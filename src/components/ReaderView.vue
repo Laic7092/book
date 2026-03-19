@@ -198,8 +198,6 @@ async function goToSearchResult(result: SearchResult) {
   );
   currentResultIndex.value = index >= 0 ? index : 0;
   await selectChapter(result.chapterId);
-  // Highlight will be applied when content loads
-  // Scroll to match after content renders
   requestAnimationFrame(() => {
     setTimeout(() => {
       const contentEl = document.querySelector(".chapter-body");
@@ -517,7 +515,7 @@ onUnmounted(() => {
             <path d="M15 18l-6-6 6-6" />
           </svg>
         </button>
-        <div class="progress-info" style="min-width: 80px">
+        <div class="progress-info" style="min-width: 60px">
           <span class="progress-text">{{ currentResultIndex + 1 }}/{{ searchResults.length }}</span>
         </div>
         <button
@@ -535,6 +533,23 @@ onUnmounted(() => {
             stroke-width="2"
           >
             <path d="M9 18l6-6-6-6" />
+          </svg>
+        </button>
+        <button
+          class="footer-btn"
+          @click.stop="clearHighlights"
+          aria-label="Exit search"
+          title="Exit search"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M18 6L6 18M6 6l12 12" />
           </svg>
         </button>
       </template>
