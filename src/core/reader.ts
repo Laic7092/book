@@ -9,6 +9,7 @@ import * as booksStore from "../storage/books";
 import * as progressStore from "../storage/progress";
 import * as bookmarksStore from "../storage/bookmarks";
 import * as settingsStore from "../storage/settings";
+import * as resourcesStore from "../storage/resources";
 
 /**
  * Parser registry
@@ -46,6 +47,7 @@ interface ReaderState {
   chapters: Chapter[];
   isLoading: boolean;
   error: string | null;
+  resourceUrls: Map<string, string> | undefined; // Maps resource paths to blob URLs
 }
 
 const state: ReaderState = {
@@ -54,6 +56,7 @@ const state: ReaderState = {
   chapters: [],
   isLoading: false,
   error: null,
+  resourceUrls: undefined,
 };
 
 /**
@@ -132,11 +135,23 @@ export const readerCore = {
       state.currentBook = book;
       state.chapters = chapters;
 
+      // Load resource URLs for this book
+      state.resourceUrls = await resourcesStore.getResourceUrls(bookId);
+      console.log(
+        "[readerCore.openBook] Resource URLs loaded:",
+        state.resourceUrls?.size || 0,
+        "resources",
+      );
+
       // Update last read timestamp
       await booksStore.updateLastRead(bookId);
 
       console.log("[readerCore.openBook] Emitting book:loaded event");
-      eventBus.emit("book:loaded", { book, chapters });
+      eventBus.emit("book:loaded", {
+        book,
+        chapters,
+        resourceUrls: state.resourceUrls,
+      });
 
       return { book, chapters };
     } catch (error) {
@@ -178,7 +193,11 @@ export const readerCore = {
 
       state.currentChapter = chapter;
 
-      eventBus.emit("chapter:changed", { chapterId, content });
+      eventBus.emit("chapter:changed", {
+        chapterId,
+        content,
+        resourceUrls: state.resourceUrls,
+      });
 
       return content;
     } catch (error) {
@@ -330,9 +349,14 @@ export const readerCore = {
    * Close current book
    */
   closeBook(): void {
+    // Revoke blob URLs to free memory
+    if (state.resourceUrls) {
+      resourcesStore.revokeResourceUrls(state.resourceUrls);
+    }
     state.currentBook = null;
     state.currentChapter = null;
     state.chapters = [];
+    state.resourceUrls = undefined;
   },
 
   /**

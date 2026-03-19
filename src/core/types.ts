@@ -68,6 +68,15 @@ export interface ParsedBook {
   book: Book;
   chapters: Chapter[];
   content: Map<string, string>; // chapterId -> content
+  resources?: Map<string, ArrayBuffer>; // resourceId -> data (original path -> ArrayBuffer)
+}
+
+export interface Resource {
+  bookId: string;
+  resourceId: string; // Original relative path within EPUB
+  data: ArrayBuffer;
+  mimeType: string;
+  type: "image" | "css" | "font" | "other";
 }
 
 export interface BookParser {
@@ -76,8 +85,8 @@ export interface BookParser {
 }
 
 export type ReaderEventMap = {
-  "book:loaded": { book: Book; chapters: Chapter[] };
-  "chapter:changed": { chapterId: string; content: string };
+  "book:loaded": { book: Book; chapters: Chapter[]; resourceUrls?: Map<string, string> };
+  "chapter:changed": { chapterId: string; content: string; resourceUrls?: Map<string, string> };
   "progress:updated": { progress: ReadingProgress };
   "bookmark:added": { bookmark: Bookmark };
   "bookmark:removed": { bookmarkId: string };

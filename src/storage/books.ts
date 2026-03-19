@@ -2,12 +2,17 @@
 
 import type { Book, ParsedBook } from "../core/types";
 import { STORES, dbPut, dbGet, dbGetAll, dbTransaction } from "./db";
+import { saveResource } from "./resources";
 
 /**
  * Save a parsed book to the database
  */
 export async function saveBook(parsedBook: ParsedBook): Promise<void> {
-  await dbTransaction([STORES.BOOKS, STORES.CHAPTERS], "readwrite", async (stores) => {
+  const storeNames = parsedBook.resources?.size
+    ? [STORES.BOOKS, STORES.CHAPTERS, STORES.RESOURCES]
+    : [STORES.BOOKS, STORES.CHAPTERS];
+
+  await dbTransaction(storeNames, "readwrite", async (stores) => {
     const booksStore = stores.get(STORES.BOOKS)!;
     const chaptersStore = stores.get(STORES.CHAPTERS)!;
 
@@ -26,6 +31,39 @@ export async function saveBook(parsedBook: ParsedBook): Promise<void> {
       });
     }
   });
+
+  // Save resources separately (after the transaction completes)
+  if (parsedBook.resources) {
+    const savePromises: Promise<void>[] = [];
+    for (const [resourceId, data] of parsedBook.resources) {
+      // Determine MIME type from file extension
+      const mimeType = getMimeTypeFromExtension(resourceId);
+      savePromises.push(saveResource(parsedBook.book.id, resourceId, data, mimeType));
+    }
+    await Promise.all(savePromises);
+  }
+}
+
+/**
+ * Get MIME type from file extension
+ */
+function getMimeTypeFromExtension(path: string): string {
+  const ext = path.split(".").pop()?.toLowerCase();
+  const mimeTypes: Record<string, string> = {
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    svg: "image/svg+xml",
+    webp: "image/webp",
+    bmp: "image/bmp",
+    css: "text/css",
+    woff: "font/woff",
+    woff2: "font/woff2",
+    ttf: "font/ttf",
+    otf: "font/otf",
+  };
+  return mimeTypes[ext || ""] || "application/octet-stream";
 }
 
 /**
@@ -52,7 +90,7 @@ export async function getAllBooks(): Promise<Book[]> {
  */
 export async function deleteBook(bookId: string): Promise<void> {
   await dbTransaction(
-    [STORES.BOOKS, STORES.CHAPTERS, STORES.PROGRESS, STORES.BOOKMARKS],
+    [STORES.BOOKS, STORES.CHAPTERS, STORES.PROGRESS, STORES.BOOKMARKS, STORES.RESOURCES],
     "readwrite",
     async (stores) => {
       // Delete book metadata
@@ -84,6 +122,20 @@ export async function deleteBook(bookId: string): Promise<void> {
         request.onsuccess = () => {
           const keys = request.result as string[];
           keys.forEach((key) => bookmarksStore.delete(key));
+          resolve();
+        };
+        request.onerror = () => reject(request.error);
+      });
+
+      // Delete resources for this book
+      const resourcesStore = stores.get(STORES.RESOURCES)!;
+      const resourcesIndex = resourcesStore.index("bookId");
+
+      await new Promise<void>((resolve, reject) => {
+        const request = resourcesIndex.getAllKeys(IDBKeyRange.only(bookId));
+        request.onsuccess = () => {
+          const keys = request.result as Array<[string, string]>;
+          keys.forEach((key) => resourcesStore.delete(key));
           resolve();
         };
         request.onerror = () => reject(request.error);

@@ -17,8 +17,38 @@ interface EpubNavItem {
   order: number;
 }
 
+interface ManifestItem {
+  id: string;
+  href: string;
+  mediaType: string;
+  properties?: string;
+}
+
 export class EpubParser extends BaseBookParser implements BookParser {
   private static readonly SUPPORTED_MIME_TYPES = ["application/epub+zip", "application/x-epub+zip"];
+  private static readonly RESOURCE_MIME_TYPES = new Set([
+    // Images
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/gif",
+    "image/svg+xml",
+    "image/webp",
+    "image/bmp",
+    // CSS
+    "text/css",
+    // Fonts
+    "font/woff",
+    "font/woff2",
+    "font/ttf",
+    "font/otf",
+    "application/font-woff",
+    "application/font-woff2",
+    "application/vnd.ms-opentype",
+    "application/x-font-ttf",
+    "application/x-font-woff",
+    "application/x-font-woff2",
+  ]);
 
   supportsFormat(mimeType: string): boolean {
     return EpubParser.SUPPORTED_MIME_TYPES.includes(mimeType);
@@ -53,8 +83,14 @@ export class EpubParser extends BaseBookParser implements BookParser {
     // Extract spine (reading order)
     const spineItems = this.extractSpine(opfDoc);
 
+    // Extract manifest for resource lookup
+    const manifest = this.extractManifest(opfDoc);
+
     // Extract NCX or Nav document for TOC
     const navItems = await this.extractToc(zip, opfDoc, opfDir);
+
+    // Extract all resources (images, CSS, fonts)
+    const resources = await this.extractResources(zip, opfDir, manifest);
 
     // Map spine items to chapters
     const bookId = generateId("book");
@@ -91,13 +127,15 @@ export class EpubParser extends BaseBookParser implements BookParser {
       order++;
     }
 
-    // Read chapter content
+    // Read and process chapter content with resource path rewriting
     for (const chapter of chapters) {
       if (chapter.href) {
         const fullPath = opfDir + chapter.href;
         const htmlContent = await this.readZipEntry(zip, fullPath);
         if (htmlContent) {
-          const cleanedContent = cleanHtml(htmlContent);
+          // Rewrite resource paths to use blob URLs
+          const rewrittenContent = this.rewriteResourcePaths(htmlContent, resources, opfDir);
+          const cleanedContent = cleanHtml(rewrittenContent);
           content.set(chapter.id, cleanedContent);
         }
       }
@@ -117,6 +155,7 @@ export class EpubParser extends BaseBookParser implements BookParser {
       book,
       chapters,
       content,
+      resources,
     };
   }
 
@@ -133,6 +172,24 @@ export class EpubParser extends BaseBookParser implements BookParser {
         return null;
       }
       return await entry.async("text");
+    } catch {
+      return null;
+    }
+  }
+
+  private async readZipEntryBinary(zip: JSZip, path: string): Promise<ArrayBuffer | null> {
+    try {
+      const entry = zip.file(path);
+      if (!entry) {
+        // Try case-insensitive search
+        const files = Object.keys(zip.files);
+        const found = files.find((f) => f.toLowerCase() === path.toLowerCase());
+        if (found) {
+          return await zip.file(found)!.async("arraybuffer");
+        }
+        return null;
+      }
+      return await entry.async("arraybuffer");
     } catch {
       return null;
     }
@@ -162,6 +219,23 @@ export class EpubParser extends BaseBookParser implements BookParser {
     return { title, creator, coverHref };
   }
 
+  private extractManifest(opfDoc: Document): Map<string, ManifestItem> {
+    const manifest = new Map<string, ManifestItem>();
+
+    opfDoc.querySelectorAll("manifest item").forEach((item) => {
+      const id = item.getAttribute("id");
+      const href = item.getAttribute("href");
+      const mediaType = item.getAttribute("media-type") || "";
+      const properties = item.getAttribute("properties") || undefined;
+
+      if (id && href) {
+        manifest.set(id, { id, href, mediaType, properties });
+      }
+    });
+
+    return manifest;
+  }
+
   private extractSpine(opfDoc: Document): Array<{ id: string; href: string }> {
     const spine = opfDoc.querySelector("spine");
     if (!spine) {
@@ -169,22 +243,13 @@ export class EpubParser extends BaseBookParser implements BookParser {
     }
 
     const items = spine.querySelectorAll("itemref");
-    const manifest = new Map<string, string>();
-
-    // Build manifest map
-    opfDoc.querySelectorAll("manifest item").forEach((item) => {
-      const id = item.getAttribute("id");
-      const href = item.getAttribute("href");
-      if (id && href) {
-        manifest.set(id, href);
-      }
-    });
+    const manifest = this.extractManifest(opfDoc);
 
     const result: Array<{ id: string; href: string }> = [];
     items.forEach((itemref) => {
       const idref = itemref.getAttribute("idref");
       if (idref) {
-        const href = manifest.get(idref);
+        const href = manifest.get(idref)?.href;
         if (href) {
           result.push({ id: idref, href });
         }
@@ -192,6 +257,172 @@ export class EpubParser extends BaseBookParser implements BookParser {
     });
 
     return result;
+  }
+
+  private async extractResources(
+    zip: JSZip,
+    opfDir: string,
+    manifest: Map<string, ManifestItem>,
+  ): Promise<Map<string, ArrayBuffer>> {
+    const resources = new Map<string, ArrayBuffer>();
+
+    for (const [, item] of manifest) {
+      // Check if this is a resource we should extract
+      if (!this.isResourceMimeType(item.mediaType)) {
+        continue;
+      }
+
+      const fullPath = opfDir + item.href;
+      const data = await this.readZipEntryBinary(zip, fullPath);
+
+      if (data) {
+        // Use the relative path as the resource ID
+        resources.set(item.href, data);
+      }
+    }
+
+    return resources;
+  }
+
+  private isResourceMimeType(mediaType: string): boolean {
+    return EpubParser.RESOURCE_MIME_TYPES.has(mediaType.toLowerCase());
+  }
+
+  private rewriteResourcePaths(
+    htmlContent: string,
+    resources: Map<string, ArrayBuffer>,
+    opfDir: string,
+  ): string {
+    // Create a mapping of relative paths to blob URLs
+    const pathToBlobMap = new Map<string, string>();
+
+    for (const [resourcePath, data] of resources) {
+      // Normalize paths for matching
+      const normalizedPath = resourcePath.replace(/^\//, "");
+      const mimeType = this.getMimeTypeFromExtension(resourcePath);
+      const blob = new Blob([data], { type: mimeType });
+      const blobUrl = URL.createObjectURL(blob);
+
+      // Map both the raw path and various normalized forms
+      pathToBlobMap.set(normalizedPath, blobUrl);
+      pathToBlobMap.set(resourcePath, blobUrl);
+
+      // Also handle paths relative to OPF directory
+      if (normalizedPath.startsWith(opfDir)) {
+        pathToBlobMap.set(normalizedPath.slice(opfDir.length), blobUrl);
+      }
+
+      // Handle basename for matching in HTML
+      const basename = resourcePath.split("/").pop();
+      if (basename && basename !== resourcePath) {
+        pathToBlobMap.set(basename, blobUrl);
+      }
+    }
+
+    // Parse and rewrite the HTML
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlContent, "text/html");
+
+    // Rewrite img src attributes
+    doc.querySelectorAll("img").forEach((img) => {
+      const src = img.getAttribute("src");
+      if (src) {
+        const blobUrl = this.findBlobUrl(src, pathToBlobMap);
+        if (blobUrl) {
+          img.setAttribute("src", blobUrl);
+        }
+      }
+    });
+
+    // Rewrite link href for CSS stylesheets
+    doc.querySelectorAll("link[rel='stylesheet']").forEach((link) => {
+      const href = link.getAttribute("href");
+      if (href) {
+        const blobUrl = this.findBlobUrl(href, pathToBlobMap);
+        if (blobUrl) {
+          link.setAttribute("href", blobUrl);
+        }
+      }
+    });
+
+    // Rewrite background/image URLs in inline styles
+    doc.querySelectorAll("*[style]").forEach((el) => {
+      const style = el.getAttribute("style");
+      if (style && (style.includes("url(") || style.includes("background"))) {
+        const rewrittenStyle = this.rewriteCssUrls(style, pathToBlobMap);
+        if (rewrittenStyle !== style) {
+          el.setAttribute("style", rewrittenStyle);
+        }
+      }
+    });
+
+    // Handle embedded CSS in style elements
+    doc.querySelectorAll("style").forEach((styleEl) => {
+      const cssContent = styleEl.textContent;
+      if (cssContent) {
+        const rewrittenCss = this.rewriteCssUrls(cssContent, pathToBlobMap);
+        if (rewrittenCss !== cssContent) {
+          styleEl.textContent = rewrittenCss;
+        }
+      }
+    });
+
+    return doc.documentElement.outerHTML;
+  }
+
+  private findBlobUrl(path: string, pathToBlobMap: Map<string, string>): string | null {
+    // Normalize the path
+    const normalizedPath = path.replace(/^\//, "").split("#")[0].split("?")[0];
+
+    // Try exact match first
+    if (pathToBlobMap.has(normalizedPath)) {
+      return pathToBlobMap.get(normalizedPath)!;
+    }
+
+    // Try matching the basename
+    const basename = normalizedPath.split("/").pop();
+    if (basename && pathToBlobMap.has(basename)) {
+      return pathToBlobMap.get(basename)!;
+    }
+
+    // Try matching the full path
+    if (pathToBlobMap.has(path)) {
+      return pathToBlobMap.get(path)!;
+    }
+
+    return null;
+  }
+
+  private rewriteCssUrls(cssContent: string, pathToBlobMap: Map<string, string>): string {
+    // Match url() patterns in CSS
+    const urlPattern = /url\(['"]?([^'")\s]+)['"]?\)/gi;
+
+    return cssContent.replace(urlPattern, (match, url) => {
+      const blobUrl = this.findBlobUrl(url, pathToBlobMap);
+      if (blobUrl) {
+        return `url("${blobUrl}")`;
+      }
+      return match;
+    });
+  }
+
+  private getMimeTypeFromExtension(path: string): string {
+    const ext = path.split(".").pop()?.toLowerCase();
+    const mimeTypes: Record<string, string> = {
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      png: "image/png",
+      gif: "image/gif",
+      svg: "image/svg+xml",
+      webp: "image/webp",
+      bmp: "image/bmp",
+      css: "text/css",
+      woff: "font/woff",
+      woff2: "font/woff2",
+      ttf: "font/ttf",
+      otf: "font/otf",
+    };
+    return mimeTypes[ext || ""] || "application/octet-stream";
   }
 
   private async extractToc(zip: JSZip, opfDoc: Document, opfDir: string): Promise<EpubNavItem[]> {
