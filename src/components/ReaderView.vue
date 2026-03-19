@@ -91,9 +91,14 @@ const themeClass = computed(() => `theme-${settings.theme}`);
 // Lifecycle
 onMounted(async () => {
   // Register event listeners FIRST, before loading book
-  readerCore.on("book:loaded", ({ chapters: chs }) => {
+  readerCore.on("book:loaded", async ({ chapters: chs }) => {
     console.log("[ReaderView] book:loaded event received, chapters:", chs);
     chapters.value = chs;
+    // Auto-load first chapter if not already loaded
+    if (chs.length > 0 && !currentChapterId.value) {
+      console.log("[ReaderView] Auto-loading first chapter:", chs[0].id);
+      await readerCore.goToChapter(chs[0].id);
+    }
   });
 
   readerCore.on("chapter:changed", ({ chapterId, content: text }) => {

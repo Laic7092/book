@@ -14,7 +14,7 @@ export async function saveBook(parsedBook: ParsedBook): Promise<void> {
     // Save book metadata
     booksStore.put(parsedBook.book);
 
-    // Save chapter contents and titles
+    // Save chapter contents, titles, and order
     for (const chapter of parsedBook.chapters) {
       const content = parsedBook.content.get(chapter.id) || "";
       chaptersStore.put({
@@ -22,6 +22,7 @@ export async function saveBook(parsedBook: ParsedBook): Promise<void> {
         chapterId: chapter.id,
         title: chapter.title,
         content,
+        order: chapter.order,
       });
     }
   });
@@ -149,18 +150,19 @@ export async function getChapters(
   return new Promise((resolve, reject) => {
     const request = index.getAll(IDBKeyRange.only(bookId));
     request.onsuccess = () => {
-      const results = request.result as Array<{ bookId: string; chapterId: string; title: string }>;
+      const results = request.result as Array<{
+        bookId: string;
+        chapterId: string;
+        title: string;
+        order: number;
+      }>;
       console.log("[getChapters] Raw results from DB:", results);
-      // Sort by key to maintain consistent order
-      results.sort((a, b) => {
-        const keyA = JSON.stringify([a.bookId, a.chapterId]);
-        const keyB = JSON.stringify([b.bookId, b.chapterId]);
-        return keyA.localeCompare(keyB);
-      });
-      const mapped = results.map((ch, index) => ({
+      // Sort by the stored order field
+      results.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      const mapped = results.map((ch) => ({
         id: ch.chapterId,
-        title: ch.title || `Chapter ${index + 1}`,
-        order: index,
+        title: ch.title || `Chapter ${ch.order + 1}`,
+        order: ch.order ?? 0,
       }));
       console.log("[getChapters] Mapped chapters:", mapped);
       resolve(mapped);

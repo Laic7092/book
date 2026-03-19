@@ -1,7 +1,7 @@
 // IndexedDB wrapper with Promise-based API
 
 const DB_NAME = "reader-db";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 export const STORES = {
   BOOKS: "books",
@@ -62,10 +62,11 @@ export async function openDB(): Promise<IDBDatabase> {
           keyPath: ["bookId", "chapterId"],
         });
         chaptersStore.createIndex("bookId", "bookId");
+        chaptersStore.createIndex("order", "order");
       }
 
-      // Add title field to chapters store (v2)
-      // Title is optional, no index needed
+      // v2: title field added (optional, no index needed)
+      // v3: order field added for proper chapter sorting
 
       // Progress store
       if (!db.objectStoreNames.contains(STORES.PROGRESS)) {

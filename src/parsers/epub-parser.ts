@@ -61,7 +61,7 @@ export class EpubParser extends BaseBookParser implements BookParser {
     const chapters: Chapter[] = [];
     const content = new Map<string, string>();
 
-    // Use NCX/nav for titles if available, otherwise use spine
+    // Use NCX/nav for titles if available, but always use spine order
     const tocMap = new Map(navItems.map((item) => [item.href, item]));
 
     let order = 0;
@@ -70,12 +70,13 @@ export class EpubParser extends BaseBookParser implements BookParser {
       const tocItem = tocMap.get(item.href) || tocMap.get(fullPath);
 
       if (tocItem) {
+        // Use TOC title but spine order
         chapters.push({
           id: tocItem.id,
           bookId,
           title: tocItem.title,
           href: item.href,
-          order: tocItem.order,
+          order: order, // Use spine order, not TOC order
         });
       } else {
         const chapterId = generateId("ch");
@@ -89,9 +90,6 @@ export class EpubParser extends BaseBookParser implements BookParser {
       }
       order++;
     }
-
-    // Sort chapters by order
-    chapters.sort((a, b) => a.order - b.order);
 
     // Read chapter content
     for (const chapter of chapters) {
