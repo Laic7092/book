@@ -53,6 +53,10 @@ export interface ReaderSettings {
   theme: "light" | "dark" | "sepia";
   margin: number;
   columnWidth: number;
+  letterSpacing?: number;
+  paragraphSpacing?: number;
+  textAlign?: "left" | "center" | "justify";
+  contrast?: "soft" | "normal" | "high";
 }
 
 export interface SearchResult {
@@ -89,6 +93,7 @@ export type ReaderEventMap = {
   "chapter:changed": { chapterId: string; content: string; resourceUrls?: Map<string, string> };
   "progress:updated": { progress: ReadingProgress };
   "bookmark:added": { bookmark: Bookmark };
+  "bookmark:updated": { bookmark: Bookmark };
   "bookmark:removed": { bookmarkId: string };
   "settings:changed": { settings: ReaderSettings };
   "search:results": { results: SearchResult[]; query: string };
@@ -97,11 +102,15 @@ export type ReaderEventMap = {
 
 export const DEFAULT_SETTINGS: ReaderSettings = {
   fontSize: 18,
-  fontFamily: "system-ui, -apple-system, sans-serif",
+  fontFamily: "Literata, Georgia, serif",
   lineHeight: 1.6,
   theme: "light",
-  margin: 20,
-  columnWidth: 700,
+  margin: 24,
+  columnWidth: 720,
+  letterSpacing: 0,
+  paragraphSpacing: 1.2,
+  textAlign: "left",
+  contrast: "normal",
 };
 
 export const THEME_COLORS = {

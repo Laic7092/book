@@ -328,6 +328,17 @@ export const readerCore = {
   },
 
   /**
+   * Update a bookmark
+   */
+  async updateBookmark(bookmarkId: string, updates: Partial<Bookmark>): Promise<void> {
+    const bookmark = await bookmarksStore.getBookmark(bookmarkId);
+    if (!bookmark) throw new Error("Bookmark not found");
+    const updated = { ...bookmark, ...updates };
+    await bookmarksStore.updateBookmark(updated);
+    eventBus.emit("bookmark:updated", { bookmark: updated });
+  },
+
+  /**
    * Get reader settings
    */
   async getSettings(): Promise<ReaderSettings> {

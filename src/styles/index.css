@@ -1,0 +1,69 @@
+/* Global theme variables - applied to html element for global access (including Teleport modals) */
+
+html.theme-light {
+  --reader-bg: #fdfcfb;
+  --reader-text: #1f1a17;
+  --text-secondary: #6e6659;
+  --header-bg: rgba(253, 252, 251, 0.9);
+  --border: #e6e2d8;
+  --border-subtle: rgba(90, 82, 72, 0.08);
+  --hover-bg: #f5f3ef;
+  --accent: #8b2e3a;
+  --accent-soft: rgba(139, 46, 58, 0.08);
+  --modal-bg: #fdfcfb;
+  --modal-text: #1f1a17;
+  --progress-track: #e6e2d8;
+  --bg-elevated: #ffffff;
+  --font-display: system-ui, -apple-system, sans-serif;
+  --font-ui: system-ui, -apple-system, sans-serif;
+  --transition-fast: 150ms ease;
+  --transition-base: 300ms ease;
+}
+
+html.theme-dark {
+  --reader-bg: #1a1816;
+  --reader-text: #e8e4de;
+  --text-secondary: #a8a094;
+  --header-bg: rgba(26, 24, 22, 0.9);
+  --border: #3d3630;
+  --border-subtle: rgba(232, 228, 222, 0.06);
+  --hover-bg: #2a2622;
+  --accent: #c45d6a;
+  --accent-soft: rgba(196, 93, 106, 0.12);
+  --modal-bg: #221f1c;
+  --modal-text: #e8e4de;
+  --progress-track: #3d3630;
+  --bg-elevated: #2a2622;
+  --font-display: system-ui, -apple-system, sans-serif;
+  --font-ui: system-ui, -apple-system, sans-serif;
+  --transition-fast: 150ms ease;
+  --transition-base: 300ms ease;
+}
+
+html.theme-sepia {
+  --reader-bg: #f5f0e6;
+  --reader-text: #3d352a;
+  --text-secondary: #7a6f5a;
+  --header-bg: rgba(245, 240, 230, 0.9);
+  --border: #c9bfa8;
+  --border-subtle: rgba(61, 53, 42, 0.08);
+  --hover-bg: #ebe5d5;
+  --accent: #8b5a3a;
+  --accent-soft: rgba(139, 90, 58, 0.1);
+  --modal-bg: #f5f0e6;
+  --modal-text: #3d352a;
+  --progress-track: #c9bfa8;
+  --bg-elevated: #ebe5d5;
+  --font-display: system-ui, -apple-system, sans-serif;
+  --font-ui: system-ui, -apple-system, sans-serif;
+  --transition-fast: 150ms ease;
+  --transition-base: 300ms ease;
+}
+
+/* Apply theme variables globally */
+body {
+  --font-display: system-ui, -apple-system, sans-serif;
+  --font-ui: system-ui, -apple-system, sans-serif;
+  --transition-fast: 150ms ease;
+  --transition-base: 300ms ease;
+}

@@ -10,10 +10,13 @@ const props = defineProps<{
   searchQuery: string;
   settings: ReaderSettings;
   hasHighlights: boolean;
+  showBookmarkEditor: boolean;
+  editingBookmark: Bookmark | null;
 }>();
 
 const emit = defineEmits<{
   (e: "update:modelValue", value: typeof props.modelValue): void;
+  (e: "update:searchQuery", value: string): void;
   (e: "close"): void;
   (e: "select-chapter", chapterId: string): void;
   (e: "update-settings", settings: Partial<ReaderSettings>): void;
@@ -22,6 +25,9 @@ const emit = defineEmits<{
   (e: "clear-highlights"): void;
   (e: "add-bookmark"): void;
   (e: "delete-bookmark", bookmarkId: string, event: MouseEvent): void;
+  (e: "edit-bookmark", bookmark: Bookmark): void;
+  (e: "save-bookmark-edit"): void;
+  (e: "close-bookmark-editor"): void;
 }>();
 
 function closeModal() {
@@ -52,6 +58,89 @@ const modalIcons: Record<string, string> = {
   bookmarks: "📌",
   settings: "⚙️",
 };
+
+const bookmarkColors = [
+  { value: "#fbbf24", label: "Yellow" },
+  { value: "#f472b6", label: "Pink" },
+  { value: "#60a5fa", label: "Blue" },
+  { value: "#34d399", label: "Green" },
+  { value: "#a78bfa", label: "Purple" },
+  { value: "#fb923c", label: "Orange" },
+];
+
+// Debounce helper for real-time search
+let searchDebounceTimer: number | null = null;
+function handleSearchInput(value: string) {
+  emit("update:searchQuery", value);
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = window.setTimeout(() => {
+    if (value.trim()) {
+      emit("search");
+    }
+  }, 300);
+}
+
+// Settings tab state
+import { ref, computed } from "vue";
+const settingsTab = ref<"text" | "theme" | "layout">("text");
+
+// Font options
+const fontOptions = [
+  { label: "Literata", value: "Literata, Georgia, serif", preview: "Literata" },
+  { label: "Cormorant", value: "Cormorant, Georgia, serif", preview: "Cormorant" },
+  {
+    label: "Sans Serif",
+    value: "Instrument Sans, -apple-system, sans-serif",
+    preview: "Instrument Sans",
+  },
+  { label: "System", value: "system-ui, -apple-system, sans-serif", preview: "system-ui" },
+  { label: "Mono", value: "JetBrains Mono, Consolas, monospace", preview: "JetBrains Mono" },
+];
+
+// Theme options
+const themeOptions = [
+  { label: "Light", value: "light", desc: "Easy on battery" },
+  { label: "Dark", value: "dark", desc: "Night reading" },
+  { label: "Sepia", value: "sepia", desc: "Paper-like comfort" },
+];
+
+// Contrast options for dark mode
+const contrastOptions = [
+  { label: "Soft", value: "soft" },
+  { label: "Normal", value: "normal" },
+  { label: "High", value: "high" },
+];
+
+// Text alignment options
+const textAlignOptions = [
+  { label: "Left", value: "left" },
+  { label: "Center", value: "center" },
+  { label: "Justify", value: "justify" },
+];
+
+// Preview style computation
+const previewStyle = computed(() => ({
+  fontSize: `${props.settings.fontSize}px`,
+  fontFamily: props.settings.fontFamily,
+  lineHeight: String(props.settings.lineHeight),
+  letterSpacing: `${props.settings.letterSpacing || 0}em`,
+}));
+
+// Reset settings function
+function resetSettings() {
+  emit("update-settings", {
+    fontSize: 18,
+    fontFamily: "Literata, Georgia, serif",
+    lineHeight: 1.6,
+    theme: "light" as const,
+    margin: 24,
+    columnWidth: 720,
+    letterSpacing: 0,
+    paragraphSpacing: 1.2,
+    textAlign: "left" as const,
+    contrast: "normal" as const,
+  });
+}
 </script>
 
 <template>
@@ -59,287 +148,407 @@ const modalIcons: Record<string, string> = {
     <div v-if="modelValue" class="modal-overlay" @click.stop="closeModal">
       <div class="modal-content" :class="[`modal-${modelValue}`]" @click.stop>
         <!-- TOC Modal -->
-        <div v-if="modelValue === 'toc'" class="modal-body">
+        <div v-if="modelValue === 'toc'" class="modal-content-inner">
           <div class="modal-header">
             <h3>Contents</h3>
             <button class="modal-close" @click="closeModal">
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
-              >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <path d="M18 6L6 18M6 6l12 12" />
               </svg>
             </button>
           </div>
-          <div v-if="chapters.length === 0" class="no-chapters">No chapters available</div>
-          <ul v-else class="toc-list">
-            <li v-for="(ch, index) in chapters" :key="ch.id">
-              <button
-                :class="['toc-item', { active: ch.id === currentChapterId }]"
-                @click.stop="handleTocClick(ch.id)"
-              >
-                <span class="toc-number">{{ index + 1 }}</span>
-                <span class="toc-title">{{ ch.title }}</span>
-              </button>
-            </li>
-          </ul>
+          <div class="modal-body scroll-body">
+            <div v-if="chapters.length === 0" class="no-chapters">No chapters available</div>
+            <ul v-else class="toc-list">
+              <li v-for="(ch, index) in chapters" :key="ch.id">
+                <button :class="['toc-item', { active: ch.id === currentChapterId }]"
+                  @click.stop="handleTocClick(ch.id)">
+                  <span class="toc-number">{{ index + 1 }}</span>
+                  <span class="toc-title">{{ ch.title }}</span>
+                </button>
+              </li>
+            </ul>
+          </div>
         </div>
 
         <!-- Settings Modal -->
-        <div v-if="modelValue === 'settings'" class="modal-body">
+        <div v-if="modelValue === 'settings'" class="modal-content-inner">
           <div class="modal-header">
-            <h3>Reading Settings</h3>
+            <div class="header-title">
+              <h3>Reading Settings</h3>
+              <button class="reset-btn" @click="resetSettings" title="Reset to defaults">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8" />
+                  <path d="M3 3v5h5" />
+                </svg>
+              </button>
+            </div>
             <button class="modal-close" @click="closeModal">
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
-              >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <path d="M18 6L6 18M6 6l12 12" />
               </svg>
             </button>
           </div>
-          <div class="settings-content">
-            <div class="setting-item">
-              <div class="setting-label">
-                <span>Text Size</span>
-                <span class="setting-value">{{ settings.fontSize }}px</span>
-              </div>
-              <div class="font-size-presets">
-                <button
-                  v-for="size in [14, 16, 18, 20, 22, 24]"
-                  :key="size"
-                  :class="['font-preset', { active: settings.fontSize === size }]"
-                  @click="emit('update-settings', { fontSize: size })"
-                >
-                  A
-                </button>
-              </div>
-              <div class="font-size-preview">
-                <span class="font-a">A</span>
-                <span class="font-medium" :style="{ fontSize: `${settings.fontSize * 0.8}px` }"
-                  >A</span
-                >
-                <span class="font-large" :style="{ fontSize: `${settings.fontSize * 1.2}px` }"
-                  >A</span
-                >
-              </div>
-              <input
-                type="range"
-                min="14"
-                max="28"
-                :value="settings.fontSize"
-                @input="
-                  emit('update-settings', {
-                    fontSize: Number(($event.target as HTMLInputElement).value),
-                  })
-                "
-                class="range-input"
-              />
-            </div>
-
-            <div class="setting-item">
-              <div class="setting-label">
-                <span>Line Height</span>
-                <span class="setting-value">{{ settings.lineHeight }}</span>
-              </div>
-              <input
-                type="range"
-                min="1.2"
-                max="2.2"
-                step="0.1"
-                :value="settings.lineHeight"
-                @input="
-                  emit('update-settings', {
-                    lineHeight: Number(($event.target as HTMLInputElement).value),
-                  })
-                "
-                class="range-input"
-              />
-            </div>
-
-            <div class="setting-item">
-              <label class="setting-label">Theme</label>
-              <div class="theme-options">
-                <button
-                  :class="['theme-option', { active: settings.theme === 'light' }]"
-                  @click="emit('update-settings', { theme: 'light' })"
-                >
-                  <span class="theme-preview theme-preview-light"></span>
-                  <span>Light</span>
-                </button>
-                <button
-                  :class="['theme-option', { active: settings.theme === 'dark' }]"
-                  @click="emit('update-settings', { theme: 'dark' })"
-                >
-                  <span class="theme-preview theme-preview-dark"></span>
-                  <span>Dark</span>
-                </button>
-                <button
-                  :class="['theme-option', { active: settings.theme === 'sepia' }]"
-                  @click="emit('update-settings', { theme: 'sepia' })"
-                >
-                  <span class="theme-preview theme-preview-sepia"></span>
-                  <span>Sepia</span>
-                </button>
+          <div class="modal-body scroll-body">
+            <!-- Live Preview Card -->
+            <div class="preview-section">
+              <div class="preview-label">Live Preview</div>
+              <div class="preview-card" :style="previewStyle">
+                <p class="preview-text">
+                  The quick brown fox jumps over the lazy dog. This is how your reading experience
+                  will look with the current settings.
+                </p>
               </div>
             </div>
 
-            <div class="setting-item">
-              <div class="setting-label">
-                <span>Column Width</span>
-                <span class="setting-value">{{ settings.columnWidth }}px</span>
+            <div class="settings-tabs">
+              <button :class="['tab', { active: settingsTab === 'text' }]" @click="settingsTab = 'text'">
+                Text
+              </button>
+              <button :class="['tab', { active: settingsTab === 'theme' }]" @click="settingsTab = 'theme'">
+                Theme
+              </button>
+              <button :class="['tab', { active: settingsTab === 'layout' }]" @click="settingsTab = 'layout'">
+                Layout
+              </button>
+            </div>
+
+            <div class="settings-content">
+              <!-- Text Tab -->
+              <div v-if="settingsTab === 'text'" class="tab-content">
+                <div class="setting-item">
+                  <div class="setting-label">
+                    <span>Font Size</span>
+                    <span class="setting-value">{{ settings.fontSize }}px</span>
+                  </div>
+                  <div class="size-presets">
+                    <button v-for="size in [14, 16, 18, 20, 22, 24]" :key="size"
+                      :class="['size-preset', { active: settings.fontSize === size }]"
+                      @click="emit('update-settings', { fontSize: size })">
+                      <span :style="{ fontSize: `${Math.max(12, size - 4)}px` }">A</span>
+                    </button>
+                  </div>
+                  <input type="range" min="12" max="32" :value="settings.fontSize" @input="
+                    emit('update-settings', {
+                      fontSize: Number(($event.target as HTMLInputElement).value),
+                    })
+                    " class="range-input" />
+                </div>
+
+                <div class="setting-item">
+                  <label class="setting-label">Font Family</label>
+                  <div class="font-options">
+                    <button v-for="font in fontOptions" :key="font.value"
+                      :class="['font-option', { active: settings.fontFamily.includes(font.value) }]"
+                      @click="emit('update-settings', { fontFamily: font.value })"
+                      :style="{ fontFamily: font.preview || font.value }">
+                      <span class="font-name">{{ font.label }}</span>
+                      <span class="font-sample">The quick brown fox</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="setting-item">
+                  <div class="setting-label">
+                    <span>Line Height</span>
+                    <span class="setting-value">{{ settings.lineHeight.toFixed(2) }}</span>
+                  </div>
+                  <div class="line-height-presets">
+                    <button v-for="height in [1.4, 1.6, 1.8, 2.0]" :key="height" :class="[
+                      'lh-preset',
+                      { active: Math.abs(settings.lineHeight - height) < 0.05 },
+                    ]" @click="emit('update-settings', { lineHeight: height })">
+                      <div class="lh-icon" :style="{ lineHeight: String(height) }">
+                        <span>A</span><span>A</span>
+                      </div>
+                    </button>
+                  </div>
+                  <input type="range" min="1.2" max="2.4" step="0.05" :value="settings.lineHeight" @input="
+                    emit('update-settings', {
+                      lineHeight: Number(($event.target as HTMLInputElement).value),
+                    })
+                    " class="range-input" />
+                </div>
+
+                <div class="setting-item">
+                  <div class="setting-label">
+                    <span>Letter Spacing</span>
+                    <span class="setting-value">{{ settings.letterSpacing || 0 }}em</span>
+                  </div>
+                  <input type="range" min="-0.05" max="0.2" step="0.01" :value="settings.letterSpacing || 0" @input="
+                    emit('update-settings', {
+                      letterSpacing: Number(($event.target as HTMLInputElement).value),
+                    })
+                    " class="range-input" />
+                </div>
               </div>
-              <input
-                type="range"
-                min="500"
-                max="900"
-                step="25"
-                :value="settings.columnWidth"
-                @input="
-                  emit('update-settings', {
-                    columnWidth: Number(($event.target as HTMLInputElement).value),
-                  })
-                "
-                class="range-input"
-              />
+
+              <!-- Theme Tab -->
+              <div v-if="settingsTab === 'theme'" class="tab-content">
+                <div class="setting-item">
+                  <label class="setting-label">Color Theme</label>
+                  <div class="theme-grid">
+                    <button v-for="theme in themeOptions" :key="theme.value"
+                      :class="['theme-card', { active: settings.theme === theme.value }]"
+                      @click="emit('update-settings', { theme: theme.value })">
+                      <div class="theme-card-preview" :class="`theme-${theme.value}`">
+                        <div class="theme-card-lines"></div>
+                      </div>
+                      <span class="theme-card-label">{{ theme.label }}</span>
+                      <span v-if="theme.desc" class="theme-card-desc">{{ theme.desc }}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="setting-item" v-if="settings.theme === 'dark'">
+                  <label class="setting-label">
+                    <span>Dark Mode Contrast</span>
+                    <span class="setting-value">{{ settings.contrast || "normal" }}</span>
+                  </label>
+                  <div class="contrast-options">
+                    <button v-for="option in contrastOptions" :key="option.value"
+                      :class="['contrast-option', { active: settings.contrast === option.value }]"
+                      @click="emit('update-settings', { contrast: option.value })">
+                      {{ option.label }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Layout Tab -->
+              <div v-if="settingsTab === 'layout'" class="tab-content">
+                <div class="setting-item">
+                  <div class="setting-label">
+                    <span>Column Width</span>
+                    <span class="setting-value">{{ settings.columnWidth }}px</span>
+                  </div>
+                  <div class="width-presets">
+                    <button v-for="width in [600, 700, 800, 900]" :key="width"
+                      :class="['width-preset', { active: settings.columnWidth === width }]"
+                      @click="emit('update-settings', { columnWidth: width })" :style="{ width: `${width / 4}px` }">
+                      <div class="width-lines"></div>
+                    </button>
+                  </div>
+                  <input type="range" min="500" max="1000" step="10" :value="settings.columnWidth" @input="
+                    emit('update-settings', {
+                      columnWidth: Number(($event.target as HTMLInputElement).value),
+                    })
+                    " class="range-input" />
+                </div>
+
+                <div class="setting-item">
+                  <div class="setting-label">
+                    <span>Margins</span>
+                    <span class="setting-value">{{ settings.margin }}px</span>
+                  </div>
+                  <div class="margin-presets">
+                    <button v-for="margin in [16, 24, 32, 48]" :key="margin"
+                      :class="['margin-preset', { active: settings.margin === margin }]"
+                      @click="emit('update-settings', { margin: margin })">
+                      <div class="margin-icon" :style="{ padding: `${margin / 4}px` }">
+                        <div class="margin-box"></div>
+                      </div>
+                    </button>
+                  </div>
+                  <input type="range" min="8" max="64" step="4" :value="settings.margin" @input="
+                    emit('update-settings', {
+                      margin: Number(($event.target as HTMLInputElement).value),
+                    })
+                    " class="range-input" />
+                </div>
+
+                <div class="setting-item">
+                  <div class="setting-label">
+                    <span>Paragraph Spacing</span>
+                    <span class="setting-value">{{ settings.paragraphSpacing || 1.2 }}em</span>
+                  </div>
+                  <input type="range" min="0.8" max="2.0" step="0.1" :value="settings.paragraphSpacing || 1.2" @input="
+                    emit('update-settings', {
+                      paragraphSpacing: Number(($event.target as HTMLInputElement).value),
+                    })
+                    " class="range-input" />
+                </div>
+
+                <div class="setting-item">
+                  <label class="setting-label">
+                    <span>Text Alignment</span>
+                  </label>
+                  <div class="align-options">
+                    <button v-for="align in textAlignOptions" :key="align.value"
+                      :class="['align-option', { active: settings.textAlign === align.value }]"
+                      @click="emit('update-settings', { textAlign: align.value })">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <rect v-if="align.value === 'left'" x="3" y="5" width="18" height="2" />
+                        <rect v-if="align.value === 'left'" x="3" y="9" width="14" height="2" />
+                        <rect v-if="align.value === 'left'" x="3" y="13" width="16" height="2" />
+                        <rect v-if="align.value === 'left'" x="3" y="17" width="12" height="2" />
+
+                        <rect v-if="align.value === 'center'" x="3" y="5" width="18" height="2" />
+                        <rect v-if="align.value === 'center'" x="5" y="9" width="14" height="2" />
+                        <rect v-if="align.value === 'center'" x="4" y="13" width="16" height="2" />
+                        <rect v-if="align.value === 'center'" x="6" y="17" width="12" height="2" />
+
+                        <rect v-if="align.value === 'justify'" x="3" y="5" width="18" height="2" />
+                        <rect v-if="align.value === 'justify'" x="3" y="9" width="18" height="2" />
+                        <rect v-if="align.value === 'justify'" x="3" y="13" width="18" height="2" />
+                        <rect v-if="align.value === 'justify'" x="3" y="17" width="14" height="2" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
         <!-- Search Modal -->
-        <div v-if="modelValue === 'search'" class="modal-body">
-          <div class="modal-header">
-            <h3>Search</h3>
-            <button class="modal-close" @click="closeModal">
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
-              >
-                <path d="M18 6L6 18M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          <div class="search-box">
-            <input
-              id="search-input"
-              :value="searchQuery"
-              @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)"
-              type="text"
-              placeholder="Search in book..."
-              @keyup.enter="emit('search')"
-              class="search-input"
-            />
-            <button class="search-submit" @click="emit('search')">
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <circle cx="11" cy="11" r="8" />
-                <path d="M21 21l-4.35-4.35" />
-              </svg>
-            </button>
-          </div>
-          <div class="search-results-info" v-if="searchResults.length > 0">
-            <span class="results-count"
-              >{{ searchResults.length }} result{{ searchResults.length !== 1 ? "s" : "" }}</span
-            >
-            <button class="clear-highlights" @click="emit('clear-highlights')" v-if="hasHighlights">
-              Clear highlights
-            </button>
-          </div>
-          <ul class="search-results">
-            <li
-              v-for="(result, i) in searchResults"
-              :key="i"
-              class="search-result"
-              @click.stop="emit('go-to-search-result', result)"
-            >
-              <div class="result-header">
-                <span class="result-chapter">{{ result.chapterTitle }}</span>
-                <span class="result-index">{{ i + 1 }}</span>
+        <div v-if="modelValue === 'search'" class="modal-content-inner">
+          <!-- Fixed header + search bar (doesn't scroll) -->
+          <div class="search-header-fixed">
+            <div class="modal-header">
+              <h3>Search</h3>
+              <button class="modal-close" @click="closeModal">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div class="search-box-wrapper">
+              <div class="search-box">
+                <input id="search-input" :value="searchQuery"
+                  @input="handleSearchInput(($event.target as HTMLInputElement).value)" type="text"
+                  placeholder="Search in book..." class="search-input" />
+                <button class="search-submit" @click="emit('search')">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8" />
+                    <path d="M21 21l-4.35-4.35" />
+                  </svg>
+                </button>
               </div>
-              <p class="result-context" v-html="highlightMatch(result.context)"></p>
-            </li>
-          </ul>
-          <p v-if="searchResults.length === 0 && searchQuery" class="no-results">
-            No results found
-          </p>
+              <div class="search-results-info" v-if="searchResults.length > 0">
+                <span class="results-count">{{ searchResults.length }} result{{
+                  searchResults.length !== 1 ? "s" : ""
+                }}</span>
+                <button class="clear-highlights" @click="emit('clear-highlights')" v-if="hasHighlights">
+                  Clear highlights
+                </button>
+              </div>
+            </div>
+          </div>
+          <!-- Scrollable results area -->
+          <div class="modal-body scroll-body">
+            <ul class="search-results">
+              <li v-for="(result, i) in searchResults" :key="i" class="search-result"
+                @click.stop="emit('go-to-search-result', result)">
+                <div class="result-header">
+                  <span class="result-chapter">{{ result.chapterTitle }}</span>
+                  <span class="result-index">{{ i + 1 }}</span>
+                </div>
+                <p class="result-context" v-html="highlightMatch(result.context)"></p>
+              </li>
+            </ul>
+            <p v-if="searchResults.length === 0 && searchQuery" class="no-results">
+              No results found
+            </p>
+          </div>
         </div>
 
         <!-- Bookmarks Modal -->
-        <div v-if="modelValue === 'bookmarks'" class="modal-body">
+        <div v-if="modelValue === 'bookmarks'" class="modal-content-inner">
           <div class="modal-header">
             <h3>Bookmarks</h3>
             <button class="modal-close" @click="closeModal">
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
-              >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <path d="M18 6L6 18M6 6l12 12" />
               </svg>
             </button>
           </div>
-          <button class="add-bookmark-btn" @click="emit('add-bookmark')">
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-            Add Bookmark
-          </button>
-          <ul class="bookmarks-list">
-            <li v-for="(bm, i) in bookmarks" :key="bm.id" class="bookmark-item">
-              <div class="bookmark-content" @click.stop="emit('select-chapter', bm.chapterId)">
-                <div class="bookmark-header">
-                  <div class="bookmark-title">{{ bm.title }}</div>
-                  <button
-                    class="bookmark-delete-btn"
-                    @click.stop="emit('delete-bookmark', bm.id, $event)"
-                    aria-label="Delete bookmark"
-                  >
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                    >
-                      <path d="M18 6L6 18M6 6l12 12" />
-                    </svg>
-                  </button>
+          <!-- Fixed add bookmark button (doesn't scroll) -->
+          <div class="bookmark-bar-fixed">
+            <button class="add-bookmark-btn" @click="emit('add-bookmark')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              Add Bookmark
+            </button>
+          </div>
+          <!-- Scrollable bookmarks area -->
+          <div class="modal-body scroll-body">
+            <ul class="bookmarks-list">
+              <li v-for="(bm, i) in bookmarks" :key="bm.id" class="bookmark-item">
+                <div class="bookmark-content" @click.stop="emit('select-chapter', bm.chapterId)">
+                  <div class="bookmark-header">
+                    <div class="bookmark-title">{{ bm.title }}</div>
+                    <div class="bookmark-actions">
+                      <button class="bookmark-edit-btn" @click.stop="emit('edit-bookmark', bm)"
+                        aria-label="Edit bookmark" title="Edit bookmark">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                          stroke-width="2">
+                          <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                          <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                        </svg>
+                      </button>
+                      <button class="bookmark-delete-btn" @click.stop="emit('delete-bookmark', bm.id, $event)"
+                        aria-label="Delete bookmark" title="Delete bookmark">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                          stroke-width="2">
+                          <path d="M18 6L6 18M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="bookmark-preview">{{ bm.contentPreview }}</div>
+                  <div class="bookmark-chapter">{{ getChapterTitle(bm.chapterId) }}</div>
                 </div>
-                <div class="bookmark-preview">{{ bm.contentPreview }}</div>
-                <div class="bookmark-chapter">{{ getChapterTitle(bm.chapterId) }}</div>
+              </li>
+            </ul>
+            <p v-if="bookmarks.length === 0" class="no-bookmarks">No bookmarks yet</p>
+          </div>
+        </div>
+
+        <!-- Bookmark Editor Modal -->
+        <div v-if="showBookmarkEditor && editingBookmark" class="modal-content-inner">
+          <div class="modal-header">
+            <h3>Edit Bookmark</h3>
+            <button class="modal-close" @click="emit('close-bookmark-editor')">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div class="modal-body scroll-body">
+            <div class="editor-content">
+              <div class="editor-field">
+                <label class="editor-label">Title</label>
+                <input type="text" v-model="editingBookmark.title" class="editor-input" placeholder="Bookmark title" />
               </div>
-            </li>
-          </ul>
-          <p v-if="bookmarks.length === 0" class="no-bookmarks">No bookmarks yet</p>
+              <div class="editor-field">
+                <label class="editor-label">Note</label>
+                <textarea v-model="editingBookmark.note" class="editor-textarea" placeholder="Add a note..."
+                  rows="4"></textarea>
+              </div>
+              <div class="editor-field">
+                <label class="editor-label">Color</label>
+                <div class="color-picker">
+                  <button v-for="color in bookmarkColors" :key="color.value"
+                    :class="['color-option', { active: editingBookmark.color === color.value }]"
+                    :style="{ backgroundColor: color.value }" @click="editingBookmark.color = color.value"
+                    :aria-label="color.label"></button>
+                </div>
+              </div>
+              <div class="editor-field">
+                <label class="editor-label">
+                  Position: {{ Math.round(editingBookmark.position) }}%
+                </label>
+                <input type="range" v-model.number="editingBookmark.position" min="0" max="100" step="1"
+                  class="range-input" />
+              </div>
+              <div class="editor-actions">
+                <button class="btn-cancel" @click="emit('close-bookmark-editor')">Cancel</button>
+                <button class="btn-save" @click="emit('save-bookmark-edit')">Save Changes</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -377,7 +586,6 @@ const modalIcons: Record<string, string> = {
   background: var(--modal-bg);
   color: var(--modal-text);
   border-radius: 18px 18px 0 0;
-  max-height: 75vh;
   width: 100%;
   max-width: 560px;
   overflow: hidden;
@@ -391,6 +599,104 @@ const modalIcons: Record<string, string> = {
   -webkit-overflow-scrolling: touch;
 }
 
+/* ============================================
+   MODAL SCROLLING STRATEGY
+   Each modal type has precise scroll control:
+   - Header is fixed/sticky
+   - Only content area scrolls
+   - Smooth touch scrolling
+   ============================================ */
+
+/* Base modal container - fixed height for list-based modals */
+.modal-toc,
+.modal-bookmarks,
+.modal-search,
+.modal-settings {
+  height: 85vh;
+  max-height: 600px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Modal inner wrapper - flex container for header + scrollable content */
+.modal-content-inner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* Fixed search header (modal header + search input) - only for Search modal */
+.search-header-fixed {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--modal-bg);
+  z-index: 10;
+}
+
+.search-box-wrapper {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* Fixed bookmark add button */
+.bookmark-bar-fixed {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--modal-bg);
+  z-index: 10;
+  padding: 12px 20px;
+}
+
+/* Scrollbar styling - unified */
+.modal-body::-webkit-scrollbar {
+  width: 5px;
+}
+
+.modal-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.modal-body::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+  transition: background 150ms ease;
+}
+
+.modal-body::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+/* Firefox scrollbar */
+.modal-body {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+/* Modal body - the SCROLLABLE container */
+.modal-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  contain: layout style;
+  scrollbar-gutter: stable;
+  overscroll-behavior-y: contain;
+  min-height: 0;
+}
+
+/* Special class for explicit scroll areas */
+.modal-body.scroll-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
 @keyframes slideUp {
   from {
     transform: translateY(100%);
@@ -399,15 +705,6 @@ const modalIcons: Record<string, string> = {
   to {
     transform: translateY(0);
   }
-}
-
-.modal-body {
-  padding: 0;
-  max-height: calc(75vh - 60px);
-  overflow-y: auto;
-  overflow-x: hidden;
-  color: var(--modal-text);
-  -webkit-overflow-scrolling: touch;
 }
 
 .modal-body h3,
@@ -426,17 +723,49 @@ const modalIcons: Record<string, string> = {
   align-items: center;
   padding: 18px 22px;
   border-bottom: 1px solid var(--border-subtle);
-  position: sticky;
-  top: 0;
   background: var(--modal-bg);
-  z-index: 1;
+  z-index: 10;
+  /* Ensure header doesn't shrink */
+  flex-shrink: 0;
 }
 
-.modal-header h3 {
+/* Modal header inside search header - no border, with backdrop */
+.search-header-fixed .modal-header {
+  border-bottom: none;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.header-title h3 {
   margin: 0;
   font-family: var(--font-display);
   font-size: 19px;
   font-weight: 500;
+}
+
+.reset-btn {
+  padding: 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all 150ms ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.reset-btn:hover {
+  background: var(--hover-bg);
+  color: var(--accent);
 }
 
 .modal-close {
@@ -455,6 +784,16 @@ const modalIcons: Record<string, string> = {
 }
 
 /* TOC */
+.no-chapters,
+.no-bookmarks {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
 .toc-list {
   list-style: none;
   padding: 12px 14px;
@@ -514,12 +853,98 @@ const modalIcons: Record<string, string> = {
 }
 
 /* Settings */
+.preview-section {
+  padding: 16px 20px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.preview-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.preview-card {
+  padding: 16px;
+  background: var(--modal-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.preview-text {
+  margin: 0;
+  color: var(--modal-text);
+  line-height: inherit;
+}
+
+.settings-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0 20px;
+  background: var(--modal-bg);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+.tab {
+  flex: 1;
+  padding: 14px 16px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: all 150ms ease;
+  position: relative;
+  font-family: var(--font-ui);
+}
+
+.tab::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%) scaleX(0);
+  width: 100%;
+  height: 2px;
+  background: var(--accent);
+  transition: transform 200ms ease;
+}
+
+.tab:hover {
+  color: var(--modal-text);
+}
+
+.tab.active {
+  color: var(--accent);
+}
+
+.tab.active::after {
+  transform: translateX(-50%) scaleX(1);
+}
+
+.tab-content {
+  animation: fadeIn 200ms ease;
+}
+
 .settings-content {
-  padding: 18px 22px 32px;
+  padding: 20px 22px 32px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 .setting-item {
-  margin-bottom: 26px;
+  margin-bottom: 28px;
 }
 
 .setting-item:last-child {
@@ -530,7 +955,7 @@ const modalIcons: Record<string, string> = {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
   font-size: 13px;
   font-weight: 500;
   color: var(--modal-text);
@@ -539,64 +964,141 @@ const modalIcons: Record<string, string> = {
 .setting-value {
   color: var(--text-secondary);
   font-feature-settings: "tnum";
+  font-size: 12px;
 }
 
-.font-size-presets {
+/* Size presets */
+.size-presets {
   display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 6px;
+  margin-bottom: 14px;
 }
 
-.font-preset {
+.size-preset {
   flex: 1;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  padding: 14px 0;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
   background: var(--modal-bg);
   cursor: pointer;
-  font-weight: 700;
-  color: var(--modal-text);
   transition: all 150ms ease;
-  font-family: var(--font-display);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.font-preset:hover {
+.size-preset span {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--modal-text);
+}
+
+.size-preset:hover {
   border-color: var(--accent);
   background: var(--hover-bg);
 }
 
-.font-preset.active {
+.size-preset.active {
   border-color: var(--accent);
   background: var(--accent);
+  box-shadow: 0 2px 8px rgba(139, 46, 58, 0.25);
+}
+
+.size-preset.active span {
   color: white;
 }
 
-.font-size-preview {
+/* Font options */
+.font-options {
   display: flex;
-  align-items: baseline;
-  gap: 12px;
-  margin-bottom: 12px;
-  padding: 12px 14px;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.font-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--modal-bg);
+  cursor: pointer;
+  transition: all 150ms ease;
+  text-align: left;
+}
+
+.font-option:hover {
+  border-color: var(--border);
   background: var(--hover-bg);
-  border-radius: 8px;
 }
 
-.font-a {
+.font-option.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.font-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--modal-text);
+}
+
+.font-sample {
   font-size: 13px;
-  opacity: 0.4;
-  font-family: var(--font-display);
+  color: var(--text-secondary);
+  opacity: 0.7;
 }
 
-.font-medium {
-  opacity: 0.65;
-  font-family: var(--font-display);
+/* Line height presets */
+.line-height-presets {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
 }
 
-.font-large {
-  opacity: 1;
-  font-family: var(--font-display);
+.lh-preset {
+  flex: 1;
+  padding: 14px 0;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--modal-bg);
+  cursor: pointer;
+  transition: all 150ms ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
+.lh-icon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--modal-text);
+}
+
+.lh-icon span:first-child {
+  opacity: 0.5;
+}
+
+.lh-preset:hover {
+  border-color: var(--accent);
+}
+
+.lh-preset.active {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.lh-preset.active .lh-icon {
+  color: white;
+}
+
+/* Range input */
 .range-input {
   width: 100%;
   height: 4px;
@@ -622,57 +1124,264 @@ const modalIcons: Record<string, string> = {
   transform: scale(1.1);
 }
 
-.theme-options {
-  display: flex;
-  gap: 10px;
+/* Theme grid */
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
 }
 
-.theme-option {
-  flex: 1;
+.theme-card {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 14px 10px;
+  gap: 10px;
+  padding: 16px 12px;
   border: 1.5px solid var(--border);
-  border-radius: 10px;
-  background: transparent;
+  border-radius: 12px;
+  background: var(--modal-bg);
   cursor: pointer;
-  font-size: 12px;
-  color: var(--modal-text);
   transition: all 150ms ease;
-  font-weight: 500;
 }
 
-.theme-option:hover {
+.theme-card:hover {
+  border-color: var(--border);
+  background: var(--hover-bg);
+}
+
+.theme-card.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.theme-card-preview {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  position: relative;
+  overflow: hidden;
+}
+
+.theme-card-lines {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.theme-card-lines::before,
+.theme-card-lines::after {
+  content: "";
+  height: 2px;
+  border-radius: 1px;
+}
+
+.theme-card-lines::before {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.theme-card-lines::after {
+  width: 70%;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.theme-light .theme-card-preview {
+  background: linear-gradient(135deg, #fdfcfb 0%, #f5f3ef 100%);
+}
+
+.theme-light .theme-card-lines::before,
+.theme-light .theme-card-lines::after {
+  background: rgba(31, 26, 23, 0.4);
+}
+
+.theme-dark .theme-card-preview {
+  background: linear-gradient(135deg, #1a1816 0%, #2a2622 100%);
+}
+
+.theme-dark .theme-card-lines::before,
+.theme-dark .theme-card-lines::after {
+  background: rgba(232, 228, 222, 0.5);
+}
+
+.theme-sepia .theme-card-preview {
+  background: linear-gradient(135deg, #f5f0e6 0%, #ebe5d5 100%);
+}
+
+.theme-sepia .theme-card-lines::before,
+.theme-sepia .theme-card-lines::after {
+  background: rgba(61, 53, 42, 0.4);
+}
+
+.theme-card-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--modal-text);
+}
+
+.theme-card-desc {
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: lowercase;
+}
+
+/* Contrast options */
+.contrast-options {
+  display: flex;
+  gap: 8px;
+}
+
+.contrast-option {
+  flex: 1;
+  padding: 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--modal-bg);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--modal-text);
+  transition: all 150ms ease;
+}
+
+.contrast-option:hover {
   border-color: var(--accent);
 }
 
-.theme-option.active {
+.contrast-option.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: white;
+}
+
+/* Width presets */
+.width-presets {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 12px;
+  background: var(--hover-bg);
+  border-radius: 10px;
+}
+
+.width-preset {
+  height: 48px;
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  background: var(--modal-bg);
+  cursor: pointer;
+  transition: all 150ms ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.width-preset:hover {
+  border-color: var(--accent);
+}
+
+.width-preset.active {
   border-color: var(--accent);
   background: var(--accent-soft);
 }
 
-.theme-preview {
-  width: 36px;
-  height: 36px;
+.width-lines {
+  width: 60%;
+  height: 24px;
+  border: 2px solid var(--modal-text);
+  border-radius: 2px;
+  opacity: 0.5;
+}
+
+/* Margin presets */
+.margin-presets {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 12px;
+  background: var(--hover-bg);
+  border-radius: 10px;
+}
+
+.margin-preset {
+  flex: 1;
+  padding: 12px;
+  border: 1.5px solid var(--border);
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: var(--modal-bg);
+  cursor: pointer;
+  transition: all 150ms ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.theme-preview-light {
-  background: linear-gradient(135deg, #fdfcfb 0%, #f5f3ef 100%);
-  border: 1px solid #e6e2d8;
+.margin-preset:hover {
+  border-color: var(--accent);
 }
 
-.theme-preview-dark {
-  background: linear-gradient(135deg, #1a1816 0%, #2a2622 100%);
-  border: 1px solid #3d3630;
+.margin-preset.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: 0 2px 8px rgba(139, 46, 58, 0.25);
 }
 
-.theme-preview-sepia {
-  background: linear-gradient(135deg, #f5f0e6 0%, #ebe5d5 100%);
-  border: 1px solid #c9bfa8;
+.margin-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--border-subtle);
+  border-radius: 4px;
+  width: 32px;
+  height: 32px;
+}
+
+.margin-box {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--modal-text);
+  border-radius: 3px;
+}
+
+.margin-preset.active .margin-box {
+  border-color: white;
+}
+
+/* Align options */
+.align-options {
+  display: flex;
+  gap: 8px;
+}
+
+.align-option {
+  flex: 1;
+  padding: 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--modal-bg);
+  cursor: pointer;
+  transition: all 150ms ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--modal-text);
+}
+
+.align-option:hover {
+  border-color: var(--accent);
+}
+
+.align-option.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: white;
 }
 
 /* Search */
@@ -754,8 +1463,6 @@ const modalIcons: Record<string, string> = {
   list-style: none;
   padding: 12px 14px;
   margin: 0;
-  max-height: 45vh;
-  overflow-y: auto;
 }
 
 .search-result {
@@ -813,8 +1520,7 @@ const modalIcons: Record<string, string> = {
   font-weight: 600;
 }
 
-.no-results,
-.no-bookmarks {
+.no-results {
   text-align: center;
   padding: 40px 20px;
   color: var(--text-secondary);
@@ -903,6 +1609,42 @@ const modalIcons: Record<string, string> = {
   color: #dc2626;
 }
 
+.bookmark-actions {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.bookmark-content:hover .bookmark-actions {
+  opacity: 1;
+}
+
+.bookmark-edit-btn {
+  padding: 4px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  transition: all 150ms ease;
+}
+
+.bookmark-edit-btn:hover {
+  background: var(--hover-bg);
+  color: var(--accent);
+}
+
+.bookmark-delete-btn {
+  padding: 4px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  transition: all 150ms ease;
+}
+
 .bookmark-preview {
   font-size: 12px;
   color: var(--text-secondary);
@@ -922,14 +1664,119 @@ const modalIcons: Record<string, string> = {
   letter-spacing: 0.03em;
 }
 
-/* Modal scrollbar */
-.modal-body::-webkit-scrollbar {
-  width: 5px;
+/* Bookmark Editor */
+.editor-content {
+  padding: 18px 22px 32px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 
-.modal-body::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 3px;
+.editor-field {
+  margin-bottom: 20px;
+}
+
+.editor-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--modal-text);
+  margin-bottom: 8px;
+}
+
+.editor-input,
+.editor-textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--hover-bg);
+  color: var(--modal-text);
+  font-size: 14px;
+  font-family: var(--font-ui);
+  transition: all 150ms ease;
+}
+
+.editor-input:focus,
+.editor-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--modal-bg);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.editor-textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.color-picker {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.color-option {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  cursor: pointer;
+  transition: all 150ms ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.color-option:hover {
+  transform: scale(1.1);
+  border-color: var(--accent);
+}
+
+.color-option.active {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 3px var(--accent-soft),
+    0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.editor-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.btn-cancel,
+.btn-save {
+  flex: 1;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 150ms ease;
+  font-family: var(--font-ui);
+}
+
+.btn-cancel {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--modal-text);
+}
+
+.btn-cancel:hover {
+  background: var(--hover-bg);
+  border-color: var(--border);
+}
+
+.btn-save {
+  background: var(--accent);
+  border: none;
+  color: #ffffff;
+}
+
+.btn-save:hover {
+  background: color-mix(in srgb, var(--accent) 85%, black);
 }
 
 /* Responsive */

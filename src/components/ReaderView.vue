@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from "vue";
 import { readerCore } from "../core/reader";
-import { searchInBook } from "../search/engine";
+import { searchInBook, highlightMatches, removeHighlights } from "../search/engine";
 import ReaderModal from "./ReaderModal.vue";
 import type { Bookmark, SearchResult, ReaderSettings, Chapter, Book } from "../core/types";
 
@@ -73,6 +73,10 @@ const settings = reactive<ReaderSettings>({
   theme: "light",
   margin: 24,
   columnWidth: 720,
+  letterSpacing: 0,
+  paragraphSpacing: 1.2,
+  textAlign: "left",
+  contrast: "normal",
 });
 const searchResults = ref<SearchResult[]>([]);
 const searchQuery = ref("");
@@ -81,10 +85,16 @@ const isTransitioning = ref(false);
 const currentChapterTitle = ref("");
 const chapterProgress = ref(0);
 const hasHighlights = ref(false);
+const currentResultIndex = ref(-1);
+
+// Bookmark editing
+const showBookmarkEditor = ref(false);
+const editingBookmark = ref<Bookmark | null>(null);
 
 const showControls = ref(false);
 const activeModal = ref<"toc" | "search" | "bookmarks" | "settings" | null>(null);
 let hideControlsTimer: number | null = null;
+let saveProgressTimer: number | null = null;
 
 function resetHideTimer() {
   showControls.value = true;
@@ -148,6 +158,8 @@ async function selectChapter(chapterId: string) {
   isTransitioning.value = true;
   try {
     await readerCore.goToChapter(chapterId);
+    // Save progress immediately on chapter switch
+    await readerCore.updateProgress(0, 0);
     console.log("[selectChapter] Chapter loaded successfully");
     closeModal();
     // Allow content to render before fading in
@@ -177,16 +189,36 @@ async function nextChapter() {
 
 async function doSearch() {
   if (!searchQuery.value) return;
-  searchResults.value = searchInBook(props.book.id, searchQuery.value, chapters.value);
+  searchResults.value = await searchInBook(props.book.id, searchQuery.value, chapters.value);
 }
 
 async function goToSearchResult(result: SearchResult) {
+  const index = searchResults.value.findIndex(
+    (r) => r.chapterId === result.chapterId && r.position === result.position,
+  );
+  currentResultIndex.value = index >= 0 ? index : 0;
   await selectChapter(result.chapterId);
   // Highlight will be applied when content loads
+  // Scroll to match after content renders
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      const contentEl = document.querySelector(".chapter-body");
+      if (!contentEl) return;
+
+      const marks = contentEl.querySelectorAll("mark.search-mark");
+      const mark = marks[currentResultIndex.value] as HTMLElement;
+      if (mark) {
+        mark.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 100);
+  });
 }
 
 function clearHighlights() {
-  const marks = document.querySelectorAll(".search-mark");
+  const contentEl = document.querySelector(".chapter-body");
+  if (!contentEl) return;
+
+  const marks = contentEl.querySelectorAll("mark.search-mark");
   marks.forEach((mark) => {
     const parent = mark.parentNode;
     while (mark.firstChild) {
@@ -195,6 +227,47 @@ function clearHighlights() {
     mark.remove();
   });
   hasHighlights.value = false;
+  currentResultIndex.value = -1;
+}
+
+async function goToNextMatch() {
+  if (searchResults.value.length === 0) return;
+  currentResultIndex.value = (currentResultIndex.value + 1) % searchResults.value.length;
+  await navigateToMatch(currentResultIndex.value);
+}
+
+async function goToPreviousMatch() {
+  if (searchResults.value.length === 0) return;
+  currentResultIndex.value =
+    (currentResultIndex.value - 1 + searchResults.value.length) % searchResults.value.length;
+  await navigateToMatch(currentResultIndex.value);
+}
+
+async function navigateToMatch(index: number) {
+  const result = searchResults.value[index];
+  if (!result) return;
+
+  await selectChapter(result.chapterId);
+
+  // Wait for content to render, then scroll to the match
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      const contentEl = document.querySelector(".chapter-body");
+      if (!contentEl) return;
+
+      const marks = contentEl.querySelectorAll("mark.search-mark");
+      const mark = marks[index] as HTMLElement;
+      if (mark) {
+        mark.scrollIntoView({ behavior: "smooth", block: "center" });
+        mark.style.backgroundColor = "var(--accent)";
+        mark.style.color = "#fff";
+        setTimeout(() => {
+          mark.style.backgroundColor = "";
+          mark.style.color = "";
+        }, 1500);
+      }
+    }, 100);
+  });
 }
 
 async function addBookmark() {
@@ -216,6 +289,23 @@ async function deleteBookmark(bookmarkId: string, e: MouseEvent) {
   bookmarks.value = bookmarks.value.filter((b) => b.id !== bookmarkId);
 }
 
+function openBookmarkEditor(bookmark: Bookmark) {
+  editingBookmark.value = { ...bookmark };
+  showBookmarkEditor.value = true;
+}
+
+async function saveBookmarkEdit() {
+  if (!editingBookmark.value) return;
+  await readerCore.updateBookmark(editingBookmark.value.id, editingBookmark.value);
+  // Update local list
+  const index = bookmarks.value.findIndex((b) => b.id === editingBookmark.value!.id);
+  if (index !== -1) {
+    bookmarks.value[index] = editingBookmark.value;
+  }
+  showBookmarkEditor.value = false;
+  editingBookmark.value = null;
+}
+
 function getScrollPercentage(): number {
   const main = document.querySelector(".reader-view") as HTMLElement;
   if (!main) return 0;
@@ -226,14 +316,33 @@ function getScrollPercentage(): number {
 function handleScroll() {
   readingProgress.value = getScrollPercentage();
   chapterProgress.value = getScrollPercentage();
+
+  // Debounced progress saving
+  if (saveProgressTimer) clearTimeout(saveProgressTimer);
+  saveProgressTimer = window.setTimeout(() => {
+    readerCore.updateProgress(getScrollPercentage(), getScrollPercentage());
+  }, 1000);
 }
 
 async function updateSettings(newSettings: Partial<ReaderSettings>) {
   Object.assign(settings, newSettings);
   await readerCore.updateSettings(settings);
+  updateThemeClass();
+  updateCSSVariables();
 }
 
-const themeClass = computed(() => `theme-${settings.theme}`);
+function updateCSSVariables() {
+  const contentEl = document.querySelector(".reader-content") as HTMLElement;
+  if (contentEl) {
+    contentEl.style.setProperty("--paragraph-spacing", String(settings.paragraphSpacing || 1.2));
+  }
+}
+
+function updateThemeClass() {
+  // Apply theme class to html element so it's accessible globally (including Teleport modals)
+  document.documentElement.classList.remove("theme-light", "theme-dark", "theme-sepia");
+  document.documentElement.classList.add(`theme-${settings.theme}`);
+}
 
 onMounted(async () => {
   document.addEventListener("touchstart", handleTouchStart, { passive: true });
@@ -242,8 +351,21 @@ onMounted(async () => {
   readerCore.on("book:loaded", async ({ chapters: chs }) => {
     chapters.value = chs;
     if (chs.length > 0 && !currentChapterId.value) {
-      await readerCore.goToChapter(chs[0].id);
+      // Restore last reading position
+      const progress = await readerCore.getCurrentProgress();
+      const chapterId = progress?.chapterId || chs[0].id;
+      const scrollPos = progress?.scrollPosition || 0;
+
+      await readerCore.goToChapter(chapterId);
+
+      // Restore scroll position
+      requestAnimationFrame(() => {
+        const main = document.querySelector(".reader-view") as HTMLElement;
+        if (main) main.scrollTop = scrollPos;
+      });
     }
+    // Load bookmarks for current book
+    bookmarks.value = await readerCore.getBookmarks();
   });
 
   // Note: Resources are already embedded as blob URLs in the HTML content
@@ -253,7 +375,15 @@ onMounted(async () => {
     console.log("[chapter:changed] Received event, chapterId:", chapterId);
     console.log("[chapter:changed] Content length:", text?.length);
     currentChapterId.value = chapterId;
-    content.value = text;
+
+    // Apply search highlights if there's an active search
+    if (searchQuery.value && searchResults.value.length > 0) {
+      content.value = highlightMatches(text, searchQuery.value);
+      hasHighlights.value = true;
+    } else {
+      content.value = text;
+    }
+
     const chapter = chapters.value.find((c) => c.id === chapterId);
     currentChapterTitle.value = chapter?.title || "";
     readingProgress.value = 0;
@@ -276,8 +406,19 @@ onMounted(async () => {
     bookmarks.value = bookmarks.value.filter((b) => b.id !== bookmarkId);
   });
 
+  readerCore.on("bookmark:updated", ({ bookmark }) => {
+    const index = bookmarks.value.findIndex((b) => b.id === bookmark.id);
+    if (index !== -1) {
+      bookmarks.value[index] = bookmark;
+    }
+  });
+
   const result = await readerCore.loadBookById(props.book.id);
-  readerCore.getSettings().then((s) => Object.assign(settings, s));
+  readerCore.getSettings().then((s) => {
+    Object.assign(settings, s);
+    updateThemeClass();
+    updateCSSVariables();
+  });
 
   resetHideTimer();
 });
@@ -286,11 +427,12 @@ onUnmounted(() => {
   document.removeEventListener("touchstart", handleTouchStart);
   document.removeEventListener("touchend", handleTouchEnd);
   if (hideControlsTimer) clearTimeout(hideControlsTimer);
+  if (saveProgressTimer) clearTimeout(saveProgressTimer);
 });
 </script>
 
 <template>
-  <div class="reader-view-container" :class="themeClass" @click="handleTap">
+  <div class="reader-view-container" @click="handleTap">
     <!-- Top Bar (floating) -->
     <header class="reader-header" :class="{ visible: showControls }">
       <button class="back-btn" @click.stop="emit('close')" aria-label="Back to library">
@@ -345,6 +487,8 @@ onUnmounted(() => {
           fontSize: `${settings.fontSize}px`,
           fontFamily: settings.fontFamily,
           lineHeight: String(settings.lineHeight),
+          letterSpacing: `${settings.letterSpacing || 0}em`,
+          textAlign: settings.textAlign || 'left',
         }"
       >
         <h2 v-if="book.format === 'txt'" class="chapter-heading">{{ currentChapterTitle }}</h2>
@@ -354,71 +498,115 @@ onUnmounted(() => {
 
     <!-- Bottom Bar (floating) -->
     <footer class="reader-footer" :class="{ visible: showControls }">
-      <button
-        class="footer-btn"
-        @click.stop="prevChapter"
-        :disabled="chapters.findIndex((c) => c.id === currentChapterId) === 0"
-      >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
+      <!-- Search Navigation (shown only when highlights are active) -->
+      <template v-if="hasHighlights && searchResults.length > 0">
+        <button
+          class="footer-btn"
+          @click.stop="goToPreviousMatch"
+          aria-label="Previous match"
+          title="Previous match"
         >
-          <path d="M15 18l-6-6 6-6" />
-        </svg>
-      </button>
-      <button
-        class="footer-btn icon-btn"
-        @click.stop="openModal('bookmarks')"
-        aria-label="Bookmarks"
-      >
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+        </button>
+        <div class="progress-info" style="min-width: 80px">
+          <span class="progress-text">{{ currentResultIndex + 1 }}/{{ searchResults.length }}</span>
+        </div>
+        <button
+          class="footer-btn"
+          @click.stop="goToNextMatch"
+          aria-label="Next match"
+          title="Next match"
         >
-          <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
-        </svg>
-      </button>
-      <div class="progress-info" @click.stop="openModal('toc')">
-        <span class="progress-text">{{ Math.round(readingProgress) }}%</span>
-        <span class="chapter-info">{{ currentChapterTitle || "Chapter 1" }}</span>
-      </div>
-      <button class="footer-btn icon-btn" @click.stop="openModal('search')" aria-label="Search">
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M9 18l6-6-6-6" />
+          </svg>
+        </button>
+      </template>
+
+      <!-- Normal Navigation (shown when no highlights) -->
+      <template v-else>
+        <button
+          class="footer-btn"
+          @click.stop="prevChapter"
+          :disabled="chapters.findIndex((c) => c.id === currentChapterId) === 0"
         >
-          <circle cx="11" cy="11" r="8" />
-          <path d="M21 21l-4.35-4.35" />
-        </svg>
-      </button>
-      <button
-        class="footer-btn"
-        @click.stop="nextChapter"
-        :disabled="chapters.findIndex((c) => c.id === currentChapterId) === chapters.length - 1"
-      >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+        </button>
+        <button
+          class="footer-btn icon-btn"
+          @click.stop="openModal('bookmarks')"
+          aria-label="Bookmarks"
         >
-          <path d="M9 18l6-6-6-6" />
-        </svg>
-      </button>
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          >
+            <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
+          </svg>
+        </button>
+        <div class="progress-info" @click.stop="openModal('toc')">
+          <span class="progress-text">{{ Math.round(readingProgress) }}%</span>
+          <span class="chapter-info">{{ currentChapterTitle || "Chapter 1" }}</span>
+        </div>
+        <button class="footer-btn icon-btn" @click.stop="openModal('search')" aria-label="Search">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <path d="M21 21l-4.35-4.35" />
+          </svg>
+        </button>
+        <button
+          class="footer-btn"
+          @click.stop="nextChapter"
+          :disabled="chapters.findIndex((c) => c.id === currentChapterId) === chapters.length - 1"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M9 18l6-6-6-6" />
+          </svg>
+        </button>
+      </template>
     </footer>
 
     <ReaderModal
@@ -430,64 +618,30 @@ onUnmounted(() => {
       :search-query="searchQuery"
       :settings="settings"
       :has-highlights="hasHighlights"
+      :show-bookmark-editor="showBookmarkEditor"
+      :editing-bookmark="editingBookmark"
       @close="closeModal"
       @select-chapter="selectChapter"
       @update-settings="updateSettings"
+      @update:search-query="searchQuery = $event"
       @search="doSearch"
       @go-to-search-result="goToSearchResult"
       @clear-highlights="clearHighlights"
       @add-bookmark="addBookmark"
       @delete-bookmark="deleteBookmark"
+      @edit-bookmark="openBookmarkEditor"
+      @save-bookmark-edit="saveBookmarkEdit"
+      @close-bookmark-editor="
+        () => {
+          showBookmarkEditor = false;
+          editingBookmark = null;
+        }
+      "
     />
   </div>
 </template>
 
 <style scoped>
-.theme-light {
-  --reader-bg: #fdfcfb;
-  --reader-text: #1f1a17;
-  --text-secondary: #6e6659;
-  --header-bg: rgba(253, 252, 251, 0.9);
-  --border: #e6e2d8;
-  --border-subtle: rgba(90, 82, 72, 0.08);
-  --hover-bg: #f5f3ef;
-  --accent: #8b2e3a;
-  --accent-soft: rgba(139, 46, 58, 0.08);
-  --modal-bg: #fdfcfb;
-  --modal-text: #1f1a17;
-  --progress-track: #e6e2d8;
-}
-
-.theme-dark {
-  --reader-bg: #1a1816;
-  --reader-text: #e8e4de;
-  --text-secondary: #a8a094;
-  --header-bg: rgba(26, 24, 22, 0.9);
-  --border: #3d3630;
-  --border-subtle: rgba(232, 228, 222, 0.06);
-  --hover-bg: #2a2622;
-  --accent: #c45d6a;
-  --accent-soft: rgba(196, 93, 106, 0.12);
-  --modal-bg: #221f1c;
-  --modal-text: #e8e4de;
-  --progress-track: #3d3630;
-}
-
-.theme-sepia {
-  --reader-bg: #f5f0e6;
-  --reader-text: #3d352a;
-  --text-secondary: #7a6f5a;
-  --header-bg: rgba(245, 240, 230, 0.9);
-  --border: #c9bfa8;
-  --border-subtle: rgba(61, 53, 42, 0.08);
-  --hover-bg: #ebe5d5;
-  --accent: #8b5a3a;
-  --accent-soft: rgba(139, 90, 58, 0.1);
-  --modal-bg: #f5f0e6;
-  --modal-text: #3d352a;
-  --progress-track: #c9bfa8;
-}
-
 .reader-view-container {
   display: flex;
   flex-direction: column;
@@ -673,7 +827,7 @@ onUnmounted(() => {
 }
 
 .reader-content :deep(p) {
-  margin-bottom: 1.2em;
+  margin-bottom: calc(var(--paragraph-spacing, 1.2) * 1em);
   text-rendering: optimizeLegibility;
 }
 
