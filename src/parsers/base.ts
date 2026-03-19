@@ -257,9 +257,18 @@ export abstract class BaseBookParser implements BookParser {
     for (let i = 0; i < chapters.length; i++) {
       const current = chapters[i];
       const next = chapters[i + 1];
-      const chapterContent = next
+      let chapterContent = next
         ? content.slice(current.start, next.start).trim()
         : content.slice(current.start).trim();
+
+      // Remove the chapter title line from the content (it will be displayed separately)
+      const titleLine = current.title.split("\n")[0].trim();
+      if (chapterContent.startsWith(titleLine)) {
+        chapterContent = chapterContent.slice(titleLine.length).trim();
+        // Also remove any following blank lines
+        chapterContent = chapterContent.replace(/^\n+/, "");
+      }
+
       const id = generateId("ch");
       console.log(
         `[splitByChapters] Chapter ${i}: "${current.title}" -> ID: ${id}, content length: ${chapterContent.length}`,

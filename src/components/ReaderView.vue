@@ -276,6 +276,11 @@ onMounted(async () => {
     currentChapterTitle.value = chapter?.title || "";
     readingProgress.value = 0;
     chapterProgress.value = 0;
+    // Reset scroll position to top
+    const main = document.querySelector(".reader-view") as HTMLElement;
+    if (main) {
+      main.scrollTop = 0;
+    }
     console.log("[chapter:changed] State updated, content.value length:", content.value?.length);
   });
 
@@ -306,14 +311,7 @@ onUnmounted(() => {
     <!-- Top Bar (floating) -->
     <header class="reader-header" :class="{ visible: showControls }">
       <button class="back-btn" @click.stop="emit('close')" aria-label="Back to library">
-        <svg
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
-        >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M19 12H5M12 19l-7-7 7-7" />
         </svg>
       </button>
@@ -323,32 +321,17 @@ onUnmounted(() => {
       </div>
       <div class="header-actions">
         <button class="action-btn" @click.stop="openModal('toc')" aria-label="Table of Contents">
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-          >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <line x1="3" y1="6" x2="21" y2="6" />
             <line x1="3" y1="12" x2="15" y2="12" />
             <line x1="3" y1="18" x2="18" y2="18" />
           </svg>
         </button>
         <button class="action-btn" @click.stop="openModal('settings')" aria-label="Settings">
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-          >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <circle cx="12" cy="12" r="3" />
             <path
-              d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"
-            />
+              d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" />
           </svg>
         </button>
       </div>
@@ -367,52 +350,29 @@ onUnmounted(() => {
         <div class="touch-zone center" title="Toggle controls"></div>
         <div class="touch-zone right" title="Next chapter"></div>
       </div>
-      <article
-        class="reader-content"
-        :class="{ transitioning: isTransitioning }"
-        :style="{
-          maxWidth: `${settings.columnWidth}px`,
-          margin: '0 auto',
-          padding: `${settings.margin}px`,
-          fontSize: `${settings.fontSize}px`,
-          fontFamily: settings.fontFamily,
-          lineHeight: String(settings.lineHeight),
-        }"
-        v-html="content"
-      ></article>
+      <article class="reader-content" :class="{ transitioning: isTransitioning }" :style="{
+        maxWidth: `${settings.columnWidth}px`,
+        margin: '0 auto',
+        padding: `${settings.margin}px`,
+        fontSize: `${settings.fontSize}px`,
+        fontFamily: settings.fontFamily,
+        lineHeight: String(settings.lineHeight),
+      }">
+        <h2 class="chapter-heading">{{ currentChapterTitle }}</h2>
+        <div class="chapter-body" v-html="content"></div>
+      </article>
     </main>
 
     <!-- Bottom Bar (floating) -->
     <footer class="reader-footer" :class="{ visible: showControls }">
-      <button
-        class="footer-btn"
-        @click.stop="prevChapter"
-        :disabled="chapters.findIndex((c) => c.id === currentChapterId) === 0"
-      >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
+      <button class="footer-btn" @click.stop="prevChapter"
+        :disabled="chapters.findIndex((c) => c.id === currentChapterId) === 0">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M15 18l-6-6 6-6" />
         </svg>
       </button>
-      <button
-        class="footer-btn icon-btn"
-        @click.stop="openModal('bookmarks')"
-        aria-label="Bookmarks"
-      >
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
-        >
+      <button class="footer-btn icon-btn" @click.stop="openModal('bookmarks')" aria-label="Bookmarks">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
         </svg>
       </button>
@@ -421,31 +381,14 @@ onUnmounted(() => {
         <span class="chapter-info">{{ currentChapterTitle || "Chapter 1" }}</span>
       </div>
       <button class="footer-btn icon-btn" @click.stop="openModal('search')" aria-label="Search">
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
-        >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <circle cx="11" cy="11" r="8" />
           <path d="M21 21l-4.35-4.35" />
         </svg>
       </button>
-      <button
-        class="footer-btn"
-        @click.stop="nextChapter"
-        :disabled="chapters.findIndex((c) => c.id === currentChapterId) === chapters.length - 1"
-      >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
+      <button class="footer-btn" @click.stop="nextChapter"
+        :disabled="chapters.findIndex((c) => c.id === currentChapterId) === chapters.length - 1">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M9 18l6-6-6-6" />
         </svg>
       </button>
@@ -460,14 +403,7 @@ onUnmounted(() => {
             <div class="modal-header">
               <h3>Contents</h3>
               <button class="modal-close" @click="closeModal">
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                   <path d="M18 6L6 18M6 6l12 12" />
                 </svg>
               </button>
@@ -475,10 +411,8 @@ onUnmounted(() => {
             <div v-if="chapters.length === 0" class="no-chapters">No chapters available</div>
             <ul v-else class="toc-list">
               <li v-for="(ch, index) in chapters" :key="ch.id">
-                <button
-                  :class="['toc-item', { active: ch.id === currentChapterId }]"
-                  @click.stop="handleTocClick(ch.id)"
-                >
+                <button :class="['toc-item', { active: ch.id === currentChapterId }]"
+                  @click.stop="handleTocClick(ch.id)">
                   <span class="toc-number">{{ index + 1 }}</span>
                   <span class="toc-title">{{ ch.title }}</span>
                 </button>
@@ -491,14 +425,7 @@ onUnmounted(() => {
             <div class="modal-header">
               <h3>Reading Settings</h3>
               <button class="modal-close" @click="closeModal">
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                   <path d="M18 6L6 18M6 6l12 12" />
                 </svg>
               </button>
@@ -510,34 +437,20 @@ onUnmounted(() => {
                   <span class="setting-value">{{ settings.fontSize }}px</span>
                 </div>
                 <div class="font-size-presets">
-                  <button
-                    v-for="size in [14, 16, 18, 20, 22, 24]"
-                    :key="size"
+                  <button v-for="size in [14, 16, 18, 20, 22, 24]" :key="size"
                     :class="['font-preset', { active: settings.fontSize === size }]"
-                    @click="updateSettings({ fontSize: size })"
-                  >
+                    @click="updateSettings({ fontSize: size })">
                     A
                   </button>
                 </div>
                 <div class="font-size-preview">
                   <span class="font-a">A</span>
-                  <span class="font-medium" :style="{ fontSize: `${settings.fontSize * 0.8}px` }"
-                    >A</span
-                  >
-                  <span class="font-large" :style="{ fontSize: `${settings.fontSize * 1.2}px` }"
-                    >A</span
-                  >
+                  <span class="font-medium" :style="{ fontSize: `${settings.fontSize * 0.8}px` }">A</span>
+                  <span class="font-large" :style="{ fontSize: `${settings.fontSize * 1.2}px` }">A</span>
                 </div>
-                <input
-                  type="range"
-                  min="14"
-                  max="28"
-                  :value="settings.fontSize"
-                  @input="
-                    updateSettings({ fontSize: Number(($event.target as HTMLInputElement).value) })
-                  "
-                  class="range-input"
-                />
+                <input type="range" min="14" max="28" :value="settings.fontSize" @input="
+                  updateSettings({ fontSize: Number(($event.target as HTMLInputElement).value) })
+                  " class="range-input" />
               </div>
 
               <div class="setting-item">
@@ -545,42 +458,28 @@ onUnmounted(() => {
                   <span>Line Height</span>
                   <span class="setting-value">{{ settings.lineHeight }}</span>
                 </div>
-                <input
-                  type="range"
-                  min="1.2"
-                  max="2.2"
-                  step="0.1"
-                  :value="settings.lineHeight"
-                  @input="
-                    updateSettings({
-                      lineHeight: Number(($event.target as HTMLInputElement).value),
-                    })
-                  "
-                  class="range-input"
-                />
+                <input type="range" min="1.2" max="2.2" step="0.1" :value="settings.lineHeight" @input="
+                  updateSettings({
+                    lineHeight: Number(($event.target as HTMLInputElement).value),
+                  })
+                  " class="range-input" />
               </div>
 
               <div class="setting-item">
                 <label class="setting-label">Theme</label>
                 <div class="theme-options">
-                  <button
-                    :class="['theme-option', { active: settings.theme === 'light' }]"
-                    @click="updateSettings({ theme: 'light' })"
-                  >
+                  <button :class="['theme-option', { active: settings.theme === 'light' }]"
+                    @click="updateSettings({ theme: 'light' })">
                     <span class="theme-preview theme-preview-light"></span>
                     <span>Light</span>
                   </button>
-                  <button
-                    :class="['theme-option', { active: settings.theme === 'dark' }]"
-                    @click="updateSettings({ theme: 'dark' })"
-                  >
+                  <button :class="['theme-option', { active: settings.theme === 'dark' }]"
+                    @click="updateSettings({ theme: 'dark' })">
                     <span class="theme-preview theme-preview-dark"></span>
                     <span>Dark</span>
                   </button>
-                  <button
-                    :class="['theme-option', { active: settings.theme === 'sepia' }]"
-                    @click="updateSettings({ theme: 'sepia' })"
-                  >
+                  <button :class="['theme-option', { active: settings.theme === 'sepia' }]"
+                    @click="updateSettings({ theme: 'sepia' })">
                     <span class="theme-preview theme-preview-sepia"></span>
                     <span>Sepia</span>
                   </button>
@@ -592,19 +491,11 @@ onUnmounted(() => {
                   <span>Column Width</span>
                   <span class="setting-value">{{ settings.columnWidth }}px</span>
                 </div>
-                <input
-                  type="range"
-                  min="500"
-                  max="900"
-                  step="25"
-                  :value="settings.columnWidth"
-                  @input="
-                    updateSettings({
-                      columnWidth: Number(($event.target as HTMLInputElement).value),
-                    })
-                  "
-                  class="range-input"
-                />
+                <input type="range" min="500" max="900" step="25" :value="settings.columnWidth" @input="
+                  updateSettings({
+                    columnWidth: Number(($event.target as HTMLInputElement).value),
+                  })
+                  " class="range-input" />
               </div>
             </div>
           </div>
@@ -614,56 +505,31 @@ onUnmounted(() => {
             <div class="modal-header">
               <h3>Search</h3>
               <button class="modal-close" @click="closeModal">
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                   <path d="M18 6L6 18M6 6l12 12" />
                 </svg>
               </button>
             </div>
             <div class="search-box">
-              <input
-                id="search-input"
-                v-model="searchQuery"
-                type="text"
-                placeholder="Search in book..."
-                @keyup.enter="doSearch"
-                class="search-input"
-              />
+              <input id="search-input" v-model="searchQuery" type="text" placeholder="Search in book..."
+                @keyup.enter="doSearch" class="search-input" />
               <button class="search-submit" @click="doSearch">
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <circle cx="11" cy="11" r="8" />
                   <path d="M21 21l-4.35-4.35" />
                 </svg>
               </button>
             </div>
             <div class="search-results-info" v-if="searchResults.length > 0">
-              <span class="results-count"
-                >{{ searchResults.length }} result{{ searchResults.length !== 1 ? "s" : "" }}</span
-              >
+              <span class="results-count">{{ searchResults.length }} result{{ searchResults.length !== 1 ? "s" : ""
+              }}</span>
               <button class="clear-highlights" @click="clearHighlights" v-if="hasHighlights">
                 Clear highlights
               </button>
             </div>
             <ul class="search-results">
-              <li
-                v-for="(result, i) in searchResults"
-                :key="i"
-                class="search-result"
-                @click.stop="goToSearchResult(result)"
-              >
+              <li v-for="(result, i) in searchResults" :key="i" class="search-result"
+                @click.stop="goToSearchResult(result)">
                 <div class="result-header">
                   <span class="result-chapter">{{ result.chapterTitle }}</span>
                   <span class="result-index">{{ i + 1 }}</span>
@@ -681,27 +547,13 @@ onUnmounted(() => {
             <div class="modal-header">
               <h3>Bookmarks</h3>
               <button class="modal-close" @click="closeModal">
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                   <path d="M18 6L6 18M6 6l12 12" />
                 </svg>
               </button>
             </div>
             <button class="add-bookmark-btn" @click="addBookmark">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 5v14M5 12h14" />
               </svg>
               Add Bookmark
@@ -711,19 +563,10 @@ onUnmounted(() => {
                 <div class="bookmark-content" @click.stop="selectChapter(bm.chapterId)">
                   <div class="bookmark-header">
                     <div class="bookmark-title">{{ bm.title }}</div>
-                    <button
-                      class="bookmark-delete-btn"
-                      @click.stop="deleteBookmark(bm.id, $event)"
-                      aria-label="Delete bookmark"
-                    >
-                      <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                      >
+                    <button class="bookmark-delete-btn" @click.stop="deleteBookmark(bm.id, $event)"
+                      aria-label="Delete bookmark">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2">
                         <path d="M18 6L6 18M6 6l12 12" />
                       </svg>
                     </button>
@@ -916,11 +759,9 @@ onUnmounted(() => {
 
 .progress-bar {
   height: 100%;
-  background: linear-gradient(
-    90deg,
-    var(--accent) 0%,
-    color-mix(in srgb, var(--accent) 75%, white) 100%
-  );
+  background: linear-gradient(90deg,
+      var(--accent) 0%,
+      color-mix(in srgb, var(--accent) 75%, white) 100%);
   transition: width 350ms cubic-bezier(0.4, 0, 0.2, 1);
   border-radius: 0 1.5px 1.5px 0;
 }
@@ -985,6 +826,23 @@ onUnmounted(() => {
   -webkit-hyphens: auto;
 }
 
+.chapter-heading {
+  font-family: var(--font-display);
+  font-size: 1.8em;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--reader-text);
+  text-align: center;
+  padding-bottom: 1.5em;
+  margin-bottom: 1em;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.chapter-body {
+  padding-top: 0.5em;
+  white-space: break-spaces;
+}
+
 .reader-content.transitioning {
   opacity: 0;
   transform: translateY(8px);
@@ -1012,9 +870,11 @@ onUnmounted(() => {
 .reader-content :deep(h1) {
   font-size: 1.8em;
 }
+
 .reader-content :deep(h2) {
   font-size: 1.5em;
 }
+
 .reader-content :deep(h3) {
   font-size: 1.25em;
 }
@@ -1188,6 +1048,7 @@ onUnmounted(() => {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -1215,6 +1076,7 @@ onUnmounted(() => {
   from {
     transform: translateY(100%);
   }
+
   to {
     transform: translateY(0);
   }
@@ -1405,10 +1267,12 @@ onUnmounted(() => {
   opacity: 0.4;
   font-family: var(--font-display);
 }
+
 .font-medium {
   opacity: 0.65;
   font-family: var(--font-display);
 }
+
 .font-large {
   opacity: 1;
   font-family: var(--font-display);
@@ -1481,10 +1345,12 @@ onUnmounted(() => {
   background: linear-gradient(135deg, #fdfcfb 0%, #f5f3ef 100%);
   border: 1px solid #e6e2d8;
 }
+
 .theme-preview-dark {
   background: linear-gradient(135deg, #1a1816 0%, #2a2622 100%);
   border: 1px solid #3d3630;
 }
+
 .theme-preview-sepia {
   background: linear-gradient(135deg, #f5f0e6 0%, #ebe5d5 100%);
   border: 1px solid #c9bfa8;
