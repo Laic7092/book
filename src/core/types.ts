@@ -119,21 +119,6 @@ export interface BookReadingStats {
   lastReadAt?: number; // Timestamp of most recent session end
 }
 
-export type ReaderEventMap = {
-  "book:loaded": { book: Book; chapters: Chapter[]; resourceUrls?: Map<string, string> };
-  "chapter:changed": { chapterId: string; content: string; resourceUrls?: Map<string, string> };
-  "progress:updated": { progress: ReadingProgress };
-  "bookmark:added": { bookmark: Bookmark };
-  "bookmark:updated": { bookmark: Bookmark };
-  "bookmark:removed": { bookmarkId: string };
-  "settings:changed": { settings: ReaderSettings };
-  "search:results": { results: SearchResult[]; query: string };
-  "stats:session-start": { bookId: string; startTime: number };
-  "stats:session-end": { bookId: string; duration: number };
-  "stats:updated": { bookId: string; stats: BookReadingStats };
-  error: { message: string; error?: Error };
-};
-
 export const DEFAULT_SETTINGS: ReaderSettings = {
   fontSize: 18,
   fontFamily: "Literata, Georgia, serif",

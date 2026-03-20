@@ -1,27 +1,36 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed } from "vue";
 import Bookshelf from "./components/Bookshelf.vue";
 import ReaderView from "./components/ReaderView.vue";
-import { readerCore } from "./core/reader";
+import { useReaderStore } from "./stores/reader";
+import { useUIStore } from "./stores/ui";
 import type { Book } from "./core/types";
 
-const currentBook = ref<Book | null>(null);
-const isTransitioning = ref(false);
+const readerStore = useReaderStore();
+const uiStore = useUIStore();
 
-function handleBookSelect(book: Book) {
-  isTransitioning.value = true;
-  currentBook.value = book;
-  setTimeout(() => {
-    isTransitioning.value = false;
-  }, 300);
+const currentBook = computed(() => readerStore.currentBook);
+const isTransitioning = computed(() => uiStore.isTransitioning);
+
+async function handleBookSelect(book: Book) {
+  uiStore.setTransitioning(true);
+  try {
+    await readerStore.openBook(book.id);
+  } catch (err) {
+    console.error("Failed to open book:", err);
+    uiStore.triggerToast("Failed to open book. Please try again.", true);
+  } finally {
+    setTimeout(() => {
+      uiStore.setTransitioning(false);
+    }, 300);
+  }
 }
 
 async function handleCloseReader() {
-  await readerCore.closeBook();
-  isTransitioning.value = true;
-  currentBook.value = null;
+  uiStore.setTransitioning(true);
+  await readerStore.closeBook();
   setTimeout(() => {
-    isTransitioning.value = false;
+    uiStore.setTransitioning(false);
   }, 300);
 }
 </script>

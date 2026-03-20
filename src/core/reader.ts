@@ -1,6 +1,5 @@
 // Reader core logic
 
-import { eventBus } from "./events";
 import type {
   Book,
   Chapter,
@@ -93,11 +92,6 @@ export const readerCore = {
       state.currentBook = parsedBook.book;
       state.chapters = parsedBook.chapters;
 
-      eventBus.emit("book:loaded", {
-        book: parsedBook.book,
-        chapters: parsedBook.chapters,
-      });
-
       return {
         book: parsedBook.book,
         chapters: parsedBook.chapters,
@@ -105,7 +99,6 @@ export const readerCore = {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to load book";
       state.error = errorMessage;
-      eventBus.emit("error", { message: errorMessage, error: error as Error });
       throw error;
     } finally {
       state.isLoading = false;
@@ -143,6 +136,9 @@ export const readerCore = {
       state.currentBook = book;
       state.chapters = chapters;
 
+      // Set current chapter to first chapter
+      state.currentChapter = chapters.length > 0 ? chapters[0] : null;
+
       // Load resource URLs for this book
       state.resourceUrls = await resourcesStore.getResourceUrls(bookId);
 
@@ -151,20 +147,13 @@ export const readerCore = {
 
       // Start reading session
       await statsStore.startSession(bookId);
-      eventBus.emit("stats:session-start", { bookId, startTime: Date.now() });
 
-      console.log("[readerCore.openBook] Emitting book:loaded event");
-      eventBus.emit("book:loaded", {
-        book,
-        chapters,
-        resourceUrls: state.resourceUrls,
-      });
+      console.log("[readerCore.openBook] Book opened successfully");
 
       return { book, chapters };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to open book";
       state.error = errorMessage;
-      eventBus.emit("error", { message: errorMessage, error: error as Error });
       throw error;
     } finally {
       state.isLoading = false;
@@ -191,27 +180,15 @@ export const readerCore = {
       throw new Error("Chapter not found");
     }
 
-    try {
-      const content = await booksStore.getChapterContent(state.currentBook.id, chapterId);
+    const content = await booksStore.getChapterContent(state.currentBook.id, chapterId);
 
-      if (content === undefined) {
-        throw new Error("Chapter content not found");
-      }
-
-      state.currentChapter = chapter;
-
-      eventBus.emit("chapter:changed", {
-        chapterId,
-        content,
-        resourceUrls: state.resourceUrls,
-      });
-
-      return content;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to load chapter";
-      eventBus.emit("error", { message: errorMessage, error: error as Error });
-      throw error;
+    if (content === undefined) {
+      throw new Error("Chapter content not found");
     }
+
+    state.currentChapter = chapter;
+
+    return content;
   },
 
   /**
@@ -264,16 +241,6 @@ export const readerCore = {
       scrollPosition,
       percentage,
     );
-
-    const progress: ReadingProgress = {
-      bookId: state.currentBook.id,
-      chapterId: state.currentChapter.id,
-      scrollPosition,
-      percentage,
-      updatedAt: Date.now(),
-    };
-
-    eventBus.emit("progress:updated", { progress });
   },
 
   /**
@@ -311,7 +278,6 @@ export const readerCore = {
     );
 
     await bookmarksStore.addBookmark(bookmark);
-    eventBus.emit("bookmark:added", { bookmark });
 
     return bookmark;
   },
@@ -331,7 +297,6 @@ export const readerCore = {
    */
   async removeBookmark(bookmarkId: string): Promise<void> {
     await bookmarksStore.deleteBookmark(bookmarkId);
-    eventBus.emit("bookmark:removed", { bookmarkId });
   },
 
   /**
@@ -342,7 +307,6 @@ export const readerCore = {
     if (!bookmark) throw new Error("Bookmark not found");
     const updated = { ...bookmark, ...updates };
     await bookmarksStore.updateBookmark(updated);
-    eventBus.emit("bookmark:updated", { bookmark: updated });
   },
 
   /**
@@ -359,7 +323,6 @@ export const readerCore = {
     const current = await settingsStore.getSettings();
     const updated = { ...current, ...settings };
     await settingsStore.saveSettings(updated);
-    eventBus.emit("settings:changed", { settings: updated });
     return updated;
   },
 
@@ -371,10 +334,6 @@ export const readerCore = {
     if (state.currentBook) {
       const chapterId = state.currentChapter?.id;
       await statsStore.endSession(state.currentBook.id, chapterId);
-      eventBus.emit("stats:session-end", {
-        bookId: state.currentBook.id,
-        duration: Date.now(),
-      });
     }
 
     // Revoke blob URLs to free memory
@@ -416,14 +375,29 @@ export const readerCore = {
   },
 
   /**
-   * Subscribe to events
+   * Get current chapter content with resource URLs rewritten
    */
-  on: eventBus.on.bind(eventBus),
+  async getCurrentChapterContent(): Promise<string | null> {
+    if (!state.currentBook || !state.currentChapter) {
+      return null;
+    }
 
-  /**
-   * Subscribe once
-   */
-  once: eventBus.once.bind(eventBus),
+    const content = await booksStore.getChapterContent(
+      state.currentBook.id,
+      state.currentChapter.id,
+    );
+    if (!content) {
+      return null;
+    }
+
+    // Rewrite resource URLs if available
+    if (state.resourceUrls && state.resourceUrls.size > 0) {
+      const { rewriteResourcePaths } = await import("../utils/resource-urls");
+      return rewriteResourcePaths(content, state.resourceUrls);
+    }
+
+    return content;
+  },
 
   /**
    * Get all books from library

@@ -1,111 +1,74 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from "vue";
-import { readerCore } from "../core/reader";
-import { dbGetAll, dbDelete, STORES } from "../storage/db";
-import type { Book } from "../core/types";
+import { computed, onMounted, ref } from "vue";
+import { useBookshelfStore } from "../stores/bookshelf";
+import { useUIStore } from "../stores/ui";
+import { getBookGradient, getInitial } from "../utils/colors";
 import { formatDuration } from "../utils/time";
+import type { Book } from "../core/types";
 
 const emit = defineEmits<{
   (e: "book:select", book: Book): void;
   (e: "book:delete", bookId: string): void;
 }>();
 
-const books = ref<Book[]>([]);
-const isLoading = ref(true);
-const isUploading = ref(false);
-const showToast = ref(false);
-const toastMessage = ref("");
-const showConfirm = ref(false);
-const bookToDelete = ref<string | null>(null);
-const searchQuery = ref("");
+const bookshelfStore = useBookshelfStore();
+const uiStore = useUIStore();
+
+// Store state
+const books = computed(() => bookshelfStore.books);
+const isLoading = computed(() => bookshelfStore.isLoading);
+const isUploading = computed(() => bookshelfStore.isUploading);
+const showToast = computed(() => uiStore.triggerToast);
+const toastMessage = computed(() => uiStore.toastMessage);
+const showConfirm = computed(() => uiStore.showConfirm);
+const searchQuery = computed({
+  get: () => bookshelfStore.searchQuery,
+  set: (val) => bookshelfStore.setSearchQuery(val),
+});
+const summaryStats = computed(() => bookshelfStore.summaryStats);
+
+// Local state
 const searchFocused = ref(false);
-
-// Summary stats
-const summaryStats = ref<{
-  totalBooks: number;
-  totalReadingTime: number;
-  totalSessions: number;
-  booksInProgress: number;
-  completedBooks: number;
-  thisWeekReadingTime: number;
-} | null>(null);
-
-// Import color utilities from shared module
-import { getBookGradient, getInitial } from "../utils/colors";
-
-async function loadBooks() {
-  isLoading.value = true;
-  books.value = await dbGetAll<Book>(STORES.BOOKS);
-  // Load summary stats
-  summaryStats.value = await readerCore.getSummaryStats();
-  isLoading.value = false;
-}
 
 async function handleFileUpload(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0];
   if (file) {
-    isUploading.value = true;
     try {
-      const result = await readerCore.loadBook(file);
-      await loadBooks();
-      showToastMessage(`"${result.book.title}" added to library`);
+      const result = await bookshelfStore.addBookFromFile(file);
+      uiStore.triggerToast(`"${result.book.title}" added to library`);
       emit("book:select", result.book);
     } catch (err) {
       console.error("Failed to add book:", err);
-      showToastMessage("Failed to load book. Please try again.", true);
-    } finally {
-      isUploading.value = false;
+      uiStore.triggerToast("Failed to load book. Please try again.", true);
     }
   }
   (e.target as HTMLInputElement).value = "";
 }
 
-function showToastMessage(msg: string, isError = false) {
-  toastMessage.value = msg;
-  showToast.value = true;
-  setTimeout(() => {
-    showToast.value = false;
-  }, 3000);
-}
-
 function confirmDelete(bookId: string, e: Event) {
   e.stopPropagation();
-  bookToDelete.value = bookId;
-  showConfirm.value = true;
+  uiStore.showConfirmation(
+    "Remove volume?",
+    "This will permanently delete this book from your library.",
+    () => deleteBook(bookId),
+  );
 }
 
-async function deleteBook() {
-  if (!bookToDelete.value) return;
-  const book = books.value.find((b) => b.id === bookToDelete.value);
-  await readerCore.deleteBook(bookToDelete.value);
-  await loadBooks();
-  emit("book:delete", bookToDelete.value);
+async function deleteBook(bookId: string) {
+  const book = books.value.find((b) => b.id === bookId);
+  await bookshelfStore.deleteBook(bookId);
+  emit("book:delete", bookId);
   if (book) {
-    showToastMessage(`"${book.title}" removed from library`);
+    uiStore.triggerToast(`"${book.title}" removed from library`);
   }
-  showConfirm.value = false;
-  bookToDelete.value = null;
-}
-
-function cancelDelete() {
-  showConfirm.value = false;
-  bookToDelete.value = null;
 }
 
 function selectBook(book: Book) {
   emit("book:select", book);
 }
 
-// Filter books by search query
-const filteredBooks = computed(() => {
-  if (!searchQuery.value.trim()) return books.value;
-  const query = searchQuery.value.toLowerCase();
-  return books.value.filter(
-    (book) =>
-      book.title.toLowerCase().includes(query) ||
-      (book.author && book.author.toLowerCase().includes(query)),
-  );
-});
+// Filter books by search query (using store's computed)
+const filteredBooks = computed(() => bookshelfStore.filteredBooks);
 
 // Cached computations for book cover rendering
 const bookGradients = computed(() => {
@@ -124,21 +87,8 @@ const bookInitials = computed(() => {
   return map;
 });
 
-let statsUnsubscribe: (() => void) | null = null;
-
 onMounted(() => {
-  loadBooks();
-  // Listen for stats updates to refresh summary
-  const statsHandler = () => {
-    loadBooks();
-  };
-  statsUnsubscribe = readerCore.on("stats:session-end", statsHandler);
-});
-
-onUnmounted(() => {
-  if (statsUnsubscribe) {
-    statsUnsubscribe();
-  }
+  bookshelfStore.loadBooks();
 });
 </script>
 
@@ -184,14 +134,18 @@ onUnmounted(() => {
             <path d="M21 21l-4.35-4.35" />
           </svg>
           <input
-            v-model="searchQuery"
+            v-model="bookshelfStore.searchQuery"
             type="text"
             placeholder="Search library..."
             class="search-input-inline"
             @focus="searchFocused = true"
             @blur="searchFocused = false"
           />
-          <button v-if="searchQuery" class="search-clear-inline" @click="searchQuery = ''">
+          <button
+            v-if="bookshelfStore.searchQuery"
+            class="search-clear-inline"
+            @click="bookshelfStore.setSearchQuery('')"
+          >
             <svg
               width="14"
               height="14"
@@ -336,8 +290,11 @@ onUnmounted(() => {
     </div>
 
     <!-- No search results -->
-    <div v-if="books.length > 0 && filteredBooks.length === 0 && searchQuery" class="no-results">
-      <p>No volumes found matching "{{ searchQuery }}"</p>
+    <div
+      v-if="books.length > 0 && filteredBooks.length === 0 && bookshelfStore.searchQuery"
+      class="no-results"
+    >
+      <p>No volumes found matching "{{ bookshelfStore.searchQuery }}"</p>
     </div>
 
     <!-- Toast Notification -->
@@ -356,13 +313,13 @@ onUnmounted(() => {
 
     <!-- Confirm Dialog -->
     <transition name="fade">
-      <div v-if="showConfirm" class="confirm-dialog" @click.self="cancelDelete">
+      <div v-if="showConfirm" class="confirm-dialog" @click.self="uiStore.cancelConfirmation()">
         <div class="confirm-content">
-          <h3 class="confirm-title">Remove volume?</h3>
-          <p class="confirm-message">This will permanently delete this book from your library.</p>
+          <h3 class="confirm-title">{{ uiStore.confirmTitle }}</h3>
+          <p class="confirm-message">{{ uiStore.confirmMessage }}</p>
           <div class="confirm-actions">
-            <button class="confirm-btn cancel" @click="cancelDelete">Cancel</button>
-            <button class="confirm-btn delete" @click="deleteBook">Delete</button>
+            <button class="confirm-btn cancel" @click="uiStore.cancelConfirmation()">Cancel</button>
+            <button class="confirm-btn delete" @click="uiStore.confirm()">Delete</button>
           </div>
         </div>
       </div>
