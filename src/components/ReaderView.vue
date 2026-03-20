@@ -45,7 +45,7 @@ const bookmarks = computed(() => readerStore.bookmarks);
 const settings = computed(() => readerStore.settings);
 const readingProgress = computed({
   get: () => readerStore.readingProgress,
-  set: (val) => readerStore.updateProgress(val),
+  set: (val) => readerStore.updateProgress(val, val),
 });
 const currentChapterTitle = computed(() => readerStore.currentChapter?.title || "");
 const showControls = computed({

@@ -137,7 +137,9 @@ const emit = defineEmits<{
           </svg>
         </button>
         <div class="progress-info" @click.stop="emit('open-modal', 'toc')">
-          <span class="progress-text">{{ Math.round(readingProgress) }}%</span>
+          <span class="progress-text"
+            >{{ isNaN(readingProgress) ? 0 : Math.round(readingProgress) }}%</span
+          >
           <span class="chapter-info">{{ currentChapterTitle || "Chapter 1" }}</span>
         </div>
         <button
@@ -219,7 +221,9 @@ const emit = defineEmits<{
           </svg>
         </button>
         <div class="progress-info" @click.stop="emit('open-modal', 'toc')">
-          <span class="progress-text">{{ Math.round(readingProgress) }}%</span>
+          <span class="progress-text"
+            >{{ isNaN(readingProgress) ? 0 : Math.round(readingProgress) }}%</span
+          >
           <span class="chapter-info">{{ currentChapterTitle || "Chapter 1" }}</span>
         </div>
         <button

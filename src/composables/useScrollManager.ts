@@ -8,7 +8,7 @@ interface UseScrollManagerOptions {
   isPaginationMode: Ref<boolean>;
   readingProgress: Ref<number>;
   chapterProgress: Ref<number>;
-  updateProgress: (progress: number) => void;
+  updateProgress: (scrollPosition: number, percentage: number) => void;
   onPreloadTrigger?: (chapterIndex: number) => void;
 }
 
@@ -83,7 +83,7 @@ export function useScrollManager(options: UseScrollManagerOptions) {
     // Debounced progress saving
     if (saveProgressTimer.value) clearTimeout(saveProgressTimer.value);
     saveProgressTimer.value = window.setTimeout(() => {
-      updateProgress(scrollPercentage);
+      updateProgress(scrollPercentage, scrollPercentage);
     }, 1000);
   }, 16);
 

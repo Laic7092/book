@@ -79,7 +79,19 @@ export function useChapterPreloader(
     const allLoaded = chapters.value.every((c) => loadedChapters.value.has(c.id));
     if (allLoaded) return;
 
-    loadedChapters.value.add(chapters.value[currentIndex].id);
+    // Load current chapter content first
+    const currentChapter = chapters.value[currentIndex];
+    if (currentChapter && !loadedChapters.value.has(currentChapter.id)) {
+      try {
+        const content = await booksStore.getChapterContent(bookId.value, currentChapter.id);
+        if (content !== undefined) {
+          chapterContents.value.set(currentChapter.id, content);
+          loadedChapters.value.add(currentChapter.id);
+        }
+      } catch (err) {
+        console.error("[loadAllChapters] Error loading current chapter:", err);
+      }
+    }
 
     const indices: number[] = [];
     for (let i = 0; i < chapters.value.length; i++) {

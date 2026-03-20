@@ -2,8 +2,8 @@
 
 import { defineStore } from "pinia";
 import type { Book } from "../core/types";
-import { readerCore } from "../core/reader";
 import { dbGetAll, STORES } from "../storage/db";
+import * as statsStore from "../storage/stats";
 
 export interface BookshelfState {
   books: Book[];
@@ -53,7 +53,7 @@ export const useBookshelfStore = defineStore("bookshelf", {
       this.isLoading = true;
       try {
         this.books = await dbGetAll<Book>(STORES.BOOKS);
-        this.summaryStats = await readerCore.getSummaryStats();
+        this.summaryStats = await statsStore.getSummaryStats();
       } finally {
         this.isLoading = false;
       }
@@ -65,7 +65,9 @@ export const useBookshelfStore = defineStore("bookshelf", {
     async addBookFromFile(file: File) {
       this.isUploading = true;
       try {
-        const result = await readerCore.loadBook(file);
+        const { useReaderStore } = await import("./reader");
+        const readerStore = useReaderStore();
+        const result = await readerStore.loadBook(file);
         await this.loadBooks();
         return result;
       } finally {
@@ -77,9 +79,11 @@ export const useBookshelfStore = defineStore("bookshelf", {
      * Delete a book
      */
     async deleteBook(bookId: string) {
-      await readerCore.deleteBook(bookId);
+      const { useReaderStore } = await import("./reader");
+      const readerStore = useReaderStore();
+      await readerStore.deleteBook(bookId);
       this.books = this.books.filter((b) => b.id !== bookId);
-      this.summaryStats = await readerCore.getSummaryStats();
+      this.summaryStats = await statsStore.getSummaryStats();
     },
 
     /**
@@ -93,7 +97,7 @@ export const useBookshelfStore = defineStore("bookshelf", {
      * Refresh summary statistics
      */
     async refreshStats() {
-      this.summaryStats = await readerCore.getSummaryStats();
+      this.summaryStats = await statsStore.getSummaryStats();
     },
   },
 });

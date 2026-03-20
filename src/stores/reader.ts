@@ -1,8 +1,43 @@
 // Reader Store - Manages book reading state and operations
 
 import { defineStore } from "pinia";
-import type { Book, Chapter, Bookmark, ReaderSettings } from "../core/types";
-import { readerCore } from "../core/reader";
+import type { Book, Chapter, Bookmark, ReaderSettings, ParsedBook } from "../core/types";
+import { TxtParser } from "../parsers/txt-parser";
+import { EpubParser } from "../parsers/epub-parser";
+import type { BookParser } from "../core/types";
+import * as booksStore from "../storage/books";
+import * as progressStore from "../storage/progress";
+import * as bookmarksStore from "../storage/bookmarks";
+import * as settingsStore from "../storage/settings";
+import * as resourcesStore from "../storage/resources";
+import * as statsStore from "../storage/stats";
+
+/**
+ * Parser registry
+ */
+const parsers: BookParser[] = [new TxtParser(), new EpubParser()];
+
+/**
+ * Get appropriate parser for a file
+ */
+function getParserForFile(file: File): BookParser | null {
+  for (const parser of parsers) {
+    if (parser.supportsFormat(file.type)) {
+      return parser;
+    }
+  }
+
+  // Fallback: try parsers based on file extension
+  const ext = file.name.split(".").pop()?.toLowerCase();
+  if (ext === "txt") {
+    return new TxtParser();
+  }
+  if (ext === "epub") {
+    return new EpubParser();
+  }
+
+  return null;
+}
 
 export interface ReaderState {
   currentBook: Book | null;
@@ -54,16 +89,30 @@ export const useReaderStore = defineStore("reader", {
     /**
      * Load a book from file
      */
-    async loadBook(file: File) {
+    async loadBook(file: File): Promise<{ book: Book; chapters: Chapter[] }> {
       this.isLoading = true;
       this.error = null;
 
       try {
-        const result = await readerCore.loadBook(file);
-        this.currentBook = result.book;
-        this.chapters = result.chapters;
-        this.bookmarks = await readerCore.getBookmarks();
-        return result;
+        const parser = getParserForFile(file);
+
+        if (!parser) {
+          throw new Error(`Unsupported file format: ${file.type || file.name}`);
+        }
+
+        const parsedBook: ParsedBook = await parser.parse(file);
+
+        // Save to storage
+        await booksStore.saveBook(parsedBook);
+
+        this.currentBook = parsedBook.book;
+        this.chapters = parsedBook.chapters;
+        this.bookmarks = await bookmarksStore.getBookmarks(parsedBook.book.id);
+
+        return {
+          book: parsedBook.book,
+          chapters: parsedBook.chapters,
+        };
       } catch (error) {
         this.error = error instanceof Error ? error.message : "Failed to load book";
         throw error;
@@ -75,23 +124,55 @@ export const useReaderStore = defineStore("reader", {
     /**
      * Open a book from storage by ID
      */
-    async openBook(bookId: string) {
+    async openBook(bookId: string): Promise<{ book: Book; chapters: Chapter[] }> {
       this.isLoading = true;
       this.error = null;
 
       try {
-        const result = await readerCore.openBook(bookId);
-        this.currentBook = result.book;
-        this.chapters = result.chapters;
-        // Sync currentChapter from readerCore state
-        this.currentChapter = readerCore.getState().currentChapter;
-        this.bookmarks = await readerCore.getBookmarks();
+        console.log("[readerStore.openBook] Loading book:", bookId);
+
+        const book = await booksStore.getBook(bookId);
+        if (!book) {
+          throw new Error("Book not found");
+        }
+        console.log("[readerStore.openBook] Book loaded:", book);
+
+        // Get chapters with titles from storage
+        const chaptersData = await booksStore.getChapters(bookId);
+        console.log("[readerStore.openBook] Chapters data from DB:", chaptersData);
+
+        const chapters: Chapter[] = chaptersData.map((ch) => ({
+          id: ch.id,
+          bookId,
+          title: ch.title,
+          order: ch.order,
+        }));
+        console.log("[readerStore.openBook] Chapters mapped:", chapters);
+
+        this.currentBook = book;
+        this.chapters = chapters;
+        // Set current chapter to first chapter
+        this.currentChapter = chapters.length > 0 ? chapters[0] : null;
+
+        // Load resource URLs for this book
+        this.resourceUrls = await resourcesStore.getResourceUrls(bookId);
+
+        // Update last read timestamp
+        await booksStore.updateLastRead(bookId);
+
+        // Start reading session
+        await statsStore.startSession(bookId);
+
+        // Load bookmarks
+        this.bookmarks = await bookmarksStore.getBookmarks(bookId);
 
         // Load settings
-        const settings = await readerCore.getSettings();
+        const settings = await settingsStore.getSettings();
         this.settings = { ...this.settings, ...settings };
 
-        return result;
+        console.log("[readerStore.openBook] Book opened successfully");
+
+        return { book, chapters };
       } catch (error) {
         this.error = error instanceof Error ? error.message : "Failed to open book";
         throw error;
@@ -103,51 +184,92 @@ export const useReaderStore = defineStore("reader", {
     /**
      * Navigate to a chapter
      */
-    async goToChapter(chapterId: string) {
-      const content = await readerCore.goToChapter(chapterId);
-      const chapter = this.chapters.find((c) => c.id === chapterId);
-      if (chapter) {
-        this.currentChapter = chapter;
+    async goToChapter(chapterId: string): Promise<string> {
+      if (!this.currentBook) {
+        throw new Error("No book loaded");
       }
+
+      const chapter = this.chapters.find((c) => c.id === chapterId);
+      if (!chapter) {
+        throw new Error("Chapter not found");
+      }
+
+      const content = await booksStore.getChapterContent(this.currentBook.id, chapterId);
+
+      if (content === undefined) {
+        throw new Error("Chapter content not found");
+      }
+
+      this.currentChapter = chapter;
       this.chapterProgress = 0;
       this.readingProgress = 0;
+
       return content;
     },
 
     /**
      * Go to next chapter
      */
-    async nextChapter() {
-      const currentIndex = this.chapters.findIndex((c) => c.id === this.currentChapter?.id);
-      if (currentIndex < this.chapters.length - 1) {
-        const nextChapter = this.chapters[currentIndex + 1];
-        if (nextChapter) {
-          return this.goToChapter(nextChapter.id);
-        }
+    async nextChapter(): Promise<string | null> {
+      if (!this.currentChapter || !this.currentBook) {
+        return null;
       }
+
+      const currentIndex = this.chapters.findIndex((c) => c.id === this.currentChapter!.id);
+      const nextChapter = this.chapters[currentIndex + 1];
+
+      if (nextChapter) {
+        return this.goToChapter(nextChapter.id);
+      }
+
       return null;
     },
 
     /**
      * Go to previous chapter
      */
-    async prevChapter() {
-      const currentIndex = this.chapters.findIndex((c) => c.id === this.currentChapter?.id);
-      if (currentIndex > 0) {
-        const prevChapter = this.chapters[currentIndex - 1];
-        if (prevChapter) {
-          return this.goToChapter(prevChapter.id);
-        }
+    async prevChapter(): Promise<string | null> {
+      if (!this.currentChapter || !this.currentBook) {
+        return null;
       }
+
+      const currentIndex = this.chapters.findIndex((c) => c.id === this.currentChapter!.id);
+      const prevChapter = this.chapters[currentIndex - 1];
+
+      if (prevChapter) {
+        return this.goToChapter(prevChapter.id);
+      }
+
       return null;
     },
 
     /**
      * Update reading progress
      */
-    updateProgress(progress: number) {
-      this.readingProgress = progress;
-      this.chapterProgress = progress;
+    async updateProgress(scrollPosition: number, percentage: number): Promise<void> {
+      if (!this.currentBook || !this.currentChapter) {
+        return;
+      }
+
+      this.readingProgress = percentage;
+      this.chapterProgress = percentage;
+
+      await progressStore.updateProgress(
+        this.currentBook.id,
+        this.currentChapter.id,
+        scrollPosition,
+        percentage,
+      );
+    },
+
+    /**
+     * Get current progress
+     */
+    async getCurrentProgress() {
+      if (!this.currentBook) {
+        return undefined;
+      }
+      return progressStore.getProgress(this.currentBook.id);
     },
 
     /**
@@ -159,25 +281,54 @@ export const useReaderStore = defineStore("reader", {
       position: number,
       color?: string,
       note?: string,
-    ) {
-      const bookmark = await readerCore.addBookmark(title, contentPreview, position, color, note);
+    ): Promise<Bookmark> {
+      if (!this.currentBook || !this.currentChapter) {
+        throw new Error("No book/chapter loaded");
+      }
+
+      const bookmark = bookmarksStore.createBookmark(
+        this.currentBook.id,
+        this.currentChapter.id,
+        title,
+        contentPreview,
+        position,
+        color,
+        note,
+      );
+
+      await bookmarksStore.addBookmark(bookmark);
       this.bookmarks.push(bookmark);
+
       return bookmark;
+    },
+
+    /**
+     * Get all bookmarks for current book
+     */
+    async getBookmarks(): Promise<Bookmark[]> {
+      if (!this.currentBook) {
+        return [];
+      }
+      return bookmarksStore.getBookmarks(this.currentBook.id);
     },
 
     /**
      * Remove a bookmark
      */
-    async removeBookmark(bookmarkId: string) {
-      await readerCore.removeBookmark(bookmarkId);
+    async removeBookmark(bookmarkId: string): Promise<void> {
+      await bookmarksStore.deleteBookmark(bookmarkId);
       this.bookmarks = this.bookmarks.filter((b) => b.id !== bookmarkId);
     },
 
     /**
      * Update a bookmark
      */
-    async updateBookmark(bookmarkId: string, updates: Partial<Bookmark>) {
-      await readerCore.updateBookmark(bookmarkId, updates);
+    async updateBookmark(bookmarkId: string, updates: Partial<Bookmark>): Promise<void> {
+      const bookmark = await bookmarksStore.getBookmark(bookmarkId);
+      if (!bookmark) throw new Error("Bookmark not found");
+      const updated = { ...bookmark, ...updates };
+      await bookmarksStore.updateBookmark(updated);
+
       const index = this.bookmarks.findIndex((b) => b.id === bookmarkId);
       if (index !== -1) {
         this.bookmarks[index] = { ...this.bookmarks[index], ...updates };
@@ -187,17 +338,29 @@ export const useReaderStore = defineStore("reader", {
     /**
      * Update settings
      */
-    async updateSettings(updates: Partial<ReaderSettings>) {
-      const newSettings = await readerCore.updateSettings(updates);
-      this.settings = newSettings;
-      return newSettings;
+    async updateSettings(updates: Partial<ReaderSettings>): Promise<ReaderSettings> {
+      const current = await settingsStore.getSettings();
+      const updated = { ...current, ...updates };
+      await settingsStore.saveSettings(updated);
+      this.settings = updated;
+      return updated;
     },
 
     /**
      * Close current book
      */
-    async closeBook() {
-      await readerCore.closeBook();
+    async closeBook(): Promise<void> {
+      // End reading session if a book is open
+      if (this.currentBook) {
+        const chapterId = this.currentChapter?.id;
+        await statsStore.endSession(this.currentBook.id, chapterId);
+      }
+
+      // Revoke blob URLs to free memory
+      if (this.resourceUrls) {
+        resourcesStore.revokeResourceUrls(this.resourceUrls);
+      }
+
       this.currentBook = null;
       this.currentChapter = null;
       this.chapters = [];
@@ -212,13 +375,6 @@ export const useReaderStore = defineStore("reader", {
      */
     reset() {
       this.$reset();
-    },
-
-    /**
-     * Get reading stats for a book
-     */
-    async getReadingStats(bookId: string) {
-      return await readerCore.getReadingStats(bookId);
     },
 
     /**
@@ -238,15 +394,70 @@ export const useReaderStore = defineStore("reader", {
     /**
      * Get current chapter content with resource URLs rewritten
      */
-    async getCurrentChapterContent() {
-      return await readerCore.getCurrentChapterContent();
+    async getCurrentChapterContent(): Promise<string | null> {
+      if (!this.currentBook || !this.currentChapter) {
+        return null;
+      }
+
+      const content = await booksStore.getChapterContent(
+        this.currentBook.id,
+        this.currentChapter.id,
+      );
+      if (!content) {
+        return null;
+      }
+
+      // Rewrite resource URLs if available
+      if (this.resourceUrls && this.resourceUrls.size > 0) {
+        const { rewriteResourcePaths } = await import("../utils/resource-urls");
+        return rewriteResourcePaths(content, this.resourceUrls);
+      }
+
+      return content;
     },
 
     /**
      * Get library books
      */
-    async getLibrary() {
-      return await readerCore.getLibrary();
+    async getLibrary(): Promise<Book[]> {
+      return booksStore.getAllBooks();
+    },
+
+    /**
+     * Get reading stats for a book
+     */
+    async getReadingStats(bookId: string) {
+      return await statsStore.getStats(bookId);
+    },
+
+    /**
+     * Get all reading stats
+     */
+    async getAllReadingStats() {
+      return await statsStore.getAllStats();
+    },
+
+    /**
+     * Get summary reading statistics
+     */
+    async getSummaryStats() {
+      return await statsStore.getSummaryStats();
+    },
+
+    /**
+     * Delete a book
+     */
+    async deleteBook(bookId: string): Promise<void> {
+      if (this.currentBook?.id === bookId) {
+        await this.closeBook();
+      }
+      await booksStore.deleteBook(bookId);
+      await statsStore.deleteStats(bookId);
     },
   },
+});
+
+// Initialize default settings on load
+settingsStore.getSettings().catch(() => {
+  // Ignore errors during initialization
 });
