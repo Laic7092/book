@@ -28,15 +28,13 @@ export class TxtParser extends BaseBookParser implements BookParser {
 
     // Detect chapters in the content
     const detectedChapters = this.detectChapters(content);
-    console.log("[TxtParser] Detected chapters:", detectedChapters);
 
     let chapters: Chapter[];
     let chapterContents: Map<string, string>;
 
     if (detectedChapters.length >= 1) {
       // Split content by detected chapters
-      console.log("[TxtParser] Splitting by detected chapters");
-      chapterContents = this.splitByChapters(content, detectedChapters);
+      chapterContents = this.splitByChaptersAndConvertToHtml(content, detectedChapters);
 
       // Create chapters with titles from detected chapters
       const chapterIds = Array.from(chapterContents.keys());
@@ -46,10 +44,8 @@ export class TxtParser extends BaseBookParser implements BookParser {
         title: detectedChapters[index]?.title || `Chapter ${index + 1}`,
         order: index,
       }));
-      console.log("[TxtParser] Created chapters:", chapters);
     } else {
       // No chapters detected - split by reasonable chunks (~50KB each)
-      console.log("[TxtParser] No chapters detected, splitting into chunks");
       const chunks = this.splitIntoChunks(content, 50000);
       chapters = chunks.map((_, index) => ({
         id: generateId("ch"),
@@ -81,11 +77,90 @@ export class TxtParser extends BaseBookParser implements BookParser {
   }
 
   /**
+   * Split content by detected chapters and convert each chapter to HTML
+   * Overrides base class method to add HTML conversion for TXT files
+   */
+  private splitByChaptersAndConvertToHtml(
+    content: string,
+    chapters: { title: string; start: number }[],
+  ): Map<string, string> {
+    const result = new Map<string, string>();
+
+    if (chapters.length === 0) {
+      const id = generateId("ch");
+      result.set(id, this.convertTextToHtml(content));
+      return result;
+    }
+
+    chapters.sort((a, b) => a.start - b.start);
+
+    for (let i = 0; i < chapters.length; i++) {
+      const current = chapters[i];
+      const next = chapters[i + 1];
+      let chapterContent = next
+        ? content.slice(current.start, next.start).trim()
+        : content.slice(current.start).trim();
+
+      const titleLine = current.title.split("\n")[0].trim();
+      if (chapterContent.startsWith(titleLine)) {
+        chapterContent = chapterContent.slice(titleLine.length).trim();
+        chapterContent = chapterContent.replace(/^\n+/, "");
+      }
+
+      const id = generateId("ch");
+      result.set(id, this.convertTextToHtml(chapterContent));
+    }
+
+    return result;
+  }
+
+  /**
+   * Convert plain text to HTML by wrapping paragraphs in <p> tags
+   * Also detects and wraps chapter titles in heading tags
+   */
+  private convertTextToHtml(text: string): string {
+    const lines = text.split(/\n+/);
+    const htmlParts: string[] = [];
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      // Detect chapter titles (e.g., "第一章", "Chapter 1", "卷一")
+      if (this.isChapterTitle(trimmed)) {
+        htmlParts.push(`<h1>${trimmed}</h1>`);
+      } else {
+        // Wrap regular text in <p> tags
+        htmlParts.push(`<p>${trimmed}</p>`);
+      }
+    }
+
+    return htmlParts.join("");
+  }
+
+  /**
+   * Check if a line looks like a chapter title
+   */
+  private isChapterTitle(line: string): boolean {
+    const patterns = [
+      /^第 [一二三四五六七八九十百千万\d]+[章卷部集篇]/, // Chinese chapter pattern
+      /^Chapter\s+\d+/i,
+      /^Part\s+\d+/i,
+      /^卷 [一二三四五六七八九十百千万\d]+/,
+      /^楔子 | 序章 | 前言 | 引子 | 尾声 | 后记/,
+      /^Prologue|^Epilogue|^Preface|^Introduction/i,
+    ];
+
+    return patterns.some((pattern) => pattern.test(line));
+  }
+
+  /**
    * Split content into chunks at paragraph boundaries
+   * Returns HTML-formatted chunks with <p> tags
    */
   private splitIntoChunks(content: string, maxChunkSize: number): string[] {
     if (content.length <= maxChunkSize) {
-      return [content];
+      return [this.convertTextToHtml(content)];
     }
 
     const chunks: string[] = [];
@@ -96,7 +171,7 @@ export class TxtParser extends BaseBookParser implements BookParser {
     let currentChunk = "";
     for (const paragraph of paragraphs) {
       if (currentChunk.length + paragraph.length > maxChunkSize && currentChunk.length > 0) {
-        chunks.push(currentChunk.trim());
+        chunks.push(this.convertTextToHtml(currentChunk.trim()));
         currentChunk = paragraph;
       } else {
         currentChunk += (currentChunk ? "\n\n" : "") + paragraph;
@@ -104,7 +179,7 @@ export class TxtParser extends BaseBookParser implements BookParser {
     }
 
     if (currentChunk.trim()) {
-      chunks.push(currentChunk.trim());
+      chunks.push(this.convertTextToHtml(currentChunk.trim()));
     }
 
     return chunks;

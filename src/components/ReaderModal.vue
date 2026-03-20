@@ -127,6 +127,19 @@ const textAlignOptions = [
   { label: "Justify", value: "justify" },
 ];
 
+// Reading mode options
+const scrollModeOptions = [
+  { label: "Vertical", value: "vertical", desc: "Continuous scroll" },
+  { label: "Pagination", value: "pagination", desc: "Page by page" },
+];
+
+// Pagination animation options
+const animationOptions = [
+  { label: "Slide", value: "slide", desc: "Smooth slide" },
+  { label: "Flip", value: "flip", desc: "Page flip" },
+  { label: "Fade", value: "fade", desc: "Fade transition" },
+];
+
 // Preview style computation
 const previewStyle = computed(() => ({
   fontSize: `${props.settings.fontSize}px`,
@@ -511,6 +524,76 @@ import { formatDuration, formatRelativeTime, formatHour } from "../utils/time";
                         <rect v-if="align.value === 'justify'" x="3" y="13" width="18" height="2" />
                         <rect v-if="align.value === 'justify'" x="3" y="17" width="14" height="2" />
                       </svg>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Reading Mode -->
+                <div class="setting-item">
+                  <label class="setting-label">
+                    <span>Reading Mode</span>
+                  </label>
+                  <div class="mode-grid">
+                    <button
+                      v-for="mode in scrollModeOptions"
+                      :key="mode.value"
+                      :class="[
+                        'mode-card',
+                        { active: (settings.scrollMode || 'vertical') === mode.value },
+                      ]"
+                      @click="emit('update-settings', { scrollMode: mode.value })"
+                    >
+                      <div class="mode-card-icon">
+                        <svg
+                          v-if="mode.value === 'vertical'"
+                          width="24"
+                          height="24"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.5"
+                        >
+                          <path d="M12 5v14M19 12l-7 7-7-7" />
+                        </svg>
+                        <svg
+                          v-else
+                          width="24"
+                          height="24"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.5"
+                        >
+                          <rect x="4" y="4" width="16" height="16" rx="2" />
+                          <path d="M9 4v16M4 12h16" />
+                        </svg>
+                      </div>
+                      <span class="mode-card-label">{{ mode.label }}</span>
+                      <span class="mode-card-desc">{{ mode.desc }}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Pagination Animation (only shown when pagination mode is selected) -->
+                <div
+                  class="setting-item"
+                  v-if="(settings.scrollMode || 'vertical') === 'pagination'"
+                >
+                  <label class="setting-label">
+                    <span>Page Transition</span>
+                    <span class="setting-value">{{ settings.paginationAnimation || "slide" }}</span>
+                  </label>
+                  <div class="animation-options">
+                    <button
+                      v-for="anim in animationOptions"
+                      :key="anim.value"
+                      :class="[
+                        'animation-option',
+                        { active: (settings.paginationAnimation || 'slide') === anim.value },
+                      ]"
+                      @click="emit('update-settings', { paginationAnimation: anim.value })"
+                    >
+                      {{ anim.label }}
                     </button>
                   </div>
                 </div>
@@ -1707,6 +1790,93 @@ import { formatDuration, formatRelativeTime, formatHour } from "../utils/time";
 }
 
 .align-option.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: white;
+}
+
+/* Reading Mode Cards */
+.mode-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.mode-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 16px;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  background: var(--modal-bg);
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.mode-card:hover {
+  border-color: var(--border);
+  background: var(--hover-bg);
+}
+
+.mode-card.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.mode-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  color: var(--modal-text);
+}
+
+.mode-card.active .mode-card-icon {
+  background: var(--accent);
+  color: white;
+}
+
+.mode-card-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--modal-text);
+}
+
+.mode-card-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* Animation Options */
+.animation-options {
+  display: flex;
+  gap: 8px;
+}
+
+.animation-option {
+  flex: 1;
+  padding: 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--modal-bg);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--modal-text);
+  transition: all 150ms ease;
+}
+
+.animation-option:hover {
+  border-color: var(--accent);
+}
+
+.animation-option.active {
   border-color: var(--accent);
   background: var(--accent);
   color: white;

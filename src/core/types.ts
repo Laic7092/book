@@ -57,6 +57,8 @@ export interface ReaderSettings {
   paragraphSpacing?: number;
   textAlign?: "left" | "center" | "justify";
   contrast?: "soft" | "normal" | "high";
+  scrollMode?: "vertical" | "pagination";
+  paginationAnimation?: "slide" | "flip" | "fade";
 }
 
 export interface SearchResult {
@@ -143,6 +145,8 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
   paragraphSpacing: 1.2,
   textAlign: "left",
   contrast: "normal",
+  scrollMode: "vertical",
+  paginationAnimation: "slide",
 };
 
 export const THEME_COLORS = {
