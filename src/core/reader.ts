@@ -145,11 +145,6 @@ export const readerCore = {
 
       // Load resource URLs for this book
       state.resourceUrls = await resourcesStore.getResourceUrls(bookId);
-      console.log(
-        "[readerCore.openBook] Resource URLs loaded:",
-        state.resourceUrls?.size || 0,
-        "resources",
-      );
 
       // Update last read timestamp
       await booksStore.updateLastRead(bookId);

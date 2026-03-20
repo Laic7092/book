@@ -127,15 +127,16 @@ export class EpubParser extends BaseBookParser implements BookParser {
       order++;
     }
 
-    // Read and process chapter content with resource path rewriting
+    // Read and process chapter content
+    // NOTE: We do NOT rewrite resource paths here anymore.
+    // Resource path rewriting happens at render time using resourceUrls from storage.
     for (const chapter of chapters) {
       if (chapter.href) {
         const fullPath = opfDir + chapter.href;
         const htmlContent = await this.readZipEntry(zip, fullPath);
         if (htmlContent) {
-          // Rewrite resource paths to use blob URLs
-          const rewrittenContent = this.rewriteResourcePaths(htmlContent, resources, opfDir);
-          const cleanedContent = cleanHtml(rewrittenContent);
+          // Just clean the HTML, don't rewrite resource paths
+          const cleanedContent = cleanHtml(htmlContent);
           content.set(chapter.id, cleanedContent);
         }
       }
@@ -286,143 +287,6 @@ export class EpubParser extends BaseBookParser implements BookParser {
 
   private isResourceMimeType(mediaType: string): boolean {
     return EpubParser.RESOURCE_MIME_TYPES.has(mediaType.toLowerCase());
-  }
-
-  private rewriteResourcePaths(
-    htmlContent: string,
-    resources: Map<string, ArrayBuffer>,
-    opfDir: string,
-  ): string {
-    // Create a mapping of relative paths to blob URLs
-    const pathToBlobMap = new Map<string, string>();
-
-    for (const [resourcePath, data] of resources) {
-      // Normalize paths for matching
-      const normalizedPath = resourcePath.replace(/^\//, "");
-      const mimeType = this.getMimeTypeFromExtension(resourcePath);
-      const blob = new Blob([data], { type: mimeType });
-      const blobUrl = URL.createObjectURL(blob);
-
-      // Map both the raw path and various normalized forms
-      pathToBlobMap.set(normalizedPath, blobUrl);
-      pathToBlobMap.set(resourcePath, blobUrl);
-
-      // Also handle paths relative to OPF directory
-      if (normalizedPath.startsWith(opfDir)) {
-        pathToBlobMap.set(normalizedPath.slice(opfDir.length), blobUrl);
-      }
-
-      // Handle basename for matching in HTML
-      const basename = resourcePath.split("/").pop();
-      if (basename && basename !== resourcePath) {
-        pathToBlobMap.set(basename, blobUrl);
-      }
-    }
-
-    // Parse and rewrite the HTML
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(htmlContent, "text/html");
-
-    // Rewrite img src attributes
-    doc.querySelectorAll("img").forEach((img) => {
-      const src = img.getAttribute("src");
-      if (src) {
-        const blobUrl = this.findBlobUrl(src, pathToBlobMap);
-        if (blobUrl) {
-          img.setAttribute("src", blobUrl);
-        }
-      }
-    });
-
-    // Rewrite link href for CSS stylesheets
-    doc.querySelectorAll("link[rel='stylesheet']").forEach((link) => {
-      const href = link.getAttribute("href");
-      if (href) {
-        const blobUrl = this.findBlobUrl(href, pathToBlobMap);
-        if (blobUrl) {
-          link.setAttribute("href", blobUrl);
-        }
-      }
-    });
-
-    // Rewrite background/image URLs in inline styles
-    doc.querySelectorAll("*[style]").forEach((el) => {
-      const style = el.getAttribute("style");
-      if (style && (style.includes("url(") || style.includes("background"))) {
-        const rewrittenStyle = this.rewriteCssUrls(style, pathToBlobMap);
-        if (rewrittenStyle !== style) {
-          el.setAttribute("style", rewrittenStyle);
-        }
-      }
-    });
-
-    // Handle embedded CSS in style elements
-    doc.querySelectorAll("style").forEach((styleEl) => {
-      const cssContent = styleEl.textContent;
-      if (cssContent) {
-        const rewrittenCss = this.rewriteCssUrls(cssContent, pathToBlobMap);
-        if (rewrittenCss !== cssContent) {
-          styleEl.textContent = rewrittenCss;
-        }
-      }
-    });
-
-    return doc.documentElement.outerHTML;
-  }
-
-  private findBlobUrl(path: string, pathToBlobMap: Map<string, string>): string | null {
-    // Normalize the path
-    const normalizedPath = path.replace(/^\//, "").split("#")[0].split("?")[0];
-
-    // Try exact match first
-    if (pathToBlobMap.has(normalizedPath)) {
-      return pathToBlobMap.get(normalizedPath)!;
-    }
-
-    // Try matching the basename
-    const basename = normalizedPath.split("/").pop();
-    if (basename && pathToBlobMap.has(basename)) {
-      return pathToBlobMap.get(basename)!;
-    }
-
-    // Try matching the full path
-    if (pathToBlobMap.has(path)) {
-      return pathToBlobMap.get(path)!;
-    }
-
-    return null;
-  }
-
-  private rewriteCssUrls(cssContent: string, pathToBlobMap: Map<string, string>): string {
-    // Match url() patterns in CSS
-    const urlPattern = /url\(['"]?([^'")\s]+)['"]?\)/gi;
-
-    return cssContent.replace(urlPattern, (match, url) => {
-      const blobUrl = this.findBlobUrl(url, pathToBlobMap);
-      if (blobUrl) {
-        return `url("${blobUrl}")`;
-      }
-      return match;
-    });
-  }
-
-  private getMimeTypeFromExtension(path: string): string {
-    const ext = path.split(".").pop()?.toLowerCase();
-    const mimeTypes: Record<string, string> = {
-      jpg: "image/jpeg",
-      jpeg: "image/jpeg",
-      png: "image/png",
-      gif: "image/gif",
-      svg: "image/svg+xml",
-      webp: "image/webp",
-      bmp: "image/bmp",
-      css: "text/css",
-      woff: "font/woff",
-      woff2: "font/woff2",
-      ttf: "font/ttf",
-      otf: "font/otf",
-    };
-    return mimeTypes[ext || ""] || "application/octet-stream";
   }
 
   private async extractToc(zip: JSZip, opfDoc: Document, opfDir: string): Promise<EpubNavItem[]> {

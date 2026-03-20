@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref, computed, onUnmounted } from "vue";
 import type {
   Bookmark,
   SearchResult,
@@ -6,6 +7,20 @@ import type {
   Chapter,
   BookReadingStats,
 } from "../core/types";
+import {
+  FONT_OPTIONS,
+  THEME_OPTIONS,
+  CONTRAST_OPTIONS,
+  TEXT_ALIGN_OPTIONS,
+  SCROLL_MODE_OPTIONS,
+  ANIMATION_OPTIONS,
+  FONT_SIZE_PRESETS,
+  LINE_HEIGHT_PRESETS,
+  COLUMN_WIDTH_PRESETS,
+  MARGIN_PRESETS,
+} from "../utils/settings";
+import { BOOKMARK_COLORS } from "../utils/colors";
+import { formatDuration, formatRelativeTime, formatHour } from "../utils/time";
 
 const props = defineProps<{
   modelValue: "toc" | "search" | "bookmarks" | "settings" | "stats" | null;
@@ -60,23 +75,6 @@ function highlightMatch(context: string): string {
   return context.replace(regex, '<mark class="search-mark">$1</mark>');
 }
 
-const modalIcons: Record<string, string> = {
-  toc: "📑",
-  search: "🔍",
-  bookmarks: "📌",
-  settings: "⚙️",
-  stats: "📊",
-};
-
-const bookmarkColors = [
-  { value: "#fbbf24", label: "Yellow" },
-  { value: "#f472b6", label: "Pink" },
-  { value: "#60a5fa", label: "Blue" },
-  { value: "#34d399", label: "Green" },
-  { value: "#a78bfa", label: "Purple" },
-  { value: "#fb923c", label: "Orange" },
-];
-
 // Debounce helper for real-time search
 let searchDebounceTimer: number | null = null;
 function handleSearchInput(value: string) {
@@ -90,55 +88,12 @@ function handleSearchInput(value: string) {
 }
 
 // Settings tab state
-import { ref, computed } from "vue";
 const settingsTab = ref<"text" | "theme" | "layout">("text");
 
-// Font options
-const fontOptions = [
-  { label: "Literata", value: "Literata, Georgia, serif", preview: "Literata" },
-  { label: "Cormorant", value: "Cormorant, Georgia, serif", preview: "Cormorant" },
-  {
-    label: "Sans Serif",
-    value: "Instrument Sans, -apple-system, sans-serif",
-    preview: "Instrument Sans",
-  },
-  { label: "System", value: "system-ui, -apple-system, sans-serif", preview: "system-ui" },
-  { label: "Mono", value: "JetBrains Mono, Consolas, monospace", preview: "JetBrains Mono" },
-];
-
-// Theme options
-const themeOptions = [
-  { label: "Light", value: "light", desc: "Easy on battery" },
-  { label: "Dark", value: "dark", desc: "Night reading" },
-  { label: "Sepia", value: "sepia", desc: "Paper-like comfort" },
-];
-
-// Contrast options for dark mode
-const contrastOptions = [
-  { label: "Soft", value: "soft" },
-  { label: "Normal", value: "normal" },
-  { label: "High", value: "high" },
-];
-
-// Text alignment options
-const textAlignOptions = [
-  { label: "Left", value: "left" },
-  { label: "Center", value: "center" },
-  { label: "Justify", value: "justify" },
-];
-
-// Reading mode options
-const scrollModeOptions = [
-  { label: "Vertical", value: "vertical", desc: "Continuous scroll" },
-  { label: "Pagination", value: "pagination", desc: "Page by page" },
-];
-
-// Pagination animation options
-const animationOptions = [
-  { label: "Slide", value: "slide", desc: "Smooth slide" },
-  { label: "Flip", value: "flip", desc: "Page flip" },
-  { label: "Fade", value: "fade", desc: "Fade transition" },
-];
+// Cleanup debounce timer on unmount
+onUnmounted(() => {
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+});
 
 // Preview style computation
 const previewStyle = computed(() => ({
@@ -154,18 +109,15 @@ function resetSettings() {
     fontSize: 18,
     fontFamily: "Literata, Georgia, serif",
     lineHeight: 1.6,
-    theme: "light" as const,
+    theme: "light",
     margin: 24,
     columnWidth: 720,
     letterSpacing: 0,
     paragraphSpacing: 1.2,
-    textAlign: "left" as const,
-    contrast: "normal" as const,
+    textAlign: "left",
+    contrast: "normal",
   });
 }
-
-// Import time formatting utilities
-import { formatDuration, formatRelativeTime, formatHour } from "../utils/time";
 </script>
 
 <template>
@@ -280,7 +232,7 @@ import { formatDuration, formatRelativeTime, formatHour } from "../utils/time";
                   </div>
                   <div class="size-presets">
                     <button
-                      v-for="size in [14, 16, 18, 20, 22, 24]"
+                      v-for="size in FONT_SIZE_PRESETS"
                       :key="size"
                       :class="['size-preset', { active: settings.fontSize === size }]"
                       @click="emit('update-settings', { fontSize: size })"
@@ -306,7 +258,7 @@ import { formatDuration, formatRelativeTime, formatHour } from "../utils/time";
                   <label class="setting-label">Font Family</label>
                   <div class="font-options">
                     <button
-                      v-for="font in fontOptions"
+                      v-for="font in FONT_OPTIONS"
                       :key="font.value"
                       :class="['font-option', { active: settings.fontFamily.includes(font.value) }]"
                       @click="emit('update-settings', { fontFamily: font.value })"
@@ -325,7 +277,7 @@ import { formatDuration, formatRelativeTime, formatHour } from "../utils/time";
                   </div>
                   <div class="line-height-presets">
                     <button
-                      v-for="height in [1.4, 1.6, 1.8, 2.0]"
+                      v-for="height in LINE_HEIGHT_PRESETS"
                       :key="height"
                       :class="[
                         'lh-preset',
@@ -380,7 +332,7 @@ import { formatDuration, formatRelativeTime, formatHour } from "../utils/time";
                   <label class="setting-label">Color Theme</label>
                   <div class="theme-grid">
                     <button
-                      v-for="theme in themeOptions"
+                      v-for="theme in THEME_OPTIONS"
                       :key="theme.value"
                       :class="['theme-card', { active: settings.theme === theme.value }]"
                       @click="emit('update-settings', { theme: theme.value })"
@@ -401,7 +353,7 @@ import { formatDuration, formatRelativeTime, formatHour } from "../utils/time";
                   </label>
                   <div class="contrast-options">
                     <button
-                      v-for="option in contrastOptions"
+                      v-for="option in CONTRAST_OPTIONS"
                       :key="option.value"
                       :class="['contrast-option', { active: settings.contrast === option.value }]"
                       @click="emit('update-settings', { contrast: option.value })"
@@ -421,7 +373,7 @@ import { formatDuration, formatRelativeTime, formatHour } from "../utils/time";
                   </div>
                   <div class="width-presets">
                     <button
-                      v-for="width in [600, 700, 800, 900]"
+                      v-for="width in COLUMN_WIDTH_PRESETS"
                       :key="width"
                       :class="['width-preset', { active: settings.columnWidth === width }]"
                       @click="emit('update-settings', { columnWidth: width })"
@@ -452,7 +404,7 @@ import { formatDuration, formatRelativeTime, formatHour } from "../utils/time";
                   </div>
                   <div class="margin-presets">
                     <button
-                      v-for="margin in [16, 24, 32, 48]"
+                      v-for="margin in MARGIN_PRESETS"
                       :key="margin"
                       :class="['margin-preset', { active: settings.margin === margin }]"
                       @click="emit('update-settings', { margin: margin })"
@@ -503,7 +455,7 @@ import { formatDuration, formatRelativeTime, formatHour } from "../utils/time";
                   </label>
                   <div class="align-options">
                     <button
-                      v-for="align in textAlignOptions"
+                      v-for="align in TEXT_ALIGN_OPTIONS"
                       :key="align.value"
                       :class="['align-option', { active: settings.textAlign === align.value }]"
                       @click="emit('update-settings', { textAlign: align.value })"
@@ -535,7 +487,7 @@ import { formatDuration, formatRelativeTime, formatHour } from "../utils/time";
                   </label>
                   <div class="mode-grid">
                     <button
-                      v-for="mode in scrollModeOptions"
+                      v-for="mode in SCROLL_MODE_OPTIONS"
                       :key="mode.value"
                       :class="[
                         'mode-card',
@@ -585,7 +537,7 @@ import { formatDuration, formatRelativeTime, formatHour } from "../utils/time";
                   </label>
                   <div class="animation-options">
                     <button
-                      v-for="anim in animationOptions"
+                      v-for="anim in ANIMATION_OPTIONS"
                       :key="anim.value"
                       :class="[
                         'animation-option',
@@ -932,7 +884,7 @@ import { formatDuration, formatRelativeTime, formatHour } from "../utils/time";
                 <label class="editor-label">Color</label>
                 <div class="color-picker">
                   <button
-                    v-for="color in bookmarkColors"
+                    v-for="color in BOOKMARK_COLORS"
                     :key="color.value"
                     :class="['color-option', { active: editingBookmark.color === color.value }]"
                     :style="{ backgroundColor: color.value }"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted, onUnmounted, computed } from "vue";
 import { readerCore } from "../core/reader";
 import { dbGetAll, dbDelete, STORES } from "../storage/db";
 import type { Book } from "../core/types";
@@ -30,60 +30,8 @@ const summaryStats = ref<{
   thisWeekReadingTime: number;
 } | null>(null);
 
-// Generate a consistent color from a string - refined palette
-function stringToColor(str: string): string {
-  const colors = [
-    "#8b2e3a", // burgundy
-    "#a64150", // rose
-    "#7d3c5a", // plum
-    "#5a4d6d", // aubergine
-    "#4a5d7d", // slate
-    "#3d6d7d", // teal
-    "#2e7d6a", // forest
-    "#5a7d4a", // olive
-    "#7d6a3d", // ochre
-    "#7d5a3d", // sienna
-    "#8b4a2e", // rust
-    "#6d4a5a", // mauve
-  ];
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return colors[Math.abs(hash) % colors.length];
-}
-
-// Get initial for cover
-function getInitial(title: string): string {
-  return title.charAt(0).toUpperCase() || "📖";
-}
-
-// Generate refined gradient for cover
-function getGradient(book: Book): string {
-  const baseColor = stringToColor(book.title);
-  const shade = adjustColor(baseColor, -15);
-  return `linear-gradient(145deg, ${baseColor} 0%, ${shade} 100%)`;
-}
-
-// Helper to darken/lighten colors
-function adjustColor(hex: string, percent: number): string {
-  const num = parseInt(hex.replace("#", ""), 16);
-  const amt = Math.round(2.55 * percent);
-  const R = (num >> 16) + amt;
-  const G = ((num >> 8) & 0x00ff) + amt;
-  const B = (num & 0x0000ff) + amt;
-  return (
-    "#" +
-    (
-      0x1000000 +
-      (R < 255 ? (R < 1 ? 0 : R) : 255) * 0x10000 +
-      (G < 255 ? (G < 1 ? 0 : G) : 255) * 0x100 +
-      (B < 255 ? (B < 1 ? 0 : B) : 255)
-    )
-      .toString(16)
-      .slice(1)
-  );
-}
+// Import color utilities from shared module
+import { getBookGradient, getInitial } from "../utils/colors";
 
 async function loadBooks() {
   isLoading.value = true;
@@ -159,12 +107,38 @@ const filteredBooks = computed(() => {
   );
 });
 
+// Cached computations for book cover rendering
+const bookGradients = computed(() => {
+  const map = new Map<string, string>();
+  for (const book of books.value) {
+    map.set(book.id, getBookGradient(book.title));
+  }
+  return map;
+});
+
+const bookInitials = computed(() => {
+  const map = new Map<string, string>();
+  for (const book of books.value) {
+    map.set(book.id, getInitial(book.title));
+  }
+  return map;
+});
+
+let statsUnsubscribe: (() => void) | null = null;
+
 onMounted(() => {
   loadBooks();
   // Listen for stats updates to refresh summary
-  readerCore.on("stats:session-end", () => {
+  const statsHandler = () => {
     loadBooks();
-  });
+  };
+  statsUnsubscribe = readerCore.on("stats:session-end", statsHandler);
+});
+
+onUnmounted(() => {
+  if (statsUnsubscribe) {
+    statsUnsubscribe();
+  }
 });
 </script>
 
@@ -317,7 +291,7 @@ onMounted(() => {
         v-for="(book, idx) in filteredBooks"
         :key="book.id"
         class="book-card"
-        :style="{ '--cover-gradient': getGradient(book) }"
+        :style="{ '--cover-gradient': bookGradients.get(book.id) }"
         :data-index="idx"
         @click="selectBook(book)"
         tabindex="0"
@@ -326,7 +300,7 @@ onMounted(() => {
         :aria-label="`Open ${book.title} by ${book.author || 'Unknown author'}`"
       >
         <div class="book-cover">
-          <span class="cover-initial" aria-hidden="true">{{ getInitial(book.title) }}</span>
+          <span class="cover-initial" aria-hidden="true">{{ bookInitials.get(book.id) }}</span>
           <span class="cover-format">{{ book.format.toUpperCase() }}</span>
         </div>
         <div class="book-info">

@@ -12,14 +12,24 @@ import type {
   Book,
   BookReadingStats,
 } from "../core/types";
+import { throttle } from "../utils/debounce";
+import { rewriteResourcePaths } from "../utils/resource-urls";
+import {
+  SWIPE_THRESHOLD,
+  PAGE_CHANGE_COOLDOWN_MS,
+  READER_HEADER_HEIGHT,
+  READER_FOOTER_HEIGHT,
+  FALLBACK_PAGE_HEIGHT,
+  BLOCK_TAGS,
+  TAP_ZONE_LEFT,
+  TAP_ZONE_RIGHT,
+} from "../utils/constants";
 
 // Touch gesture support
 let touchStartX = 0;
 let touchStartY = 0;
-const SWIPE_THRESHOLD = 50;
 // Cooldown timers to prevent rapid repeated triggers
 let pageChangeCooldown = false;
-const PAGE_CHANGE_COOLDOWN_MS = 300;
 
 function handleTouchStart(e: TouchEvent) {
   // Ignore touch events inside modals
@@ -187,16 +197,14 @@ function handleTap(e: MouseEvent) {
   if (isPaginationMode.value) {
     const x = e.clientX;
     const width = window.innerWidth;
-    const leftZone = width * 0.3;
-    const rightZone = width * 0.7;
+    const leftZone = width * TAP_ZONE_LEFT;
+    const rightZone = width * TAP_ZONE_RIGHT;
 
     if (x < leftZone) {
-      // Prevent rapid repeated taps
       if (!pageChangeCooldown) {
         prevPage();
       }
     } else if (x > rightZone) {
-      // Prevent rapid repeated taps
       if (!pageChangeCooldown) {
         nextPage();
       }
@@ -262,14 +270,14 @@ async function selectChapter(chapterId: string) {
 }
 
 async function prevChapter() {
-  const currentIndex = chapters.value.findIndex((c) => c.id === currentChapterId.value);
+  const currentIndex = currentChapterIndex.value;
   if (currentIndex > 0) {
     await selectChapter(chapters.value[currentIndex - 1].id);
   }
 }
 
 async function nextChapter() {
-  const currentIndex = chapters.value.findIndex((c) => c.id === currentChapterId.value);
+  const currentIndex = currentChapterIndex.value;
   if (currentIndex < chapters.value.length - 1) {
     await selectChapter(chapters.value[currentIndex + 1].id);
   }
@@ -284,18 +292,16 @@ function calculatePages(contentHtml: string): string[] {
   const pageContents: string[] = [];
 
   // Calculate available height for content
-  const headerHeight = 60;
-  const footerHeight = 60;
   let pageHeight = containerHeight.value;
 
   // If containerHeight hasn't been set, calculate it now
   if (!pageHeight || pageHeight <= 0) {
-    pageHeight = window.innerHeight - headerHeight - footerHeight;
+    pageHeight = window.innerHeight - READER_HEADER_HEIGHT - READER_FOOTER_HEIGHT;
   }
 
   // Fallback: if pageHeight is still invalid, use a reasonable default
   if (!pageHeight || pageHeight <= 0) {
-    pageHeight = 600;
+    pageHeight = FALLBACK_PAGE_HEIGHT;
   }
 
   // Create a temporary container for measurement with exact same styles as actual content
@@ -328,25 +334,7 @@ function calculatePages(contentHtml: string): string[] {
     return [contentHtml];
   }
 
-  // Need to paginate: split by block elements
-  const blockTags = [
-    "p",
-    "h1",
-    "h2",
-    "h3",
-    "h4",
-    "h5",
-    "h6",
-    "li",
-    "blockquote",
-    "pre",
-    "figure",
-    "figcaption",
-    "table",
-    "hr",
-    "ul",
-    "ol",
-  ];
+  // Need to paginate: split by block elements (using predefined constant)
 
   // Parse HTML and extract block elements
   const wrapper = document.createElement("div");
@@ -463,6 +451,22 @@ async function prevPage() {
 async function doSearch() {
   if (!searchQuery.value) return;
   searchResults.value = await searchInBook(props.book.id, searchQuery.value, chapters.value);
+
+  // In vertical mode, we need to re-apply highlights to all loaded chapters
+  if (!isPaginationMode.value && searchResults.value.length > 0) {
+    hasHighlights.value = true;
+    // Re-process all loaded chapters with highlights
+    const newMap = new Map(chapterContents.value);
+    for (const chapter of chapters.value) {
+      if (loadedChapters.value.has(chapter.id)) {
+        const originalContent = await booksStore.getChapterContent(props.book.id, chapter.id);
+        if (originalContent) {
+          newMap.set(chapter.id, highlightMatches(originalContent, searchQuery.value));
+        }
+      }
+    }
+    chapterContents.value = newMap; // Replace the entire Map to trigger reactivity
+  }
 }
 
 async function loadStats() {
@@ -484,35 +488,79 @@ async function goToSearchResult(result: SearchResult) {
     (r) => r.chapterId === result.chapterId && r.position === result.position,
   );
   currentResultIndex.value = index >= 0 ? index : 0;
-  await selectChapter(result.chapterId);
+
+  if (isPaginationMode.value) {
+    await selectChapter(result.chapterId);
+  }
+
   requestAnimationFrame(() => {
-    setTimeout(() => {
+    setTimeout(async () => {
+      // In vertical mode, find the specific chapter container and scroll it into view
+      if (!isPaginationMode.value) {
+        const chapterContainer = document.querySelector(
+          `.chapter-container[data-chapter-id="${result.chapterId}"]`,
+        ) as HTMLElement;
+        if (chapterContainer) {
+          chapterContainer.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+        return;
+      }
+
+      // Pagination mode: find the mark within the current chapter
       const contentEl = document.querySelector(".chapter-body");
       if (!contentEl) return;
 
       const marks = contentEl.querySelectorAll("mark.search-mark");
-      const mark = marks[currentResultIndex.value] as HTMLElement;
+      // In pagination mode, we need to find the mark at the correct position
+      // Filter marks to only those in the current chapter
+      const chapterMarks = Array.from(marks).filter((mark) => {
+        const chapterBody = mark.closest(".chapter-body");
+        return chapterBody !== null;
+      });
+
+      const mark = chapterMarks[0] as HTMLElement;
       if (mark) {
         mark.scrollIntoView({ behavior: "smooth", block: "center" });
+        mark.style.backgroundColor = "var(--accent)";
+        mark.style.color = "#fff";
+        setTimeout(() => {
+          mark.style.backgroundColor = "";
+          mark.style.color = "";
+        }, 1500);
       }
     }, 100);
   });
 }
 
-function clearHighlights() {
-  const contentEl = document.querySelector(".chapter-body");
-  if (!contentEl) return;
-
-  const marks = contentEl.querySelectorAll("mark.search-mark");
-  marks.forEach((mark) => {
-    const parent = mark.parentNode;
-    while (mark.firstChild) {
-      parent?.insertBefore(mark.firstChild, mark);
-    }
-    mark.remove();
-  });
+async function clearHighlights() {
   hasHighlights.value = false;
   currentResultIndex.value = -1;
+
+  // In vertical mode, re-load all loaded chapters without highlights
+  if (!isPaginationMode.value) {
+    const newMap = new Map(chapterContents.value);
+    for (const chapter of chapters.value) {
+      if (loadedChapters.value.has(chapter.id)) {
+        const originalContent = await booksStore.getChapterContent(props.book.id, chapter.id);
+        if (originalContent) {
+          newMap.set(chapter.id, originalContent);
+        }
+      }
+    }
+    chapterContents.value = newMap; // Replace the entire Map to trigger reactivity
+  } else {
+    // Pagination mode: remove highlights from DOM
+    const contentEl = document.querySelector(".chapter-body");
+    if (!contentEl) return;
+    const marks = contentEl.querySelectorAll("mark.search-mark");
+    marks.forEach((mark) => {
+      const parent = mark.parentNode;
+      while (mark.firstChild) {
+        parent?.insertBefore(mark.firstChild, mark);
+      }
+      mark.remove();
+    });
+  }
 }
 
 async function goToNextMatch() {
@@ -532,16 +580,40 @@ async function navigateToMatch(index: number) {
   const result = searchResults.value[index];
   if (!result) return;
 
-  await selectChapter(result.chapterId);
+  if (isPaginationMode.value) {
+    await selectChapter(result.chapterId);
+  }
 
   // Wait for content to render, then scroll to the match
   requestAnimationFrame(() => {
     setTimeout(() => {
+      if (!isPaginationMode.value) {
+        // Vertical mode: scroll to the chapter container
+        const chapterContainer = document.querySelector(
+          `.chapter-container[data-chapter-id="${result.chapterId}"]`,
+        ) as HTMLElement;
+        if (chapterContainer) {
+          chapterContainer.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+        return;
+      }
+
+      // Pagination mode: find the mark within the current chapter
       const contentEl = document.querySelector(".chapter-body");
       if (!contentEl) return;
 
       const marks = contentEl.querySelectorAll("mark.search-mark");
-      const mark = marks[index] as HTMLElement;
+
+      // Calculate the index within the current chapter
+      // Count how many results are in the same chapter before this one
+      let indexInChapter = 0;
+      for (let i = 0; i < index; i++) {
+        if (searchResults.value[i]?.chapterId === result.chapterId) {
+          indexInChapter++;
+        }
+      }
+
+      const mark = marks[indexInChapter] as HTMLElement;
       if (mark) {
         mark.scrollIntoView({ behavior: "smooth", block: "center" });
         mark.style.backgroundColor = "var(--accent)";
@@ -612,8 +684,9 @@ function getScrollPercentage(): number {
   return Math.max(0, Math.min(100, percentage));
 }
 
-function handleScroll() {
-  if (isPaginationMode.value) return; // Don't handle scroll in pagination mode
+// Throttled scroll handler for better performance
+const throttledScrollHandler = throttle(() => {
+  if (isPaginationMode.value) return;
 
   const scrollPercentage = getScrollPercentage();
   readingProgress.value = scrollPercentage;
@@ -625,12 +698,15 @@ function handleScroll() {
   // Debounced progress saving
   if (saveProgressTimer) clearTimeout(saveProgressTimer);
   saveProgressTimer = window.setTimeout(() => {
-    // Save the current visible chapter index and scroll position
     const currentVisibleChapter = getCurrentVisibleChapter();
     if (currentVisibleChapter !== null) {
       readerCore.updateProgress(scrollPercentage, scrollPercentage);
     }
   }, 1000);
+}, 16); // ~60fps
+
+function handleScroll() {
+  throttledScrollHandler();
 }
 
 // Check if user is approaching chapter boundaries and preload
@@ -668,24 +744,27 @@ async function loadAdjacentChapters(targetIndex: number) {
   isLoadingAdjacent.value = true;
 
   try {
-    const chapterContent = await booksStore.getChapterContent(props.book.id, targetChapter.id);
-    if (chapterContent !== undefined) {
-      chapterContents.value.set(targetChapter.id, chapterContent);
-      loadedChapters.value.add(targetChapter.id);
+    // Load both adjacent chapters in parallel for better performance
+    const nextIndex = targetIndex + (targetIndex > currentChapterIndex.value ? 1 : -1);
+    const chaptersToLoad: [number, Chapter][] = [[targetIndex, targetChapter]];
 
-      // Also preload the next adjacent chapter
-      const nextIndex = targetIndex + (targetIndex > currentChapterIndex.value ? 1 : -1);
-      if (nextIndex >= 0 && nextIndex < chapters.value.length) {
-        const nextChapter = chapters.value[nextIndex];
-        if (nextChapter && !loadedChapters.value.has(nextChapter.id)) {
-          const nextContent = await booksStore.getChapterContent(props.book.id, nextChapter.id);
-          if (nextContent !== undefined) {
-            chapterContents.value.set(nextChapter.id, nextContent);
-            loadedChapters.value.add(nextChapter.id);
-          }
-        }
+    if (nextIndex >= 0 && nextIndex < chapters.value.length) {
+      const nextChapter = chapters.value[nextIndex];
+      if (nextChapter && !loadedChapters.value.has(nextChapter.id)) {
+        chaptersToLoad.push([nextIndex, nextChapter]);
       }
     }
+
+    // Load all chapters in parallel
+    const loadPromises = chaptersToLoad.map(async ([idx, chapter]) => {
+      const content = await booksStore.getChapterContent(props.book.id, chapter.id);
+      if (content !== undefined) {
+        chapterContents.value.set(chapter.id, content);
+        loadedChapters.value.add(chapter.id);
+      }
+    });
+
+    await Promise.all(loadPromises);
   } catch (err) {
     console.error("[loadAdjacentChapters] Error loading chapter:", err);
   } finally {
@@ -694,11 +773,20 @@ async function loadAdjacentChapters(targetIndex: number) {
 }
 
 // Load all chapters initially for vertical scroll mode
+let loadAllChaptersRunning = false;
+
 async function loadAllChapters() {
   if (isPaginationMode.value) return;
+  if (loadAllChaptersRunning) return; // Prevent concurrent execution
 
   const currentIndex = currentChapterIndex.value;
   if (currentIndex < 0) return;
+
+  // Check if all chapters are already loaded
+  const allLoaded = chapters.value.every((c) => loadedChapters.value.has(c.id));
+  if (allLoaded) return;
+
+  loadAllChaptersRunning = true;
 
   // Load current chapter first
   loadedChapters.value.add(chapters.value[currentIndex].id);
@@ -706,7 +794,7 @@ async function loadAllChapters() {
   // Then load all other chapters in order of distance from current chapter
   const indices: number[] = [];
   for (let i = 0; i < chapters.value.length; i++) {
-    if (i !== currentIndex) {
+    if (i !== currentIndex && !loadedChapters.value.has(chapters.value[i].id)) {
       indices.push(i);
     }
   }
@@ -737,6 +825,8 @@ async function loadAllChapters() {
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
   }
+
+  loadAllChaptersRunning = false;
 }
 
 // Get the currently visible chapter index based on scroll position
@@ -767,26 +857,28 @@ function getCurrentVisibleChapter(): number {
   return currentChapterIndex.value;
 }
 
-// Get all loaded chapter contents in order
+// Get all loaded chapter contents in order for rendering
 const allLoadedContent = computed(() => {
-  if (isPaginationMode.value) return "";
+  if (isPaginationMode.value) return [];
 
-  const contents: string[] = [];
+  const contents: Array<{ chapterId: string; title: string; content: string; order: number }> = [];
   for (let i = 0; i < chapters.value.length; i++) {
     const chapter = chapters.value[i];
     if (chapter && loadedChapters.value.has(chapter.id)) {
       const chapterContent = chapterContents.value.get(chapter.id);
       if (chapterContent) {
-        contents.push(
-          `<div class="chapter-container" data-chapter-id="${chapter.id}">` +
-            `<h2 class="chapter-heading">${chapter.title}</h2>` +
-            `<div class="chapter-body">${chapterContent}</div>` +
-            `</div>`,
-        );
+        contents.push({
+          chapterId: chapter.id,
+          title: chapter.title,
+          content: chapterContent,
+          order: chapter.order,
+        });
       }
     }
   }
-  return contents.join("");
+  // Sort by order to ensure correct chapter sequence
+  contents.sort((a, b) => a.order - b.order);
+  return contents;
 });
 
 // Watch for scroll mode changes to trigger chapter loading
@@ -874,86 +966,126 @@ const pageInfo = computed(() => {
   return `Page ${currentPage.value + 1} / ${pages.value.length}`;
 });
 
+// Unsubscribe functions for event listener cleanup
+let unsubscribeBookLoaded: (() => void) | null = null;
+let unsubscribeChapterChanged: (() => void) | null = null;
+let unsubscribeBookmarkAdded: (() => void) | null = null;
+let unsubscribeBookmarkRemoved: (() => void) | null = null;
+let unsubscribeBookmarkUpdated: (() => void) | null = null;
+let unsubscribeSettingsChanged: (() => void) | null = null;
+
 onMounted(async () => {
   document.addEventListener("touchstart", handleTouchStart, { passive: true });
   document.addEventListener("touchend", handleTouchEnd, { passive: true });
 
-  readerCore.on("book:loaded", async ({ chapters: chs }) => {
-    chapters.value = chs;
-    if (chs.length > 0 && !currentChapterId.value) {
-      // Restore last reading position
-      const progress = await readerCore.getCurrentProgress();
-      const chapterId = progress?.chapterId || chs[0].id;
-      const scrollPos = progress?.scrollPosition || 0;
+  unsubscribeBookLoaded = readerCore.on(
+    "book:loaded",
+    async ({ chapters: chs }: { chapters: Chapter[] }) => {
+      chapters.value = chs;
+      if (chs.length > 0 && !currentChapterId.value) {
+        // Restore last reading position
+        const progress = await readerCore.getCurrentProgress();
+        const chapterId = progress?.chapterId || chs[0].id;
+        const scrollPos = progress?.scrollPosition || 0;
 
-      await readerCore.goToChapter(chapterId);
+        await readerCore.goToChapter(chapterId);
 
-      // Restore scroll position with proper timing
-      // Wait for content to render and layout to complete
-      setTimeout(() => {
-        const main = document.querySelector(".reader-view") as HTMLElement;
-        if (main && !isPaginationMode.value) {
-          main.scrollTop = scrollPos;
+        // Restore scroll position with proper timing
+        // Wait for content to render and layout to complete
+        setTimeout(() => {
+          const main = document.querySelector(".reader-view") as HTMLElement;
+          if (main && !isPaginationMode.value) {
+            main.scrollTop = scrollPos;
+          }
+        }, 100);
+      }
+      // Load bookmarks for current book
+      bookmarks.value = await readerCore.getBookmarks();
+    },
+  );
+
+  unsubscribeChapterChanged = readerCore.on(
+    "chapter:changed",
+    async ({
+      chapterId,
+      content: text,
+      resourceUrls,
+    }: {
+      chapterId: string;
+      content: string;
+      resourceUrls?: Map<string, string>;
+    }) => {
+      currentChapterId.value = chapterId;
+
+      // Rewrite resource paths in the HTML content
+      let processedContent = text;
+      if (resourceUrls && resourceUrls.size > 0) {
+        processedContent = rewriteResourcePaths(processedContent, resourceUrls);
+      }
+
+      // Apply search highlights if there's an active search
+      if (searchQuery.value && searchResults.value.length > 0) {
+        processedContent = highlightMatches(processedContent, searchQuery.value);
+        hasHighlights.value = true;
+      }
+
+      // Store chapter content
+      chapterContents.value.set(chapterId, processedContent);
+      loadedChapters.value.add(chapterId);
+
+      const chapter = chapters.value.find((c) => c.id === chapterId);
+      currentChapterTitle.value = chapter?.title || "";
+
+      if (isPaginationMode.value) {
+        // Calculate pages for pagination mode
+        // Wait for content to be set and DOM to update
+        await nextTick();
+        await recalculatePages();
+      } else {
+        readingProgress.value = 0;
+        chapterProgress.value = 0;
+
+        // Load all chapters for vertical scroll mode on first chapter load only
+        // This enables seamless scrolling through the entire book
+        if (loadedChapters.value.size === 1) {
+          loadAllChapters();
         }
-      }, 100);
-    }
-    // Load bookmarks for current book
-    bookmarks.value = await readerCore.getBookmarks();
-  });
+      }
+    },
+  );
 
-  readerCore.on("chapter:changed", async ({ chapterId, content: text }) => {
-    currentChapterId.value = chapterId;
+  unsubscribeBookmarkAdded = readerCore.on(
+    "bookmark:added",
+    ({ bookmark }: { bookmark: Bookmark }) => {
+      bookmarks.value.push(bookmark);
+    },
+  );
 
-    // Store chapter content
-    chapterContents.value.set(chapterId, text);
-    loadedChapters.value.add(chapterId);
+  unsubscribeBookmarkRemoved = readerCore.on(
+    "bookmark:removed",
+    ({ bookmarkId }: { bookmarkId: string }) => {
+      bookmarks.value = bookmarks.value.filter((b) => b.id !== bookmarkId);
+    },
+  );
 
-    // Apply search highlights if there's an active search
-    if (searchQuery.value && searchResults.value.length > 0) {
-      content.value = highlightMatches(text, searchQuery.value);
-      hasHighlights.value = true;
-    } else {
-      content.value = text;
-    }
+  unsubscribeBookmarkUpdated = readerCore.on(
+    "bookmark:updated",
+    ({ bookmark }: { bookmark: Bookmark }) => {
+      const index = bookmarks.value.findIndex((b) => b.id === bookmark.id);
+      if (index !== -1) {
+        bookmarks.value[index] = bookmark;
+      }
+    },
+  );
 
-    const chapter = chapters.value.find((c) => c.id === chapterId);
-    currentChapterTitle.value = chapter?.title || "";
+  unsubscribeSettingsChanged = readerCore.on(
+    "settings:changed",
+    ({ settings: newSettings }: { settings: Partial<ReaderSettings> }) => {
+      Object.assign(settings, newSettings);
+    },
+  );
 
-    if (isPaginationMode.value) {
-      // Calculate pages for pagination mode
-      // Wait for content to be set and DOM to update
-      await nextTick();
-      await recalculatePages();
-    } else {
-      readingProgress.value = 0;
-      chapterProgress.value = 0;
-
-      // Load all chapters for vertical scroll mode
-      // This enables seamless scrolling through the entire book
-      loadAllChapters();
-    }
-  });
-
-  readerCore.on("bookmark:added", ({ bookmark }) => {
-    bookmarks.value.push(bookmark);
-  });
-
-  readerCore.on("bookmark:removed", ({ bookmarkId }) => {
-    bookmarks.value = bookmarks.value.filter((b) => b.id !== bookmarkId);
-  });
-
-  readerCore.on("bookmark:updated", ({ bookmark }) => {
-    const index = bookmarks.value.findIndex((b) => b.id === bookmark.id);
-    if (index !== -1) {
-      bookmarks.value[index] = bookmark;
-    }
-  });
-
-  readerCore.on("settings:changed", ({ settings: newSettings }) => {
-    Object.assign(settings, newSettings);
-  });
-
-  const result = await readerCore.loadBookById(props.book.id);
+  await readerCore.loadBookById(props.book.id);
   readerCore.getSettings().then((s) => {
     Object.assign(settings, s);
     updateThemeClass();
@@ -968,6 +1100,14 @@ onUnmounted(() => {
   document.removeEventListener("touchend", handleTouchEnd);
   if (hideControlsTimer) clearTimeout(hideControlsTimer);
   if (saveProgressTimer) clearTimeout(saveProgressTimer);
+
+  // Cleanup readerCore event listeners
+  if (unsubscribeBookLoaded) unsubscribeBookLoaded();
+  if (unsubscribeChapterChanged) unsubscribeChapterChanged();
+  if (unsubscribeBookmarkAdded) unsubscribeBookmarkAdded();
+  if (unsubscribeBookmarkRemoved) unsubscribeBookmarkRemoved();
+  if (unsubscribeBookmarkUpdated) unsubscribeBookmarkUpdated();
+  if (unsubscribeSettingsChanged) unsubscribeSettingsChanged();
 });
 </script>
 
@@ -1054,8 +1194,17 @@ onUnmounted(() => {
           letterSpacing: `${settings.letterSpacing || 0}em`,
           textAlign: settings.textAlign || 'left',
         }"
-        v-html="allLoadedContent"
-      ></article>
+      >
+        <div
+          v-for="chapter in allLoadedContent"
+          :key="chapter.chapterId"
+          class="chapter-container"
+          :data-chapter-id="chapter.chapterId"
+        >
+          <h2 class="chapter-heading">{{ chapter.title }}</h2>
+          <div class="chapter-body" v-html="chapter.content"></div>
+        </div>
+      </article>
     </main>
 
     <!-- Bottom Bar (floating) -->
