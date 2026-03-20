@@ -177,8 +177,7 @@ async function prevPage() {
 }
 
 // Search navigation
-const navigateToSearchResult = async (index: number) => {
-  const result = search.searchResults.value[index];
+const navigateToSearchResult = async (result: SearchResult) => {
   if (!result) return;
 
   if (isPaginationMode.value) {
@@ -408,7 +407,7 @@ onUnmounted(() => {
         }
       "
       @search="search.doSearch"
-      @go-to-search-result="(idx) => navigateToSearchResult(idx as number)"
+      @go-to-search-result="navigateToSearchResult"
       @clear-highlights="search.clearHighlights"
       @add-bookmark="addBookmark"
       @delete-bookmark="deleteBookmark"

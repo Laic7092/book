@@ -2,7 +2,7 @@
 import { ref } from "vue";
 import type { SearchResult } from "../../core/types";
 
-defineProps<{
+const props = defineProps<{
   searchQuery: string;
   searchResults: SearchResult[];
   hasHighlights: boolean;
@@ -29,7 +29,7 @@ function handleSearchInput(value: string) {
 }
 
 function highlightMatch(context: string): string {
-  const query = context;
+  const query = props.searchQuery;
   if (!query) return context;
   const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const regex = new RegExp(`(${escaped})`, "gi");

@@ -69,8 +69,9 @@ function getChapterTitle(chapterId: string): string {
 }
 
 function highlightMatch(context: string): string {
-  if (!props.searchQuery) return context;
-  const escaped = props.searchQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const query = props.searchQuery;
+  if (!query) return context;
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const regex = new RegExp(`(${escaped})`, "gi");
   return context.replace(regex, '<mark class="search-mark">$1</mark>');
 }
