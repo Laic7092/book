@@ -3,6 +3,7 @@ import { ref, onMounted, computed } from "vue";
 import { readerCore } from "../core/reader";
 import { dbGetAll, dbDelete, STORES } from "../storage/db";
 import type { Book } from "../core/types";
+import { formatDuration } from "../utils/time";
 
 const emit = defineEmits<{
   (e: "book:select", book: Book): void;
@@ -18,6 +19,16 @@ const showConfirm = ref(false);
 const bookToDelete = ref<string | null>(null);
 const searchQuery = ref("");
 const searchFocused = ref(false);
+
+// Summary stats
+const summaryStats = ref<{
+  totalBooks: number;
+  totalReadingTime: number;
+  totalSessions: number;
+  booksInProgress: number;
+  completedBooks: number;
+  thisWeekReadingTime: number;
+} | null>(null);
 
 // Generate a consistent color from a string - refined palette
 function stringToColor(str: string): string {
@@ -77,6 +88,8 @@ function adjustColor(hex: string, percent: number): string {
 async function loadBooks() {
   isLoading.value = true;
   books.value = await dbGetAll<Book>(STORES.BOOKS);
+  // Load summary stats
+  summaryStats.value = await readerCore.getSummaryStats();
   isLoading.value = false;
 }
 
@@ -148,6 +161,10 @@ const filteredBooks = computed(() => {
 
 onMounted(() => {
   loadBooks();
+  // Listen for stats updates to refresh summary
+  readerCore.on("stats:session-end", () => {
+    loadBooks();
+  });
 });
 </script>
 
@@ -160,6 +177,23 @@ onMounted(() => {
         <p class="bookshelf-subtitle">
           {{ books.length }} {{ books.length === 1 ? "volume" : "volumes" }}
         </p>
+        <!-- Summary Stats -->
+        <div v-if="summaryStats && summaryStats.totalBooks > 0" class="summary-stats">
+          <div class="stat-item">
+            <span class="stat-value">{{ formatDuration(summaryStats.totalReadingTime) }}</span>
+            <span class="stat-label">Total Reading</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <span class="stat-value">{{ summaryStats.booksInProgress }}</span>
+            <span class="stat-label">In Progress</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <span class="stat-value">{{ formatDuration(summaryStats.thisWeekReadingTime) }}</span>
+            <span class="stat-label">This Week</span>
+          </div>
+        </div>
       </div>
       <div class="header-actions">
         <div class="search-container" :class="{ focused: searchFocused }">
@@ -405,6 +439,45 @@ onMounted(() => {
   color: var(--text-secondary);
   margin: 0;
   font-weight: 400;
+}
+
+/* Summary Stats */
+.summary-stats {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border-radius: 10px;
+  width: fit-content;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.stat-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--accent);
+  font-family: var(--font-display);
+}
+
+.stat-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.stat-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--border-subtle);
 }
 
 /* Add Button */

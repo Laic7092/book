@@ -1,7 +1,7 @@
 // IndexedDB wrapper with Promise-based API
 
 const DB_NAME = "reader-db";
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 export const STORES = {
   BOOKS: "books",
@@ -10,6 +10,7 @@ export const STORES = {
   BOOKMARKS: "bookmarks",
   SETTINGS: "settings",
   RESOURCES: "resources",
+  STATS: "stats",
 } as const;
 
 export type StoreName = (typeof STORES)[keyof typeof STORES];
@@ -94,6 +95,13 @@ export async function openDB(): Promise<IDBDatabase> {
         });
         resourcesStore.createIndex("bookId", "bookId");
         resourcesStore.createIndex("type", "type");
+      }
+
+      // Stats store (v5): stores reading statistics
+      if (!db.objectStoreNames.contains(STORES.STATS)) {
+        const statsStore = db.createObjectStore(STORES.STATS, { keyPath: "bookId" });
+        statsStore.createIndex("lastActiveDate", "lastActiveDate");
+        statsStore.createIndex("lastReadAt", "lastReadAt");
       }
     };
   });

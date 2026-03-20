@@ -1,9 +1,16 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted } from "vue";
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from "vue";
 import { readerCore } from "../core/reader";
 import { searchInBook, highlightMatches, removeHighlights } from "../search/engine";
 import ReaderModal from "./ReaderModal.vue";
-import type { Bookmark, SearchResult, ReaderSettings, Chapter, Book } from "../core/types";
+import type {
+  Bookmark,
+  SearchResult,
+  ReaderSettings,
+  Chapter,
+  Book,
+  BookReadingStats,
+} from "../core/types";
 
 // Touch gesture support
 let touchStartX = 0;
@@ -92,7 +99,8 @@ const showBookmarkEditor = ref(false);
 const editingBookmark = ref<Bookmark | null>(null);
 
 const showControls = ref(false);
-const activeModal = ref<"toc" | "search" | "bookmarks" | "settings" | null>(null);
+const activeModal = ref<"toc" | "search" | "bookmarks" | "settings" | "stats" | null>(null);
+const stats = ref<BookReadingStats | null>(null);
 let hideControlsTimer: number | null = null;
 let saveProgressTimer: number | null = null;
 
@@ -191,6 +199,20 @@ async function doSearch() {
   if (!searchQuery.value) return;
   searchResults.value = await searchInBook(props.book.id, searchQuery.value, chapters.value);
 }
+
+async function loadStats() {
+  stats.value = await readerCore.getReadingStats(props.book.id);
+}
+
+// Watch for modal changes to load stats when opened
+watch(
+  () => activeModal.value,
+  async (newVal) => {
+    if (newVal === "stats") {
+      await loadStats();
+    }
+  },
+);
 
 async function goToSearchResult(result: SearchResult) {
   const index = searchResults.value.findIndex(
@@ -574,6 +596,23 @@ onUnmounted(() => {
         </button>
         <button
           class="footer-btn icon-btn"
+          @click.stop="openModal('stats')"
+          aria-label="Statistics"
+          title="Reading statistics"
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          >
+            <path d="M12 20V10M18 20V4M6 20v-4" />
+          </svg>
+        </button>
+        <button
+          class="footer-btn icon-btn"
           @click.stop="openModal('bookmarks')"
           aria-label="Bookmarks"
         >
@@ -635,6 +674,8 @@ onUnmounted(() => {
       :has-highlights="hasHighlights"
       :show-bookmark-editor="showBookmarkEditor"
       :editing-bookmark="editingBookmark"
+      :stats="stats"
+      :total-chapters="chapters.length"
       @close="closeModal"
       @select-chapter="selectChapter"
       @update-settings="updateSettings"

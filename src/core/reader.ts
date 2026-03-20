@@ -1,7 +1,14 @@
 // Reader core logic
 
 import { eventBus } from "./events";
-import type { Book, Chapter, ReadingProgress, Bookmark, ReaderSettings } from "./types";
+import type {
+  Book,
+  Chapter,
+  ReadingProgress,
+  Bookmark,
+  ReaderSettings,
+  BookReadingStats,
+} from "./types";
 import { TxtParser } from "../parsers/txt-parser";
 import { EpubParser } from "../parsers/epub-parser";
 import type { BookParser } from "./types";
@@ -10,6 +17,7 @@ import * as progressStore from "../storage/progress";
 import * as bookmarksStore from "../storage/bookmarks";
 import * as settingsStore from "../storage/settings";
 import * as resourcesStore from "../storage/resources";
+import * as statsStore from "../storage/stats";
 
 /**
  * Parser registry
@@ -145,6 +153,10 @@ export const readerCore = {
 
       // Update last read timestamp
       await booksStore.updateLastRead(bookId);
+
+      // Start reading session
+      await statsStore.startSession(bookId);
+      eventBus.emit("stats:session-start", { bookId, startTime: Date.now() });
 
       console.log("[readerCore.openBook] Emitting book:loaded event");
       eventBus.emit("book:loaded", {
@@ -359,7 +371,17 @@ export const readerCore = {
   /**
    * Close current book
    */
-  closeBook(): void {
+  async closeBook(): Promise<void> {
+    // End reading session if a book is open
+    if (state.currentBook) {
+      const chapterId = state.currentChapter?.id;
+      await statsStore.endSession(state.currentBook.id, chapterId);
+      eventBus.emit("stats:session-end", {
+        bookId: state.currentBook.id,
+        duration: Date.now(),
+      });
+    }
+
     // Revoke blob URLs to free memory
     if (state.resourceUrls) {
       resourcesStore.revokeResourceUrls(state.resourceUrls);
@@ -420,9 +442,38 @@ export const readerCore = {
    */
   async deleteBook(bookId: string): Promise<void> {
     if (state.currentBook?.id === bookId) {
-      this.closeBook();
+      await this.closeBook();
     }
     await booksStore.deleteBook(bookId);
+    await statsStore.deleteStats(bookId);
+  },
+
+  /**
+   * Get reading statistics for a book
+   */
+  async getReadingStats(bookId: string): Promise<BookReadingStats | undefined> {
+    return statsStore.getStats(bookId);
+  },
+
+  /**
+   * Get reading statistics for all books
+   */
+  async getAllReadingStats(): Promise<BookReadingStats[]> {
+    return statsStore.getAllStats();
+  },
+
+  /**
+   * Get summary reading statistics
+   */
+  async getSummaryStats(): Promise<{
+    totalBooks: number;
+    totalReadingTime: number;
+    totalSessions: number;
+    booksInProgress: number;
+    completedBooks: number;
+    thisWeekReadingTime: number;
+  }> {
+    return statsStore.getSummaryStats();
   },
 };
 

@@ -2,6 +2,7 @@
 import { ref } from "vue";
 import Bookshelf from "./components/Bookshelf.vue";
 import ReaderView from "./components/ReaderView.vue";
+import { readerCore } from "./core/reader";
 import type { Book } from "./core/types";
 
 const currentBook = ref<Book | null>(null);
@@ -15,7 +16,8 @@ function handleBookSelect(book: Book) {
   }, 300);
 }
 
-function handleCloseReader() {
+async function handleCloseReader() {
+  await readerCore.closeBook();
   isTransitioning.value = true;
   currentBook.value = null;
   setTimeout(() => {

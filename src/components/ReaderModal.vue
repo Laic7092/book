@@ -1,8 +1,14 @@
 <script setup lang="ts">
-import type { Bookmark, SearchResult, ReaderSettings, Chapter } from "../core/types";
+import type {
+  Bookmark,
+  SearchResult,
+  ReaderSettings,
+  Chapter,
+  BookReadingStats,
+} from "../core/types";
 
 const props = defineProps<{
-  modelValue: "toc" | "search" | "bookmarks" | "settings" | null;
+  modelValue: "toc" | "search" | "bookmarks" | "settings" | "stats" | null;
   chapters: Chapter[];
   currentChapterId: string | null;
   bookmarks: Bookmark[];
@@ -12,6 +18,8 @@ const props = defineProps<{
   hasHighlights: boolean;
   showBookmarkEditor: boolean;
   editingBookmark: Bookmark | null;
+  stats: BookReadingStats | null;
+  totalChapters: number;
 }>();
 
 const emit = defineEmits<{
@@ -57,6 +65,7 @@ const modalIcons: Record<string, string> = {
   search: "🔍",
   bookmarks: "📌",
   settings: "⚙️",
+  stats: "📊",
 };
 
 const bookmarkColors = [
@@ -141,6 +150,9 @@ function resetSettings() {
     contrast: "normal" as const,
   });
 }
+
+// Import time formatting utilities
+import { formatDuration, formatRelativeTime, formatHour } from "../utils/time";
 </script>
 
 <template>
@@ -152,7 +164,14 @@ function resetSettings() {
           <div class="modal-header">
             <h3>Contents</h3>
             <button class="modal-close" @click="closeModal">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
                 <path d="M18 6L6 18M6 6l12 12" />
               </svg>
             </button>
@@ -161,8 +180,10 @@ function resetSettings() {
             <div v-if="chapters.length === 0" class="no-chapters">No chapters available</div>
             <ul v-else class="toc-list">
               <li v-for="(ch, index) in chapters" :key="ch.id">
-                <button :class="['toc-item', { active: ch.id === currentChapterId }]"
-                  @click.stop="handleTocClick(ch.id)">
+                <button
+                  :class="['toc-item', { active: ch.id === currentChapterId }]"
+                  @click.stop="handleTocClick(ch.id)"
+                >
                   <span class="toc-number">{{ index + 1 }}</span>
                   <span class="toc-title">{{ ch.title }}</span>
                 </button>
@@ -177,14 +198,28 @@ function resetSettings() {
             <div class="header-title">
               <h3>Reading Settings</h3>
               <button class="reset-btn" @click="resetSettings" title="Reset to defaults">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
                   <path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8" />
                   <path d="M3 3v5h5" />
                 </svg>
               </button>
             </div>
             <button class="modal-close" @click="closeModal">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
                 <path d="M18 6L6 18M6 6l12 12" />
               </svg>
             </button>
@@ -202,13 +237,22 @@ function resetSettings() {
             </div>
 
             <div class="settings-tabs">
-              <button :class="['tab', { active: settingsTab === 'text' }]" @click="settingsTab = 'text'">
+              <button
+                :class="['tab', { active: settingsTab === 'text' }]"
+                @click="settingsTab = 'text'"
+              >
                 Text
               </button>
-              <button :class="['tab', { active: settingsTab === 'theme' }]" @click="settingsTab = 'theme'">
+              <button
+                :class="['tab', { active: settingsTab === 'theme' }]"
+                @click="settingsTab = 'theme'"
+              >
                 Theme
               </button>
-              <button :class="['tab', { active: settingsTab === 'layout' }]" @click="settingsTab = 'layout'">
+              <button
+                :class="['tab', { active: settingsTab === 'layout' }]"
+                @click="settingsTab = 'layout'"
+              >
                 Layout
               </button>
             </div>
@@ -222,26 +266,39 @@ function resetSettings() {
                     <span class="setting-value">{{ settings.fontSize }}px</span>
                   </div>
                   <div class="size-presets">
-                    <button v-for="size in [14, 16, 18, 20, 22, 24]" :key="size"
+                    <button
+                      v-for="size in [14, 16, 18, 20, 22, 24]"
+                      :key="size"
                       :class="['size-preset', { active: settings.fontSize === size }]"
-                      @click="emit('update-settings', { fontSize: size })">
+                      @click="emit('update-settings', { fontSize: size })"
+                    >
                       <span :style="{ fontSize: `${Math.max(12, size - 4)}px` }">A</span>
                     </button>
                   </div>
-                  <input type="range" min="12" max="32" :value="settings.fontSize" @input="
-                    emit('update-settings', {
-                      fontSize: Number(($event.target as HTMLInputElement).value),
-                    })
-                    " class="range-input" />
+                  <input
+                    type="range"
+                    min="12"
+                    max="32"
+                    :value="settings.fontSize"
+                    @input="
+                      emit('update-settings', {
+                        fontSize: Number(($event.target as HTMLInputElement).value),
+                      })
+                    "
+                    class="range-input"
+                  />
                 </div>
 
                 <div class="setting-item">
                   <label class="setting-label">Font Family</label>
                   <div class="font-options">
-                    <button v-for="font in fontOptions" :key="font.value"
+                    <button
+                      v-for="font in fontOptions"
+                      :key="font.value"
                       :class="['font-option', { active: settings.fontFamily.includes(font.value) }]"
                       @click="emit('update-settings', { fontFamily: font.value })"
-                      :style="{ fontFamily: font.preview || font.value }">
+                      :style="{ fontFamily: font.preview || font.value }"
+                    >
                       <span class="font-name">{{ font.label }}</span>
                       <span class="font-sample">The quick brown fox</span>
                     </button>
@@ -254,20 +311,33 @@ function resetSettings() {
                     <span class="setting-value">{{ settings.lineHeight.toFixed(2) }}</span>
                   </div>
                   <div class="line-height-presets">
-                    <button v-for="height in [1.4, 1.6, 1.8, 2.0]" :key="height" :class="[
-                      'lh-preset',
-                      { active: Math.abs(settings.lineHeight - height) < 0.05 },
-                    ]" @click="emit('update-settings', { lineHeight: height })">
+                    <button
+                      v-for="height in [1.4, 1.6, 1.8, 2.0]"
+                      :key="height"
+                      :class="[
+                        'lh-preset',
+                        { active: Math.abs(settings.lineHeight - height) < 0.05 },
+                      ]"
+                      @click="emit('update-settings', { lineHeight: height })"
+                    >
                       <div class="lh-icon" :style="{ lineHeight: String(height) }">
                         <span>A</span><span>A</span>
                       </div>
                     </button>
                   </div>
-                  <input type="range" min="1.2" max="2.4" step="0.05" :value="settings.lineHeight" @input="
-                    emit('update-settings', {
-                      lineHeight: Number(($event.target as HTMLInputElement).value),
-                    })
-                    " class="range-input" />
+                  <input
+                    type="range"
+                    min="1.2"
+                    max="2.4"
+                    step="0.05"
+                    :value="settings.lineHeight"
+                    @input="
+                      emit('update-settings', {
+                        lineHeight: Number(($event.target as HTMLInputElement).value),
+                      })
+                    "
+                    class="range-input"
+                  />
                 </div>
 
                 <div class="setting-item">
@@ -275,11 +345,19 @@ function resetSettings() {
                     <span>Letter Spacing</span>
                     <span class="setting-value">{{ settings.letterSpacing || 0 }}em</span>
                   </div>
-                  <input type="range" min="-0.05" max="0.2" step="0.01" :value="settings.letterSpacing || 0" @input="
-                    emit('update-settings', {
-                      letterSpacing: Number(($event.target as HTMLInputElement).value),
-                    })
-                    " class="range-input" />
+                  <input
+                    type="range"
+                    min="-0.05"
+                    max="0.2"
+                    step="0.01"
+                    :value="settings.letterSpacing || 0"
+                    @input="
+                      emit('update-settings', {
+                        letterSpacing: Number(($event.target as HTMLInputElement).value),
+                      })
+                    "
+                    class="range-input"
+                  />
                 </div>
               </div>
 
@@ -288,9 +366,12 @@ function resetSettings() {
                 <div class="setting-item">
                   <label class="setting-label">Color Theme</label>
                   <div class="theme-grid">
-                    <button v-for="theme in themeOptions" :key="theme.value"
+                    <button
+                      v-for="theme in themeOptions"
+                      :key="theme.value"
                       :class="['theme-card', { active: settings.theme === theme.value }]"
-                      @click="emit('update-settings', { theme: theme.value })">
+                      @click="emit('update-settings', { theme: theme.value })"
+                    >
                       <div class="theme-card-preview" :class="`theme-${theme.value}`">
                         <div class="theme-card-lines"></div>
                       </div>
@@ -306,9 +387,12 @@ function resetSettings() {
                     <span class="setting-value">{{ settings.contrast || "normal" }}</span>
                   </label>
                   <div class="contrast-options">
-                    <button v-for="option in contrastOptions" :key="option.value"
+                    <button
+                      v-for="option in contrastOptions"
+                      :key="option.value"
                       :class="['contrast-option', { active: settings.contrast === option.value }]"
-                      @click="emit('update-settings', { contrast: option.value })">
+                      @click="emit('update-settings', { contrast: option.value })"
+                    >
                       {{ option.label }}
                     </button>
                   </div>
@@ -323,17 +407,29 @@ function resetSettings() {
                     <span class="setting-value">{{ settings.columnWidth }}px</span>
                   </div>
                   <div class="width-presets">
-                    <button v-for="width in [600, 700, 800, 900]" :key="width"
+                    <button
+                      v-for="width in [600, 700, 800, 900]"
+                      :key="width"
                       :class="['width-preset', { active: settings.columnWidth === width }]"
-                      @click="emit('update-settings', { columnWidth: width })" :style="{ width: `${width / 4}px` }">
+                      @click="emit('update-settings', { columnWidth: width })"
+                      :style="{ width: `${width / 4}px` }"
+                    >
                       <div class="width-lines"></div>
                     </button>
                   </div>
-                  <input type="range" min="500" max="1000" step="10" :value="settings.columnWidth" @input="
-                    emit('update-settings', {
-                      columnWidth: Number(($event.target as HTMLInputElement).value),
-                    })
-                    " class="range-input" />
+                  <input
+                    type="range"
+                    min="500"
+                    max="1000"
+                    step="10"
+                    :value="settings.columnWidth"
+                    @input="
+                      emit('update-settings', {
+                        columnWidth: Number(($event.target as HTMLInputElement).value),
+                      })
+                    "
+                    class="range-input"
+                  />
                 </div>
 
                 <div class="setting-item">
@@ -342,19 +438,30 @@ function resetSettings() {
                     <span class="setting-value">{{ settings.margin }}px</span>
                   </div>
                   <div class="margin-presets">
-                    <button v-for="margin in [16, 24, 32, 48]" :key="margin"
+                    <button
+                      v-for="margin in [16, 24, 32, 48]"
+                      :key="margin"
                       :class="['margin-preset', { active: settings.margin === margin }]"
-                      @click="emit('update-settings', { margin: margin })">
+                      @click="emit('update-settings', { margin: margin })"
+                    >
                       <div class="margin-icon" :style="{ padding: `${margin / 4}px` }">
                         <div class="margin-box"></div>
                       </div>
                     </button>
                   </div>
-                  <input type="range" min="8" max="64" step="4" :value="settings.margin" @input="
-                    emit('update-settings', {
-                      margin: Number(($event.target as HTMLInputElement).value),
-                    })
-                    " class="range-input" />
+                  <input
+                    type="range"
+                    min="8"
+                    max="64"
+                    step="4"
+                    :value="settings.margin"
+                    @input="
+                      emit('update-settings', {
+                        margin: Number(($event.target as HTMLInputElement).value),
+                      })
+                    "
+                    class="range-input"
+                  />
                 </div>
 
                 <div class="setting-item">
@@ -362,11 +469,19 @@ function resetSettings() {
                     <span>Paragraph Spacing</span>
                     <span class="setting-value">{{ settings.paragraphSpacing || 1.2 }}em</span>
                   </div>
-                  <input type="range" min="0.8" max="2.0" step="0.1" :value="settings.paragraphSpacing || 1.2" @input="
-                    emit('update-settings', {
-                      paragraphSpacing: Number(($event.target as HTMLInputElement).value),
-                    })
-                    " class="range-input" />
+                  <input
+                    type="range"
+                    min="0.8"
+                    max="2.0"
+                    step="0.1"
+                    :value="settings.paragraphSpacing || 1.2"
+                    @input="
+                      emit('update-settings', {
+                        paragraphSpacing: Number(($event.target as HTMLInputElement).value),
+                      })
+                    "
+                    class="range-input"
+                  />
                 </div>
 
                 <div class="setting-item">
@@ -374,9 +489,12 @@ function resetSettings() {
                     <span>Text Alignment</span>
                   </label>
                   <div class="align-options">
-                    <button v-for="align in textAlignOptions" :key="align.value"
+                    <button
+                      v-for="align in textAlignOptions"
+                      :key="align.value"
                       :class="['align-option', { active: settings.textAlign === align.value }]"
-                      @click="emit('update-settings', { textAlign: align.value })">
+                      @click="emit('update-settings', { textAlign: align.value })"
+                    >
                       <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                         <rect v-if="align.value === 'left'" x="3" y="5" width="18" height="2" />
                         <rect v-if="align.value === 'left'" x="3" y="9" width="14" height="2" />
@@ -401,6 +519,127 @@ function resetSettings() {
           </div>
         </div>
 
+        <!-- Stats Modal -->
+        <div v-if="modelValue === 'stats'" class="modal-content-inner modal-stats">
+          <div class="modal-header">
+            <h3>Reading Statistics</h3>
+            <button class="modal-close" @click="closeModal">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div class="modal-body scroll-body">
+            <div v-if="stats" class="stats-content">
+              <!-- Summary Card -->
+              <div class="stats-summary">
+                <div class="stat-item primary">
+                  <div class="stat-value">{{ formatDuration(stats.totalReadingTime) }}</div>
+                  <div class="stat-label">Total Reading Time</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-value">{{ stats.totalSessions }}</div>
+                  <div class="stat-label">Sessions</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-value">{{ formatDuration(stats.averageSessionTime) }}</div>
+                  <div class="stat-label">Avg Session</div>
+                </div>
+              </div>
+
+              <!-- Progress Card -->
+              <div class="stats-card">
+                <h4 class="stats-card-title">Progress</h4>
+                <div class="progress-grid">
+                  <div class="progress-item">
+                    <div class="progress-number">{{ stats.chaptersCompleted }}</div>
+                    <div class="progress-label">of {{ totalChapters }} chapters</div>
+                  </div>
+                  <div class="progress-bar-container">
+                    <div class="progress-bar">
+                      <div
+                        class="progress-fill"
+                        :style="{ width: `${(stats.chaptersCompleted / totalChapters) * 100}%` }"
+                      ></div>
+                    </div>
+                    <div class="progress-percentage">
+                      {{ Math.round((stats.chaptersCompleted / totalChapters) * 100) }}%
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Reading Speed Card -->
+              <div class="stats-card">
+                <h4 class="stats-card-title">Reading Speed</h4>
+                <div class="speed-grid">
+                  <div class="stat-item">
+                    <div class="stat-value">{{ stats.readingSpeed }}</div>
+                    <div class="stat-label">words/min</div>
+                  </div>
+                  <div class="stat-item">
+                    <div class="stat-value">{{ stats.wordsRead.toLocaleString() }}</div>
+                    <div class="stat-label">words read</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Active Hours Card -->
+              <div class="stats-card" v-if="stats.activeHours.length > 0">
+                <h4 class="stats-card-title">Active Hours</h4>
+                <div class="hours-grid">
+                  <div v-for="hour in stats.activeHours" :key="hour" class="hour-item">
+                    <div class="hour-bar"></div>
+                    <span class="hour-label">{{ formatHour(hour) }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- History Card -->
+              <div class="stats-card">
+                <h4 class="stats-card-title">Reading History</h4>
+                <div class="history-grid">
+                  <div class="history-item">
+                    <span class="history-label">First read</span>
+                    <span class="history-value">{{
+                      stats.firstReadAt ? formatRelativeTime(stats.firstReadAt) : "—"
+                    }}</span>
+                  </div>
+                  <div class="history-item">
+                    <span class="history-label">Last read</span>
+                    <span class="history-value">{{
+                      stats.lastReadAt ? formatRelativeTime(stats.lastReadAt) : "—"
+                    }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-else class="no-stats">
+              <div class="no-stats-icon">
+                <svg
+                  width="48"
+                  height="48"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <path d="M12 20V10M18 20V4M6 20v-4" />
+                </svg>
+              </div>
+              <p>No reading data yet</p>
+              <p class="no-stats-hint">Start reading to track your progress</p>
+            </div>
+          </div>
+        </div>
+
         <!-- Search Modal -->
         <div v-if="modelValue === 'search'" class="modal-content-inner">
           <!-- Fixed header + search bar (doesn't scroll) -->
@@ -408,28 +647,53 @@ function resetSettings() {
             <div class="modal-header">
               <h3>Search</h3>
               <button class="modal-close" @click="closeModal">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
                   <path d="M18 6L6 18M6 6l12 12" />
                 </svg>
               </button>
             </div>
             <div class="search-box-wrapper">
               <div class="search-box">
-                <input id="search-input" :value="searchQuery"
-                  @input="handleSearchInput(($event.target as HTMLInputElement).value)" type="text"
-                  placeholder="Search in book..." class="search-input" />
+                <input
+                  id="search-input"
+                  :value="searchQuery"
+                  @input="handleSearchInput(($event.target as HTMLInputElement).value)"
+                  type="text"
+                  placeholder="Search in book..."
+                  class="search-input"
+                />
                 <button class="search-submit" @click="emit('search')">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
                     <circle cx="11" cy="11" r="8" />
                     <path d="M21 21l-4.35-4.35" />
                   </svg>
                 </button>
               </div>
               <div class="search-results-info" v-if="searchResults.length > 0">
-                <span class="results-count">{{ searchResults.length }} result{{
-                  searchResults.length !== 1 ? "s" : ""
-                }}</span>
-                <button class="clear-highlights" @click="emit('clear-highlights')" v-if="hasHighlights">
+                <span class="results-count"
+                  >{{ searchResults.length }} result{{
+                    searchResults.length !== 1 ? "s" : ""
+                  }}</span
+                >
+                <button
+                  class="clear-highlights"
+                  @click="emit('clear-highlights')"
+                  v-if="hasHighlights"
+                >
                   Clear highlights
                 </button>
               </div>
@@ -438,8 +702,12 @@ function resetSettings() {
           <!-- Scrollable results area -->
           <div class="modal-body scroll-body">
             <ul class="search-results">
-              <li v-for="(result, i) in searchResults" :key="i" class="search-result"
-                @click.stop="emit('go-to-search-result', result)">
+              <li
+                v-for="(result, i) in searchResults"
+                :key="i"
+                class="search-result"
+                @click.stop="emit('go-to-search-result', result)"
+              >
                 <div class="result-header">
                   <span class="result-chapter">{{ result.chapterTitle }}</span>
                   <span class="result-index">{{ i + 1 }}</span>
@@ -458,7 +726,14 @@ function resetSettings() {
           <div class="modal-header">
             <h3>Bookmarks</h3>
             <button class="modal-close" @click="closeModal">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
                 <path d="M18 6L6 18M6 6l12 12" />
               </svg>
             </button>
@@ -466,7 +741,14 @@ function resetSettings() {
           <!-- Fixed add bookmark button (doesn't scroll) -->
           <div class="bookmark-bar-fixed">
             <button class="add-bookmark-btn" @click="emit('add-bookmark')">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
                 <path d="M12 5v14M5 12h14" />
               </svg>
               Add Bookmark
@@ -480,18 +762,38 @@ function resetSettings() {
                   <div class="bookmark-header">
                     <div class="bookmark-title">{{ bm.title }}</div>
                     <div class="bookmark-actions">
-                      <button class="bookmark-edit-btn" @click.stop="emit('edit-bookmark', bm)"
-                        aria-label="Edit bookmark" title="Edit bookmark">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                          stroke-width="2">
+                      <button
+                        class="bookmark-edit-btn"
+                        @click.stop="emit('edit-bookmark', bm)"
+                        aria-label="Edit bookmark"
+                        title="Edit bookmark"
+                      >
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                        >
                           <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
                           <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
                         </svg>
                       </button>
-                      <button class="bookmark-delete-btn" @click.stop="emit('delete-bookmark', bm.id, $event)"
-                        aria-label="Delete bookmark" title="Delete bookmark">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                          stroke-width="2">
+                      <button
+                        class="bookmark-delete-btn"
+                        @click.stop="emit('delete-bookmark', bm.id, $event)"
+                        aria-label="Delete bookmark"
+                        title="Delete bookmark"
+                      >
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                        >
                           <path d="M18 6L6 18M6 6l12 12" />
                         </svg>
                       </button>
@@ -511,7 +813,14 @@ function resetSettings() {
           <div class="modal-header">
             <h3>Edit Bookmark</h3>
             <button class="modal-close" @click="emit('close-bookmark-editor')">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
                 <path d="M18 6L6 18M6 6l12 12" />
               </svg>
             </button>
@@ -520,28 +829,47 @@ function resetSettings() {
             <div class="editor-content">
               <div class="editor-field">
                 <label class="editor-label">Title</label>
-                <input type="text" v-model="editingBookmark.title" class="editor-input" placeholder="Bookmark title" />
+                <input
+                  type="text"
+                  v-model="editingBookmark.title"
+                  class="editor-input"
+                  placeholder="Bookmark title"
+                />
               </div>
               <div class="editor-field">
                 <label class="editor-label">Note</label>
-                <textarea v-model="editingBookmark.note" class="editor-textarea" placeholder="Add a note..."
-                  rows="4"></textarea>
+                <textarea
+                  v-model="editingBookmark.note"
+                  class="editor-textarea"
+                  placeholder="Add a note..."
+                  rows="4"
+                ></textarea>
               </div>
               <div class="editor-field">
                 <label class="editor-label">Color</label>
                 <div class="color-picker">
-                  <button v-for="color in bookmarkColors" :key="color.value"
+                  <button
+                    v-for="color in bookmarkColors"
+                    :key="color.value"
                     :class="['color-option', { active: editingBookmark.color === color.value }]"
-                    :style="{ backgroundColor: color.value }" @click="editingBookmark.color = color.value"
-                    :aria-label="color.label"></button>
+                    :style="{ backgroundColor: color.value }"
+                    @click="editingBookmark.color = color.value"
+                    :aria-label="color.label"
+                  ></button>
                 </div>
               </div>
               <div class="editor-field">
                 <label class="editor-label">
                   Position: {{ Math.round(editingBookmark.position) }}%
                 </label>
-                <input type="range" v-model.number="editingBookmark.position" min="0" max="100" step="1"
-                  class="range-input" />
+                <input
+                  type="range"
+                  v-model.number="editingBookmark.position"
+                  min="0"
+                  max="100"
+                  step="1"
+                  class="range-input"
+                />
               </div>
               <div class="editor-actions">
                 <button class="btn-cancel" @click="emit('close-bookmark-editor')">Cancel</button>
@@ -1799,6 +2127,199 @@ function resetSettings() {
     padding: 16px 18px;
     min-height: 52px;
   }
+}
+
+/* Stats Modal */
+.modal-stats .stats-content {
+  padding: 20px;
+}
+
+.stats-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+
+.stat-item.primary {
+  grid-column: span 3;
+  text-align: center;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.stat-item {
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--accent);
+  font-family: var(--font-display);
+}
+
+.stat-item.primary .stat-value {
+  font-size: 32px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.stats-card {
+  background: var(--hover-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.stats-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 14px;
+}
+
+.progress-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.progress-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.progress-number {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+}
+
+.progress-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.progress-bar-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.progress-percentage {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 40px;
+}
+
+.speed-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.hours-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hour-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  min-width: 50px;
+}
+
+.hour-bar {
+  width: 4px;
+  height: 24px;
+  background: var(--accent);
+  border-radius: 2px;
+  opacity: 0.8;
+}
+
+.hour-label {
+  font-size: 10px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.history-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.history-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.history-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.history-value {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.no-stats {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.no-stats-icon {
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.no-stats-hint {
+  font-size: 13px;
+  margin-top: 8px;
+  color: var(--text-muted);
 }
 
 /* Small phones */

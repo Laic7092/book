@@ -88,6 +88,35 @@ export interface BookParser {
   supportsFormat(mimeType: string): boolean;
 }
 
+/**
+ * Reading session - tracks a single reading session
+ */
+export interface ReadingSession {
+  bookId: string;
+  startTime: number; // Session start timestamp
+  endTime?: number; // Session end timestamp (recorded when closing book)
+  chaptersRead: string[]; // Chapter IDs read in this session
+  wordsRead?: number; // Approximate words read in this session
+}
+
+/**
+ * Reading statistics for a book
+ */
+export interface BookReadingStats {
+  bookId: string;
+  totalSessions: number; // Total number of reading sessions
+  totalReadingTime: number; // Cumulative reading time in milliseconds
+  averageSessionTime: number; // Average session duration in milliseconds
+  wordsRead: number; // Total words read
+  readingSpeed: number; // Words per minute
+  chaptersCompleted: number; // Number of chapters completed
+  lastActiveDate: string; // Last active date (YYYY-MM-DD format)
+  activeHours: number[]; // Array of hours (0-23) when user was active
+  estimatedTimeRemaining?: number; // Estimated time remaining in milliseconds
+  firstReadAt?: number; // Timestamp of first reading session
+  lastReadAt?: number; // Timestamp of most recent session end
+}
+
 export type ReaderEventMap = {
   "book:loaded": { book: Book; chapters: Chapter[]; resourceUrls?: Map<string, string> };
   "chapter:changed": { chapterId: string; content: string; resourceUrls?: Map<string, string> };
@@ -97,6 +126,9 @@ export type ReaderEventMap = {
   "bookmark:removed": { bookmarkId: string };
   "settings:changed": { settings: ReaderSettings };
   "search:results": { results: SearchResult[]; query: string };
+  "stats:session-start": { bookId: string; startTime: number };
+  "stats:session-end": { bookId: string; duration: number };
+  "stats:updated": { bookId: string; stats: BookReadingStats };
   error: { message: string; error?: Error };
 };
 
