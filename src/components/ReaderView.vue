@@ -98,8 +98,16 @@ const scrollManager = useScrollManager({
   isPaginationMode,
   readingProgress,
   chapterProgress,
-  updateProgress: (val) => readerStore.updateProgress(val),
+  updateProgress: (scrollPos, percentage, chapterId) =>
+    readerStore.updateProgress(scrollPos, percentage, chapterId),
   onPreloadTrigger: preloader.loadAdjacentChapters,
+  onChapterChange: async (chapterId) => {
+    // Update current chapter in store when user scrolls to a new chapter
+    const chapter = chapters.value.find((c) => c.id === chapterId);
+    if (chapter && chapter.id !== currentChapterId.value) {
+      readerStore.currentChapter = chapter;
+    }
+  },
 });
 
 // Toggle controls - must be defined before gestures
@@ -151,6 +159,9 @@ async function nextPage() {
   const result = pagination.nextPage();
   if (!result.shouldGoToNextChapter) {
     await pagination.goToPage(result.pageIndex, chapters.value.length, currentChapterIndex.value);
+    // Update progress within chapter
+    const chapterProgress = ((result.pageIndex + 1) / pagination.pages.value.length) * 100;
+    readerStore.updateProgress(chapterProgress, chapterProgress);
   } else {
     const currentIndex = currentChapterIndex.value;
     if (currentIndex < chapters.value.length - 1) {
@@ -166,6 +177,9 @@ async function prevPage() {
   const result = pagination.prevPage();
   if (!result.shouldGoToPrevChapter) {
     await pagination.goToPage(result.pageIndex, chapters.value.length, currentChapterIndex.value);
+    // Update progress within chapter
+    const chapterProgress = ((result.pageIndex + 1) / pagination.pages.value.length) * 100;
+    readerStore.updateProgress(chapterProgress, chapterProgress);
   } else {
     const currentIndex = currentChapterIndex.value;
     if (currentIndex > 0) {
@@ -310,6 +324,14 @@ onMounted(async () => {
   } else {
     // Vertical scroll mode - load all chapters
     await preloader.loadAllChapters();
+    // Restore scroll position after content is loaded
+    setTimeout(() => {
+      const progress = readerStore.readingProgress;
+      const chapterId = readerStore.currentChapter?.id;
+      if (progress > 0 && chapterId) {
+        scrollManager.restoreScrollPosition(progress, chapterId);
+      }
+    }, 200);
   }
 });
 

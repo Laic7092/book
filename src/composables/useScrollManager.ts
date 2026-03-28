@@ -8,15 +8,23 @@ interface UseScrollManagerOptions {
   isPaginationMode: Ref<boolean>;
   readingProgress: Ref<number>;
   chapterProgress: Ref<number>;
-  updateProgress: (scrollPosition: number, percentage: number) => void;
+  updateProgress: (scrollPosition: number, percentage: number, chapterId?: string) => void;
   onPreloadTrigger?: (chapterIndex: number) => void;
+  onChapterChange?: (chapterId: string) => void;
 }
 
 export function useScrollManager(options: UseScrollManagerOptions) {
-  const { isPaginationMode, readingProgress, chapterProgress, updateProgress, onPreloadTrigger } =
-    options;
+  const {
+    isPaginationMode,
+    readingProgress,
+    chapterProgress,
+    updateProgress,
+    onPreloadTrigger,
+    onChapterChange,
+  } = options;
 
   const saveProgressTimer = ref<number | null>(null);
+  const lastVisibleChapterId = ref<string | null>(null);
 
   const getScrollPercentage = (): number => {
     const main = document.querySelector(".reader-view") as HTMLElement;
@@ -53,6 +61,27 @@ export function useScrollManager(options: UseScrollManagerOptions) {
     return -1;
   };
 
+  const getCurrentVisibleChapterId = (): string | null => {
+    const main = document.querySelector(".reader-view") as HTMLElement;
+    if (!main) return null;
+
+    const { scrollTop, clientHeight } = main;
+    const midpoint = scrollTop + clientHeight / 2;
+
+    const chapterContainers = main.querySelectorAll(".chapter-container");
+    for (let i = 0; i < chapterContainers.length; i++) {
+      const container = chapterContainers[i] as HTMLElement;
+      const top = container.offsetTop;
+      const bottom = top + container.offsetHeight;
+
+      if (midpoint >= top && midpoint < bottom) {
+        return container.getAttribute("data-chapter-id");
+      }
+    }
+
+    return null;
+  };
+
   const checkPreloadThreshold = (currentChapterIndex: number, totalChapters: number) => {
     const main = document.querySelector(".reader-view") as HTMLElement;
     if (!main) return;
@@ -80,10 +109,17 @@ export function useScrollManager(options: UseScrollManagerOptions) {
     readingProgress.value = scrollPercentage;
     chapterProgress.value = scrollPercentage;
 
+    // Check if visible chapter changed
+    const currentChapterId = getCurrentVisibleChapterId();
+    if (currentChapterId && currentChapterId !== lastVisibleChapterId.value) {
+      lastVisibleChapterId.value = currentChapterId;
+      onChapterChange?.(currentChapterId);
+    }
+
     // Debounced progress saving
     if (saveProgressTimer.value) clearTimeout(saveProgressTimer.value);
     saveProgressTimer.value = window.setTimeout(() => {
-      updateProgress(scrollPercentage, scrollPercentage);
+      updateProgress(scrollPercentage, scrollPercentage, currentChapterId || undefined);
     }, 1000);
   }, 16);
 
@@ -108,6 +144,29 @@ export function useScrollManager(options: UseScrollManagerOptions) {
     });
   };
 
+  const restoreScrollPosition = (scrollPosition: number, chapterId?: string) => {
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        const main = document.querySelector(".reader-view") as HTMLElement;
+        if (main && scrollPosition > 0) {
+          // If chapterId is provided, scroll to that chapter first
+          if (chapterId) {
+            const chapterEl = document.querySelector(
+              `[data-chapter-id="${chapterId}"]`,
+            ) as HTMLElement;
+            if (chapterEl) {
+              main.scrollTop =
+                chapterEl.offsetTop - 20 + (scrollPosition / 100) * chapterEl.offsetHeight;
+              return;
+            }
+          }
+          // Otherwise just restore scroll position
+          main.scrollTop = scrollPosition;
+        }
+      }, 100);
+    });
+  };
+
   const cleanup = () => {
     if (saveProgressTimer.value) clearTimeout(saveProgressTimer.value);
   };
@@ -115,8 +174,10 @@ export function useScrollManager(options: UseScrollManagerOptions) {
   return {
     getScrollPercentage,
     getCurrentVisibleChapterIndex,
+    getCurrentVisibleChapterId,
     handleScroll,
     scrollToChapter,
+    restoreScrollPosition,
     cleanup,
   };
 }

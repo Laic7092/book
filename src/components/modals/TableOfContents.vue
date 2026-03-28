@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { ref, onMounted, nextTick, computed, watch } from "vue";
 import type { Chapter } from "../../core/types";
 
-defineProps<{
+const props = defineProps<{
   chapters: Chapter[];
   currentChapterId: string | null;
 }>();
@@ -11,9 +12,63 @@ const emit = defineEmits<{
   (e: "close"): void;
 }>();
 
+const tocListRef = ref<HTMLElement | null>(null);
+const activeItemRefs = ref<Record<string, HTMLElement>>({});
+const hasScrolledToCurrent = ref(false);
+const isMounted = ref(false);
+
 function handleTocClick(chapterId: string) {
   emit("select-chapter", chapterId);
   emit("close");
+}
+
+const currentChapterIndex = computed(() => {
+  if (!props.currentChapterId) return -1;
+  return props.chapters.findIndex((c) => c.id === props.currentChapterId);
+});
+
+function scrollToCurrentChapter() {
+  if (!props.currentChapterId || hasScrolledToCurrent.value || !isMounted.value) return;
+
+  const activeEl = activeItemRefs.value[props.currentChapterId];
+  if (activeEl && tocListRef.value) {
+    hasScrolledToCurrent.value = true;
+    activeEl.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+}
+
+// Auto-scroll to current chapter when modal opens
+onMounted(async () => {
+  isMounted.value = true;
+  if (!props.currentChapterId) return;
+
+  await nextTick();
+
+  // Wait for modal slide-up animation to complete
+  setTimeout(() => {
+    scrollToCurrentChapter();
+  }, 400);
+});
+
+// Also watch for chapter changes in case modal stays open
+watch(
+  () => props.currentChapterId,
+  (newVal) => {
+    if (newVal) {
+      hasScrolledToCurrent.value = false;
+      setTimeout(() => {
+        scrollToCurrentChapter();
+      }, 100);
+    }
+  },
+);
+
+function setRef(el: HTMLElement | null, chapterId: string) {
+  if (el) {
+    activeItemRefs.value[chapterId] = el;
+  } else {
+    delete activeItemRefs.value[chapterId];
+  }
 }
 </script>
 
@@ -34,11 +89,12 @@ function handleTocClick(chapterId: string) {
         </svg>
       </button>
     </div>
-    <div class="modal-body scroll-body">
+    <div ref="tocListRef" class="modal-body scroll-body">
       <div v-if="chapters.length === 0" class="no-chapters">No chapters available</div>
       <ul v-else class="toc-list">
         <li v-for="(ch, index) in chapters" :key="ch.id">
           <button
+            :ref="(el: HTMLElement | null) => setRef(el, ch.id)"
             :class="['toc-item', { active: ch.id === currentChapterId }]"
             @click.stop="handleTocClick(ch.id)"
           >

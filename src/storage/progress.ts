@@ -29,11 +29,9 @@ export async function updateProgress(
   scrollPosition: number,
   percentage: number,
 ): Promise<void> {
-  const existing = await getProgress(bookId);
-
   const progress: ReadingProgress = {
     bookId,
-    chapterId: existing?.chapterId || chapterId,
+    chapterId,
     scrollPosition,
     percentage,
     updatedAt: Date.now(),

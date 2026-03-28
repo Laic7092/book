@@ -151,8 +151,6 @@ export const useReaderStore = defineStore("reader", {
 
         this.currentBook = book;
         this.chapters = chapters;
-        // Set current chapter to first chapter
-        this.currentChapter = chapters.length > 0 ? chapters[0] : null;
 
         // Load resource URLs for this book
         this.resourceUrls = await resourcesStore.getResourceUrls(bookId);
@@ -170,7 +168,20 @@ export const useReaderStore = defineStore("reader", {
         const settings = await settingsStore.getSettings();
         this.settings = { ...this.settings, ...settings };
 
-        console.log("[readerStore.openBook] Book opened successfully");
+        // Load saved reading progress and set current chapter
+        const savedProgress = await progressStore.getProgress(bookId);
+        if (savedProgress?.chapterId) {
+          const lastChapter = chapters.find((c) => c.id === savedProgress!.chapterId);
+          if (lastChapter) {
+            this.currentChapter = lastChapter;
+            this.readingProgress = savedProgress.percentage || 0;
+            this.chapterProgress = savedProgress.percentage || 0;
+          } else {
+            this.currentChapter = chapters.length > 0 ? chapters[0] : null;
+          }
+        } else {
+          this.currentChapter = chapters.length > 0 ? chapters[0] : null;
+        }
 
         return { book, chapters };
       } catch (error) {
@@ -246,7 +257,11 @@ export const useReaderStore = defineStore("reader", {
     /**
      * Update reading progress
      */
-    async updateProgress(scrollPosition: number, percentage: number): Promise<void> {
+    async updateProgress(
+      scrollPosition: number,
+      percentage: number,
+      chapterId?: string,
+    ): Promise<void> {
       if (!this.currentBook || !this.currentChapter) {
         return;
       }
@@ -256,7 +271,7 @@ export const useReaderStore = defineStore("reader", {
 
       await progressStore.updateProgress(
         this.currentBook.id,
-        this.currentChapter.id,
+        chapterId || this.currentChapter.id,
         scrollPosition,
         percentage,
       );
