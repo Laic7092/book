@@ -47,6 +47,13 @@ const readingProgress = computed({
   get: () => readerStore.readingProgress,
   set: (val) => readerStore.updateProgress(val, val),
 });
+// Progress bar displays chapter progress (same as pagination mode)
+const chapterProgress = computed({
+  get: () => readerStore.chapterProgress,
+  set: (val) => {
+    readerStore.chapterProgress = val;
+  },
+});
 const currentChapterTitle = computed(() => readerStore.currentChapter?.title || "");
 const showControls = computed({
   get: () => uiStore.showControls,
@@ -77,7 +84,6 @@ const paginationAnimationClass = computed(() => {
 
 // Content state for pagination
 const content = ref("");
-const chapterProgress = ref(0);
 
 // Initialize composables
 const pagination = usePagination(settings, containerHeight);
@@ -98,6 +104,7 @@ const scrollManager = useScrollManager({
   isPaginationMode,
   readingProgress,
   chapterProgress,
+  chapters,
   updateProgress: (scrollPos, percentage, chapterId) =>
     readerStore.updateProgress(scrollPos, percentage, chapterId),
   onPreloadTrigger: preloader.loadAdjacentChapters,
@@ -106,6 +113,18 @@ const scrollManager = useScrollManager({
     const chapter = chapters.value.find((c) => c.id === chapterId);
     if (chapter && chapter.id !== currentChapterId.value) {
       readerStore.currentChapter = chapter;
+      // Reset chapter progress when entering a new chapter
+      readerStore.chapterProgress = 0;
+    }
+  },
+  onVisibleRangeChange: async (start, end) => {
+    // Load chapters in visible range with buffer
+    if (!isPaginationMode.value) {
+      await preloader.updateVisibleRange(start, end, 2);
+      // Unload chapters far from visible range to free memory
+      const unloadStart = Math.max(0, start - 5);
+      const unloadEnd = Math.min(chapters.value.length - 1, end + 5);
+      preloader.unloadChaptersOutsideRange(unloadStart, unloadEnd);
     }
   },
 });
@@ -275,7 +294,7 @@ watch(
   () => settings.value.scrollMode,
   async (newMode) => {
     if (newMode === "vertical" && chapters.value.length > 0) {
-      await preloader.loadAllChapters();
+      await preloader.loadInitialChapters(2);
     } else if (newMode === "pagination" && readerStore.currentChapter) {
       content.value = (await readerStore.getCurrentChapterContent()) || "";
       await pagination.recalculatePages(content.value);
@@ -293,6 +312,16 @@ watch(
       content.value = (await readerStore.getCurrentChapterContent()) || "";
       await pagination.recalculatePages(content.value);
     }
+  },
+);
+
+// Watch for chapter changes (vertical scroll mode) - load chapters around current position
+watch(
+  () => currentChapterId.value,
+  async (newChapterId) => {
+    if (!newChapterId || isPaginationMode.value) return;
+    // Lazy loading mode - load chapters around current position
+    await preloader.loadInitialChapters(2);
   },
 );
 
@@ -322,8 +351,8 @@ onMounted(async () => {
     content.value = (await readerStore.getCurrentChapterContent()) || "";
     await pagination.recalculatePages(content.value);
   } else {
-    // Vertical scroll mode - load all chapters
-    await preloader.loadAllChapters();
+    // Vertical scroll mode - lazy load initial chapters
+    await preloader.loadInitialChapters(2);
     // Restore scroll position after content is loaded
     setTimeout(() => {
       const progress = readerStore.readingProgress;
@@ -354,7 +383,8 @@ onUnmounted(() => {
     />
 
     <!-- Progress Bar -->
-    <ProgressBar :progress="readingProgress" />
+    <!-- Display current chapter progress (consistent with pagination mode) -->
+    <ProgressBar :progress="chapterProgress" />
 
     <!-- Main Content -->
     <ReaderContent
@@ -365,6 +395,7 @@ onUnmounted(() => {
       :pagination-animation-class="paginationAnimationClass"
       :chapters="chapters"
       :all-loaded-content="preloader.allLoadedContent.value"
+      :visible-chapters="preloader.visibleChapters.value"
       :transitioning="isTransitioning"
       @scroll="scrollManager.handleScroll(chapters, currentChapterIndex)"
     />

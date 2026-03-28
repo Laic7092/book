@@ -13,6 +13,10 @@ export function useChapterPreloader(
   const isLoadingAdjacent = ref(false);
   const chapterContents = ref<Map<string, string>>(new Map());
 
+  // Visible chapter range for virtual scrolling
+  const visibleStartIndex = ref(0);
+  const visibleEndIndex = ref(0);
+
   const allLoadedContent = computed(() => {
     const contents: Array<{ chapterId: string; title: string; content: string; order: number }> =
       [];
@@ -33,6 +37,62 @@ export function useChapterPreloader(
     contents.sort((a, b) => a.order - b.order);
     return contents;
   });
+
+  // Get chapters in visible range (including unloaded ones for placeholder rendering)
+  const visibleChapters = computed(() => {
+    const result: Array<{
+      chapter: Chapter;
+      index: number;
+      isLoaded: boolean;
+      content?: string;
+    }> = [];
+
+    for (let i = visibleStartIndex.value; i <= visibleEndIndex.value; i++) {
+      if (i >= 0 && i < chapters.value.length) {
+        const chapter = chapters.value[i];
+        if (chapter) {
+          const isLoaded = loadedChapters.value.has(chapter.id);
+          result.push({
+            chapter,
+            index: i,
+            isLoaded,
+            content: isLoaded ? chapterContents.value.get(chapter.id) : undefined,
+          });
+        }
+      }
+    }
+    return result;
+  });
+
+  const loadChaptersInRange = async (startIndex: number, endIndex: number) => {
+    if (!bookId.value) return;
+
+    const actualStart = Math.max(0, startIndex);
+    const actualEnd = Math.min(chapters.value.length - 1, endIndex);
+
+    const chaptersToLoad: Chapter[] = [];
+    for (let i = actualStart; i <= actualEnd; i++) {
+      const chapter = chapters.value[i];
+      if (chapter && !loadedChapters.value.has(chapter.id)) {
+        chaptersToLoad.push(chapter);
+      }
+    }
+
+    if (chaptersToLoad.length === 0) return;
+
+    try {
+      const loadPromises = chaptersToLoad.map(async (chapter) => {
+        const content = await booksStore.getChapterContent(bookId.value!, chapter.id);
+        if (content !== undefined) {
+          chapterContents.value.set(chapter.id, content);
+          loadedChapters.value.add(chapter.id);
+        }
+      });
+      await Promise.all(loadPromises);
+    } catch (err) {
+      console.error("[loadChaptersInRange] Error loading chapters:", err);
+    }
+  };
 
   const loadAdjacentChapters = async (targetIndex: number) => {
     if (targetIndex < 0 || targetIndex >= chapters.value.length) return;
@@ -125,6 +185,31 @@ export function useChapterPreloader(
     }
   };
 
+  // Load initial chapters around current position (for lazy loading mode)
+  const loadInitialChapters = async (bufferSize: number = 2) => {
+    const currentIndex = currentChapterIndex.value;
+    if (currentIndex < 0 || !bookId.value) return;
+
+    const start = Math.max(0, currentIndex - bufferSize);
+    const end = Math.min(chapters.value.length - 1, currentIndex + bufferSize);
+    await loadChaptersInRange(start, end);
+
+    // Update visible range
+    visibleStartIndex.value = start;
+    visibleEndIndex.value = end;
+  };
+
+  // Update visible range and load/unload chapters as needed
+  const updateVisibleRange = async (newStart: number, newEnd: number, bufferSize: number = 1) => {
+    const actualStart = Math.max(0, newStart - bufferSize);
+    const actualEnd = Math.min(chapters.value.length - 1, newEnd + bufferSize);
+
+    visibleStartIndex.value = actualStart;
+    visibleEndIndex.value = actualEnd;
+
+    await loadChaptersInRange(actualStart, actualEnd);
+  };
+
   const loadChapter = async (chapterId: string) => {
     if (!bookId.value) return;
     const content = await booksStore.getChapterContent(bookId.value, chapterId);
@@ -142,6 +227,24 @@ export function useChapterPreloader(
     loadedChapters.value.clear();
     chapterContents.value.clear();
     isLoadingAdjacent.value = false;
+    visibleStartIndex.value = 0;
+    visibleEndIndex.value = 0;
+  };
+
+  const unloadChaptersOutsideRange = (keepStart: number, keepEnd: number) => {
+    const chaptersToUnload: string[] = [];
+
+    for (const chapterId of loadedChapters.value) {
+      const chapterIndex = chapters.value.findIndex((c) => c.id === chapterId);
+      if (chapterIndex < keepStart || chapterIndex > keepEnd) {
+        chaptersToUnload.push(chapterId);
+      }
+    }
+
+    for (const chapterId of chaptersToUnload) {
+      loadedChapters.value.delete(chapterId);
+      chapterContents.value.delete(chapterId);
+    }
   };
 
   return {
@@ -149,8 +252,14 @@ export function useChapterPreloader(
     isLoadingAdjacent,
     chapterContents,
     allLoadedContent,
+    visibleChapters,
+    visibleStartIndex,
+    visibleEndIndex,
     loadAdjacentChapters,
     loadAllChapters,
+    loadInitialChapters,
+    updateVisibleRange,
+    unloadChaptersOutsideRange,
     loadChapter,
     isChapterLoaded,
     reset,

@@ -9,6 +9,12 @@ defineProps<{
   paginationAnimationClass?: string;
   chapters?: Chapter[];
   allLoadedContent?: Array<{ chapterId: string; title: string; content: string; order: number }>;
+  visibleChapters?: Array<{
+    chapter: Chapter;
+    index: number;
+    isLoaded: boolean;
+    content?: string;
+  }>;
   transitioning?: boolean;
 }>();
 </script>
@@ -49,15 +55,36 @@ defineProps<{
         textAlign: settings.textAlign || 'left',
       }"
     >
-      <div
-        v-for="chapter in allLoadedContent"
-        :key="chapter.chapterId"
-        class="chapter-container"
-        :data-chapter-id="chapter.chapterId"
-      >
-        <h2 class="chapter-heading">{{ chapter.title }}</h2>
-        <div class="chapter-body" v-html="chapter.content"></div>
-      </div>
+      <!-- Lazy loading mode: render all chapters with placeholders for unloaded ones -->
+      <template v-if="visibleChapters && visibleChapters.length > 0">
+        <div
+          v-for="item in visibleChapters"
+          :key="item.chapter.id"
+          class="chapter-container"
+          :data-chapter-id="item.chapter.id"
+        >
+          <h2 class="chapter-heading">{{ item.chapter.title }}</h2>
+          <div v-if="item.isLoaded" class="chapter-body" v-html="item.content"></div>
+          <div v-else class="chapter-placeholder">
+            <div class="placeholder-loading">
+              <span class="loading-dots"></span>
+              <span>加载章节...</span>
+            </div>
+          </div>
+        </div>
+      </template>
+      <!-- Fallback to allLoadedContent for backward compatibility -->
+      <template v-else-if="allLoadedContent && allLoadedContent.length > 0">
+        <div
+          v-for="chapter in allLoadedContent"
+          :key="chapter.chapterId"
+          class="chapter-container"
+          :data-chapter-id="chapter.chapterId"
+        >
+          <h2 class="chapter-heading">{{ chapter.title }}</h2>
+          <div class="chapter-body" v-html="chapter.content"></div>
+        </div>
+      </template>
     </article>
   </main>
 </template>
@@ -121,6 +148,57 @@ defineProps<{
 .chapter-body {
   padding-top: 0.5em;
   white-space: break-spaces;
+}
+
+/* Chapter placeholder for lazy loading */
+.chapter-placeholder {
+  padding: 2em 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  color: var(--reader-text-muted, #888);
+}
+
+.placeholder-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.75em;
+  font-size: 0.9em;
+}
+
+.loading-dots {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.loading-dots::before,
+.loading-dots::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  background: currentColor;
+  border-radius: 50%;
+  animation: loading-bounce 1.4s infinite ease-in-out both;
+}
+
+.loading-dots::before {
+  animation-delay: -0.32s;
+}
+
+.loading-dots::after {
+  animation-delay: -0.16s;
+}
+
+@keyframes loading-bounce {
+  0%,
+  80%,
+  100% {
+    transform: scale(0);
+  }
+  40% {
+    transform: scale(1);
+  }
 }
 
 .reader-content.transitioning {

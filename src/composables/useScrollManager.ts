@@ -8,9 +8,11 @@ interface UseScrollManagerOptions {
   isPaginationMode: Ref<boolean>;
   readingProgress: Ref<number>;
   chapterProgress: Ref<number>;
+  chapters: Ref<Chapter[]>;
   updateProgress: (scrollPosition: number, percentage: number, chapterId?: string) => void;
   onPreloadTrigger?: (chapterIndex: number) => void;
   onChapterChange?: (chapterId: string) => void;
+  onVisibleRangeChange?: (start: number, end: number) => void;
 }
 
 export function useScrollManager(options: UseScrollManagerOptions) {
@@ -18,10 +20,14 @@ export function useScrollManager(options: UseScrollManagerOptions) {
     isPaginationMode,
     readingProgress,
     chapterProgress,
+    chapters,
     updateProgress,
     onPreloadTrigger,
     onChapterChange,
+    onVisibleRangeChange,
   } = options;
+
+  const lastVisibleRange = ref<{ start: number; end: number } | null>(null);
 
   const saveProgressTimer = ref<number | null>(null);
   const lastVisibleChapterId = ref<string | null>(null);
@@ -61,6 +67,58 @@ export function useScrollManager(options: UseScrollManagerOptions) {
     return -1;
   };
 
+  const getVisibleChapterRange = (chapters: Chapter[]): { start: number; end: number } => {
+    const main = document.querySelector(".reader-view") as HTMLElement;
+    if (!main || chapters.length === 0) {
+      return { start: 0, end: 0 };
+    }
+
+    const { scrollTop, clientHeight } = main;
+    const viewportTop = scrollTop;
+    const viewportBottom = scrollTop + clientHeight;
+
+    let visibleStart = chapters.length - 1;
+    let visibleEnd = 0;
+
+    const chapterContainers = main.querySelectorAll(".chapter-container");
+    chapterContainers.forEach((container) => {
+      const containerEl = container as HTMLElement;
+      const top = containerEl.offsetTop;
+      const bottom = top + containerEl.offsetHeight;
+
+      // Check if chapter intersects with viewport
+      if (bottom > viewportTop && top < viewportBottom) {
+        const chapterId = containerEl.getAttribute("data-chapter-id");
+        if (chapterId) {
+          const index = chapters.findIndex((c) => c.id === chapterId);
+          if (index >= 0) {
+            visibleStart = Math.min(visibleStart, index);
+            visibleEnd = Math.max(visibleEnd, index);
+          }
+        }
+      }
+    });
+
+    // If no chapters visible (e.g., scrolled past last chapter), use closest chapter
+    if (visibleStart > visibleEnd) {
+      const totalHeight = main.scrollHeight;
+      if (scrollTop + clientHeight >= totalHeight - 10) {
+        // At bottom
+        visibleStart = chapters.length - 1;
+        visibleEnd = chapters.length - 1;
+      } else {
+        // At top or between chapters
+        const firstContainer = chapterContainers[0] as HTMLElement;
+        if (firstContainer && firstContainer.offsetTop > scrollTop) {
+          visibleStart = 0;
+          visibleEnd = 0;
+        }
+      }
+    }
+
+    return { start: visibleStart, end: visibleEnd };
+  };
+
   const getCurrentVisibleChapterId = (): string | null => {
     const main = document.querySelector(".reader-view") as HTMLElement;
     if (!main) return null;
@@ -80,6 +138,36 @@ export function useScrollManager(options: UseScrollManagerOptions) {
     }
 
     return null;
+  };
+
+  // Calculate chapter progress based on current visible chapter
+  const getChapterProgress = (chapterId: string | null): number => {
+    if (!chapterId) return 0;
+
+    const main = document.querySelector(".reader-view") as HTMLElement;
+    if (!main) return 0;
+
+    const chapterEl = document.querySelector(`[data-chapter-id="${chapterId}"]`) as HTMLElement;
+    if (!chapterEl) return 0;
+
+    const { scrollTop } = main;
+    const chapterTop = chapterEl.offsetTop;
+    const chapterHeight = chapterEl.offsetHeight;
+
+    // Calculate how much of the chapter has been scrolled past
+    const scrolledPastTop = scrollTop - chapterTop;
+
+    if (scrolledPastTop <= 0) {
+      return 0;
+    }
+
+    if (scrolledPastTop >= chapterHeight) {
+      return 100;
+    }
+
+    // Progress within the chapter
+    const progress = (scrolledPastTop / chapterHeight) * 100;
+    return Math.max(0, Math.min(100, progress));
   };
 
   const checkPreloadThreshold = (currentChapterIndex: number, totalChapters: number) => {
@@ -107,13 +195,31 @@ export function useScrollManager(options: UseScrollManagerOptions) {
 
     const scrollPercentage = getScrollPercentage();
     readingProgress.value = scrollPercentage;
-    chapterProgress.value = scrollPercentage;
 
     // Check if visible chapter changed
     const currentChapterId = getCurrentVisibleChapterId();
     if (currentChapterId && currentChapterId !== lastVisibleChapterId.value) {
       lastVisibleChapterId.value = currentChapterId;
       onChapterChange?.(currentChapterId);
+    }
+
+    // Update chapter progress (progress within current chapter)
+    if (currentChapterId) {
+      const progressInChapter = getChapterProgress(currentChapterId);
+      chapterProgress.value = progressInChapter;
+    }
+
+    // Check visible range change for lazy loading
+    if (onVisibleRangeChange) {
+      const { start, end } = getVisibleChapterRange(chapters.value);
+      if (
+        !lastVisibleRange.value ||
+        lastVisibleRange.value.start !== start ||
+        lastVisibleRange.value.end !== end
+      ) {
+        lastVisibleRange.value = { start, end };
+        onVisibleRangeChange(start, end);
+      }
     }
 
     // Debounced progress saving
@@ -123,10 +229,18 @@ export function useScrollManager(options: UseScrollManagerOptions) {
     }, 1000);
   }, 16);
 
-  const handleScroll = (chapters: Chapter[], currentChapterIndex: number) => {
+  const handleScroll = (_chapters: Chapter[], currentChapterIndex: number) => {
     throttledScrollHandler();
     if (currentChapterIndex >= 0) {
-      checkPreloadThreshold(currentChapterIndex, chapters.length);
+      checkPreloadThreshold(currentChapterIndex, _chapters.length);
+    }
+  };
+
+  const forceScrollUpdate = (_chapters: Chapter[]) => {
+    if (isPaginationMode.value) return;
+    const { start, end } = getVisibleChapterRange(_chapters);
+    if (onVisibleRangeChange) {
+      onVisibleRangeChange(start, end);
     }
   };
 
@@ -173,9 +287,12 @@ export function useScrollManager(options: UseScrollManagerOptions) {
 
   return {
     getScrollPercentage,
+    getChapterProgress,
     getCurrentVisibleChapterIndex,
     getCurrentVisibleChapterId,
+    getVisibleChapterRange,
     handleScroll,
+    forceScrollUpdate,
     scrollToChapter,
     restoreScrollPosition,
     cleanup,
