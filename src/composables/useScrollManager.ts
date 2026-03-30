@@ -1,298 +1,126 @@
-// Composable for scroll management in vertical reading mode
+// Simplified scroll manager for vertical reading mode
+// Core responsibilities: track scroll position, detect current chapter, save/restore progress
 
 import { ref, type Ref } from "vue";
 import { throttle } from "../utils/debounce";
-import type { Chapter } from "../core/types";
 
 interface UseScrollManagerOptions {
   isPaginationMode: Ref<boolean>;
   readingProgress: Ref<number>;
   chapterProgress: Ref<number>;
-  chapters: Ref<Chapter[]>;
   updateProgress: (scrollPosition: number, percentage: number, chapterId?: string) => void;
-  onPreloadTrigger?: (chapterIndex: number) => void;
   onChapterChange?: (chapterId: string) => void;
-  onVisibleRangeChange?: (start: number, end: number) => void;
 }
 
 export function useScrollManager(options: UseScrollManagerOptions) {
-  const {
-    isPaginationMode,
-    readingProgress,
-    chapterProgress,
-    chapters,
-    updateProgress,
-    onPreloadTrigger,
-    onChapterChange,
-    onVisibleRangeChange,
-  } = options;
+  const { isPaginationMode, readingProgress, chapterProgress, updateProgress, onChapterChange } =
+    options;
 
-  const lastVisibleRange = ref<{ start: number; end: number } | null>(null);
+  const lastChapterId = ref<string | null>(null);
+  const saveTimer = ref<number | null>(null);
 
-  const saveProgressTimer = ref<number | null>(null);
-  const lastVisibleChapterId = ref<string | null>(null);
+  // Get the main scroll container
+  function getContainer(): HTMLElement | null {
+    return document.querySelector(".reader-view") as HTMLElement;
+  }
 
-  const getScrollPercentage = (): number => {
-    const main = document.querySelector(".reader-view") as HTMLElement;
-    if (!main) return 0;
-    const { scrollTop, scrollHeight, clientHeight } = main;
-
+  // Calculate scroll percentage (0-100)
+  function getScrollPercentage(): number {
+    const el = getContainer();
+    if (!el) return 0;
+    const { scrollTop, scrollHeight, clientHeight } = el;
     if (scrollHeight <= clientHeight) return 0;
+    return Math.min(100, Math.max(0, (scrollTop / (scrollHeight - clientHeight)) * 100));
+  }
 
-    const percentage = (scrollTop / (scrollHeight - clientHeight)) * 100;
-    return Math.max(0, Math.min(100, percentage));
-  };
+  // Find which chapter is currently visible (by viewport midpoint)
+  function getCurrentChapterId(): string | null {
+    const el = getContainer();
+    if (!el) return null;
 
-  const getCurrentVisibleChapterIndex = (chapters: Chapter[]): number => {
-    const main = document.querySelector(".reader-view") as HTMLElement;
-    if (!main) return -1;
+    const midpoint = el.scrollTop + el.clientHeight / 2;
+    const containers = el.querySelectorAll(".chapter-container");
 
-    const { scrollTop, clientHeight } = main;
-    const midpoint = scrollTop + clientHeight / 2;
-
-    const chapterContainers = main.querySelectorAll(".chapter-container");
-    for (let i = 0; i < chapterContainers.length; i++) {
-      const container = chapterContainers[i] as HTMLElement;
-      const top = container.offsetTop;
-      const bottom = top + container.offsetHeight;
-
-      if (midpoint >= top && midpoint < bottom) {
-        const chapterId = container.getAttribute("data-chapter-id");
-        if (chapterId) {
-          return chapters.findIndex((c) => c.id === chapterId);
-        }
+    for (const container of containers) {
+      const el = container as HTMLElement;
+      if (midpoint >= el.offsetTop && midpoint < el.offsetTop + el.offsetHeight) {
+        return el.getAttribute("data-chapter-id");
       }
     }
-
-    return -1;
-  };
-
-  const getVisibleChapterRange = (chapters: Chapter[]): { start: number; end: number } => {
-    const main = document.querySelector(".reader-view") as HTMLElement;
-    if (!main || chapters.length === 0) {
-      return { start: 0, end: 0 };
-    }
-
-    const { scrollTop, clientHeight } = main;
-    const viewportTop = scrollTop;
-    const viewportBottom = scrollTop + clientHeight;
-
-    let visibleStart = chapters.length - 1;
-    let visibleEnd = 0;
-
-    const chapterContainers = main.querySelectorAll(".chapter-container");
-    chapterContainers.forEach((container) => {
-      const containerEl = container as HTMLElement;
-      const top = containerEl.offsetTop;
-      const bottom = top + containerEl.offsetHeight;
-
-      // Check if chapter intersects with viewport
-      if (bottom > viewportTop && top < viewportBottom) {
-        const chapterId = containerEl.getAttribute("data-chapter-id");
-        if (chapterId) {
-          const index = chapters.findIndex((c) => c.id === chapterId);
-          if (index >= 0) {
-            visibleStart = Math.min(visibleStart, index);
-            visibleEnd = Math.max(visibleEnd, index);
-          }
-        }
-      }
-    });
-
-    // If no chapters visible (e.g., scrolled past last chapter), use closest chapter
-    if (visibleStart > visibleEnd) {
-      const totalHeight = main.scrollHeight;
-      if (scrollTop + clientHeight >= totalHeight - 10) {
-        // At bottom
-        visibleStart = chapters.length - 1;
-        visibleEnd = chapters.length - 1;
-      } else {
-        // At top or between chapters
-        const firstContainer = chapterContainers[0] as HTMLElement;
-        if (firstContainer && firstContainer.offsetTop > scrollTop) {
-          visibleStart = 0;
-          visibleEnd = 0;
-        }
-      }
-    }
-
-    return { start: visibleStart, end: visibleEnd };
-  };
-
-  const getCurrentVisibleChapterId = (): string | null => {
-    const main = document.querySelector(".reader-view") as HTMLElement;
-    if (!main) return null;
-
-    const { scrollTop, clientHeight } = main;
-    const midpoint = scrollTop + clientHeight / 2;
-
-    const chapterContainers = main.querySelectorAll(".chapter-container");
-    for (let i = 0; i < chapterContainers.length; i++) {
-      const container = chapterContainers[i] as HTMLElement;
-      const top = container.offsetTop;
-      const bottom = top + container.offsetHeight;
-
-      if (midpoint >= top && midpoint < bottom) {
-        return container.getAttribute("data-chapter-id");
-      }
-    }
-
     return null;
-  };
+  }
 
-  // Calculate chapter progress based on current visible chapter
-  const getChapterProgress = (chapterId: string | null): number => {
-    if (!chapterId) return 0;
-
-    const main = document.querySelector(".reader-view") as HTMLElement;
-    if (!main) return 0;
+  // Calculate progress within current chapter (0-100)
+  function getChapterProgress(chapterId: string): number {
+    const container = getContainer();
+    if (!container) return 0;
 
     const chapterEl = document.querySelector(`[data-chapter-id="${chapterId}"]`) as HTMLElement;
     if (!chapterEl) return 0;
 
-    const { scrollTop } = main;
-    const chapterTop = chapterEl.offsetTop;
-    const chapterHeight = chapterEl.offsetHeight;
+    const scrolled = container.scrollTop - chapterEl.offsetTop;
+    const height = chapterEl.offsetHeight;
+    if (height <= 0) return 0;
 
-    // Calculate how much of the chapter has been scrolled past
-    const scrolledPastTop = scrollTop - chapterTop;
+    return Math.min(100, Math.max(0, (scrolled / height) * 100));
+  }
 
-    if (scrolledPastTop <= 0) {
-      return 0;
-    }
-
-    if (scrolledPastTop >= chapterHeight) {
-      return 100;
-    }
-
-    // Progress within the chapter
-    const progress = (scrolledPastTop / chapterHeight) * 100;
-    return Math.max(0, Math.min(100, progress));
-  };
-
-  const checkPreloadThreshold = (currentChapterIndex: number, totalChapters: number) => {
-    const main = document.querySelector(".reader-view") as HTMLElement;
-    if (!main) return;
-
-    const { scrollTop, scrollHeight, clientHeight } = main;
-
-    if (scrollHeight <= clientHeight) return;
-
-    const scrollProgress = scrollTop / (scrollHeight - clientHeight);
-
-    // Preload next chapter when approaching end (70% scrolled)
-    if (scrollProgress > 0.7 && currentChapterIndex < totalChapters - 1) {
-      onPreloadTrigger?.(currentChapterIndex + 1);
-    }
-    // Preload previous chapter when near beginning (30% scrolled)
-    else if (scrollProgress < 0.3 && currentChapterIndex > 0) {
-      onPreloadTrigger?.(currentChapterIndex - 1);
-    }
-  };
-
-  const throttledScrollHandler = throttle(() => {
+  // Throttled scroll handler
+  const handleScroll = throttle(() => {
     if (isPaginationMode.value) return;
 
-    const scrollPercentage = getScrollPercentage();
-    readingProgress.value = scrollPercentage;
+    const percentage = getScrollPercentage();
+    readingProgress.value = percentage;
 
-    // Check if visible chapter changed
-    const currentChapterId = getCurrentVisibleChapterId();
-    if (currentChapterId && currentChapterId !== lastVisibleChapterId.value) {
-      lastVisibleChapterId.value = currentChapterId;
-      onChapterChange?.(currentChapterId);
+    const currentId = getCurrentChapterId();
+    if (currentId && currentId !== lastChapterId.value) {
+      lastChapterId.value = currentId;
+      onChapterChange?.(currentId);
     }
 
-    // Update chapter progress (progress within current chapter)
-    if (currentChapterId) {
-      const progressInChapter = getChapterProgress(currentChapterId);
-      chapterProgress.value = progressInChapter;
+    if (currentId) {
+      chapterProgress.value = getChapterProgress(currentId);
     }
 
-    // Check visible range change for lazy loading
-    if (onVisibleRangeChange) {
-      const { start, end } = getVisibleChapterRange(chapters.value);
-      if (
-        !lastVisibleRange.value ||
-        lastVisibleRange.value.start !== start ||
-        lastVisibleRange.value.end !== end
-      ) {
-        lastVisibleRange.value = { start, end };
-        onVisibleRangeChange(start, end);
-      }
-    }
-
-    // Debounced progress saving
-    if (saveProgressTimer.value) clearTimeout(saveProgressTimer.value);
-    saveProgressTimer.value = window.setTimeout(() => {
-      updateProgress(scrollPercentage, scrollPercentage, currentChapterId || undefined);
+    // Debounced save
+    if (saveTimer.value) clearTimeout(saveTimer.value);
+    saveTimer.value = window.setTimeout(() => {
+      updateProgress(percentage, percentage, currentId || undefined);
     }, 1000);
   }, 16);
 
-  const handleScroll = (_chapters: Chapter[], currentChapterIndex: number) => {
-    throttledScrollHandler();
-    if (currentChapterIndex >= 0) {
-      checkPreloadThreshold(currentChapterIndex, _chapters.length);
+  // Jump to chapter instantly (no animation)
+  function scrollToChapter(chapterId: string): void {
+    const chapterEl = document.querySelector(`[data-chapter-id="${chapterId}"]`) as HTMLElement;
+    const container = getContainer();
+    if (chapterEl && container) {
+      container.scrollTop = chapterEl.offsetTop;
     }
-  };
+  }
 
-  const forceScrollUpdate = (_chapters: Chapter[]) => {
-    if (isPaginationMode.value) return;
-    const { start, end } = getVisibleChapterRange(_chapters);
-    if (onVisibleRangeChange) {
-      onVisibleRangeChange(start, end);
+  // Restore scroll position (used on page load)
+  function restoreScrollPosition(scrollPosition: number, chapterId?: string): void {
+    const container = getContainer();
+    if (!container) return;
+
+    if (chapterId) {
+      const chapterEl = document.querySelector(`[data-chapter-id="${chapterId}"]`) as HTMLElement;
+      if (chapterEl) {
+        container.scrollTop = chapterEl.offsetTop + (scrollPosition / 100) * chapterEl.offsetHeight;
+        return;
+      }
     }
-  };
+    container.scrollTop = scrollPosition;
+  }
 
-  const scrollToChapter = (chapterId: string) => {
-    requestAnimationFrame(() => {
-      setTimeout(() => {
-        const chapterEl = document.querySelector(`[data-chapter-id="${chapterId}"]`) as HTMLElement;
-        if (chapterEl) {
-          const main = document.querySelector(".reader-view") as HTMLElement;
-          if (main) {
-            main.scrollTo({ top: chapterEl.offsetTop - 20, behavior: "smooth" });
-          }
-        }
-      }, 50);
-    });
-  };
-
-  const restoreScrollPosition = (scrollPosition: number, chapterId?: string) => {
-    requestAnimationFrame(() => {
-      setTimeout(() => {
-        const main = document.querySelector(".reader-view") as HTMLElement;
-        if (main && scrollPosition > 0) {
-          // If chapterId is provided, scroll to that chapter first
-          if (chapterId) {
-            const chapterEl = document.querySelector(
-              `[data-chapter-id="${chapterId}"]`,
-            ) as HTMLElement;
-            if (chapterEl) {
-              main.scrollTop =
-                chapterEl.offsetTop - 20 + (scrollPosition / 100) * chapterEl.offsetHeight;
-              return;
-            }
-          }
-          // Otherwise just restore scroll position
-          main.scrollTop = scrollPosition;
-        }
-      }, 100);
-    });
-  };
-
-  const cleanup = () => {
-    if (saveProgressTimer.value) clearTimeout(saveProgressTimer.value);
-  };
+  function cleanup(): void {
+    if (saveTimer.value) clearTimeout(saveTimer.value);
+  }
 
   return {
     getScrollPercentage,
-    getChapterProgress,
-    getCurrentVisibleChapterIndex,
-    getCurrentVisibleChapterId,
-    getVisibleChapterRange,
+    getCurrentChapterId,
     handleScroll,
-    forceScrollUpdate,
     scrollToChapter,
     restoreScrollPosition,
     cleanup,

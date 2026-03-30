@@ -33,7 +33,7 @@ function scrollToCurrentChapter() {
   const activeEl = activeItemRefs.value[props.currentChapterId];
   if (activeEl && tocListRef.value) {
     hasScrolledToCurrent.value = true;
-    activeEl.scrollIntoView({ behavior: "smooth", block: "center" });
+    activeEl.scrollIntoView({ block: "center" });
   }
 }
 
@@ -153,7 +153,6 @@ function setRef(el: HTMLElement | null, chapterId: string) {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
   contain: layout style;
   scrollbar-gutter: stable;
@@ -167,6 +166,7 @@ function setRef(el: HTMLElement | null, chapterId: string) {
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
 }
 
 .no-chapters {
