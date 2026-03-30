@@ -1,34 +1,86 @@
 <script setup lang="ts">
+import { ref, onMounted, onUnmounted, watch, computed } from "vue";
 import type { ReaderSettings } from "../../core/types";
 
-defineProps<{
+const props = defineProps<{
   content: string;
   settings: ReaderSettings;
   isPaginationMode: boolean;
-  isPaginating?: boolean;
-  paginationAnimationClass?: string;
-  loadedChapters?: Array<{ chapterId: string; title: string; content: string }>;
+  currentPage?: number;
   transitioning?: boolean;
+  loadedChapters?: Array<{ chapterId: string; title: string; content: string }>;
 }>();
+
+const paginationRef = ref<HTMLElement | null>(null);
+const containerWidth = ref(0);
+const columnGap = ref(0);
+let resizeObserver: ResizeObserver | null = null;
+
+function updateWidth() {
+  if (paginationRef.value) {
+    const el = paginationRef.value;
+    const style = getComputedStyle(el);
+    containerWidth.value = el.clientWidth;
+    columnGap.value = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+  }
+}
+
+onMounted(() => {
+  updateWidth();
+  resizeObserver = new ResizeObserver(updateWidth);
+  if (paginationRef.value) {
+    resizeObserver.observe(paginationRef.value);
+  }
+});
+
+onUnmounted(() => {
+  if (resizeObserver) {
+    resizeObserver.disconnect();
+    resizeObserver = null;
+  }
+});
+
+watch(
+  () => props.isPaginationMode,
+  () => {
+    if (props.isPaginationMode) {
+      updateWidth();
+    }
+  },
+);
+
+const paginationStyle = computed(() => {
+  const baseStyle = {
+    padding: `${props.settings.margin}px`,
+    fontSize: `${props.settings.fontSize}px`,
+    fontFamily: props.settings.fontFamily,
+    lineHeight: String(props.settings.lineHeight),
+    letterSpacing: `${props.settings.letterSpacing || 0}em`,
+    textAlign: props.settings.textAlign || "left",
+  };
+
+  if (props.isPaginationMode) {
+    return {
+      ...baseStyle,
+      columnWidth: `${containerWidth.value}px`,
+      columnGap: `${columnGap.value}px`,
+      transform: `translateX(-${(props.currentPage || 0) * containerWidth.value}px)`,
+    };
+  }
+
+  return baseStyle;
+});
 </script>
 
 <template>
   <main class="reader-view" :class="{ 'pagination-mode': isPaginationMode }">
-    <!-- Pagination Mode -->
+    <!-- Pagination Mode: CSS column layout -->
     <article
       v-if="isPaginationMode"
+      ref="paginationRef"
       class="reader-content pagination-content"
-      :class="[paginationAnimationClass, { paginating: isPaginating }]"
-      :style="{
-        maxWidth: `${settings.columnWidth}px`,
-        margin: '0 auto',
-        padding: `${settings.margin}px`,
-        fontSize: `${settings.fontSize}px`,
-        fontFamily: settings.fontFamily,
-        lineHeight: String(settings.lineHeight),
-        letterSpacing: `${settings.letterSpacing || 0}em`,
-        textAlign: settings.textAlign || 'left',
-      }"
+      :class="{ transitioning }"
+      :style="paginationStyle"
       v-html="content"
     ></article>
 
@@ -81,7 +133,6 @@ defineProps<{
     opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1),
     transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   opacity: 1;
-  transform: translateY(0);
   word-wrap: break-word;
   overflow-wrap: break-word;
   hyphens: auto;
@@ -123,7 +174,6 @@ defineProps<{
 
 .reader-content.transitioning {
   opacity: 0;
-  transform: translateY(8px);
 }
 
 .reader-content :deep(p) {
@@ -131,68 +181,25 @@ defineProps<{
   text-rendering: optimizeLegibility;
 }
 
-/* Pagination Mode */
+/* Pagination Mode: CSS Columns */
 .pagination-content {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  column-fill: auto;
+  column-gap: 0;
+  height: calc(100vh - 120px);
+  height: calc(100dvh - 120px);
   width: 100%;
-  max-height: 100%;
-  overflow: hidden;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-sizing: border-box;
 }
 
-.pagination-content.paginating {
-  pointer-events: none;
-}
-
-/* Slide animation */
-.pagination-slide-enter-active,
-.pagination-slide-leave-active {
-  transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.pagination-slide-enter-from {
-  transform: translateX(100%);
-  opacity: 0;
-}
-
-.pagination-slide-leave-to {
-  transform: translateX(-100%);
-  opacity: 0;
-}
-
-/* Flip animation */
-.pagination-flip-enter-active,
-.pagination-flip-leave-active {
-  transition: all 350ms cubic-bezier(0.4, 0, 0.2, 1);
-  transform-style: preserve-3d;
-}
-
-.pagination-flip-enter-from {
-  transform: rotateY(-180deg);
-  opacity: 0;
-}
-
-.pagination-flip-leave-to {
-  transform: rotateY(180deg);
-  opacity: 0;
-}
-
-.pagination-flip-enter-from,
-.pagination-flip-leave-to {
-  backface-visibility: hidden;
-}
-
-/* Fade animation */
-.pagination-fade-enter-active,
-.pagination-fade-leave-active {
-  transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.pagination-fade-enter-from,
-.pagination-fade-leave-to {
-  opacity: 0;
+.pagination-content :deep(p),
+.pagination-content :deep(h1),
+.pagination-content :deep(h2),
+.pagination-content :deep(h3),
+.pagination-content :deep(h4),
+.pagination-content :deep(h5),
+.pagination-content :deep(h6) {
+  break-inside: avoid;
 }
 
 /* Scrollbar */

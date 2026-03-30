@@ -34,7 +34,6 @@ const uiStore = useUIStore();
 
 // Local state
 const stats = ref<BookReadingStats | null>(null);
-const containerHeight = ref(0);
 const isTransitioning = ref(false);
 const editingBookmark = ref<Bookmark | null>(null);
 
@@ -76,16 +75,11 @@ const currentChapterIndex = computed(() => {
 
 const isPaginationMode = computed(() => (settings.value.scrollMode || "vertical") === "pagination");
 
-const paginationAnimationClass = computed(() => {
-  const anim = settings.value.paginationAnimation || "slide";
-  return `pagination-${anim}`;
-});
-
 // Content state for pagination
 const content = ref("");
 
 // Initialize composables
-const pagination = usePagination(settings, containerHeight);
+const pagination = usePagination();
 const chapterLoader = useChapterLoader(
   computed(() => props.book.id),
   chapters,
@@ -143,8 +137,8 @@ const handleSelectChapter = async (chapterId: string) => {
 
     if (isPaginationMode.value) {
       content.value = (await readerStore.getCurrentChapterContent()) || "";
-      await pagination.recalculatePages(content.value);
-      pagination.currentPage.value = 0;
+      await nextTick();
+      await pagination.reset();
     } else {
       await chapterLoader.loadCurrentAndAdjacent(2);
       scrollManager.scrollToChapter(chapterId);
@@ -162,16 +156,20 @@ const handleSelectChapter = async (chapterId: string) => {
 async function nextPage() {
   if (pagination.isPaginating.value) return;
 
-  const result = pagination.nextPage();
-  if (!result.shouldGoToNextChapter) {
-    await pagination.goToPage(result.pageIndex, chapters.value.length, currentChapterIndex.value);
-    const chapterProgress = ((result.pageIndex + 1) / pagination.pages.value.length) * 100;
-    readerStore.updateProgress(chapterProgress, chapterProgress);
+  if (isPaginationMode.value) {
+    const atEnd = pagination.nextPage();
+    if (atEnd) {
+      const currentIndex = currentChapterIndex.value;
+      if (currentIndex < chapters.value.length - 1) {
+        await handleSelectChapter(chapters.value[currentIndex + 1].id);
+      }
+    } else {
+      readerStore.updateProgress(pagination.getPageProgress(), pagination.getPageProgress());
+    }
   } else {
     const currentIndex = currentChapterIndex.value;
     if (currentIndex < chapters.value.length - 1) {
       await handleSelectChapter(chapters.value[currentIndex + 1].id);
-      pagination.currentPage.value = 0;
     }
   }
 }
@@ -179,17 +177,23 @@ async function nextPage() {
 async function prevPage() {
   if (pagination.isPaginating.value) return;
 
-  const result = pagination.prevPage();
-  if (!result.shouldGoToPrevChapter) {
-    await pagination.goToPage(result.pageIndex, chapters.value.length, currentChapterIndex.value);
-    const chapterProgress = ((result.pageIndex + 1) / pagination.pages.value.length) * 100;
-    readerStore.updateProgress(chapterProgress, chapterProgress);
+  if (isPaginationMode.value) {
+    if (pagination.currentPage.value > 0) {
+      pagination.prevPage();
+      readerStore.updateProgress(pagination.getPageProgress(), pagination.getPageProgress());
+    } else {
+      const currentIndex = currentChapterIndex.value;
+      if (currentIndex > 0) {
+        await handleSelectChapter(chapters.value[currentIndex - 1].id);
+        // Jump to last page of previous chapter
+        await nextTick();
+        pagination.currentPage.value = pagination.totalPages.value - 1;
+      }
+    }
   } else {
     const currentIndex = currentChapterIndex.value;
     if (currentIndex > 0) {
       await handleSelectChapter(chapters.value[currentIndex - 1].id);
-      await nextTick();
-      pagination.currentPage.value = pagination.pages.value.length - 1;
     }
   }
 }
@@ -283,7 +287,8 @@ watch(
       await chapterLoader.loadCurrentAndAdjacent(2);
     } else if (newMode === "pagination" && readerStore.currentChapter) {
       content.value = (await readerStore.getCurrentChapterContent()) || "";
-      await pagination.recalculatePages(content.value);
+      await nextTick();
+      await pagination.reset();
     }
   },
 );
@@ -295,7 +300,8 @@ watch(
     if (!newChapterId || !isPaginationMode.value) return;
     if (readerStore.currentBook) {
       content.value = (await readerStore.getCurrentChapterContent()) || "";
-      await pagination.recalculatePages(content.value);
+      await nextTick();
+      await pagination.reset();
     }
   },
 );
@@ -309,11 +315,8 @@ watch(
   },
 );
 
-// Display content for pagination mode
+// Display content for pagination mode (CSS column handles splitting)
 const displayContent = computed(() => {
-  if (isPaginationMode.value) {
-    return pagination.pages.value[pagination.currentPage.value] || "";
-  }
   return content.value;
 });
 
@@ -330,7 +333,8 @@ onMounted(async () => {
 
   if (isPaginationMode.value && readerStore.currentChapter) {
     content.value = (await readerStore.getCurrentChapterContent()) || "";
-    await pagination.recalculatePages(content.value);
+    await nextTick();
+    await pagination.reset();
   } else {
     await chapterLoader.loadCurrentAndAdjacent(2);
     // Restore scroll position
@@ -370,8 +374,7 @@ onUnmounted(() => {
       :content="displayContent"
       :settings="settings"
       :is-pagination-mode="isPaginationMode"
-      :is-paginating="pagination.isPaginating.value"
-      :pagination-animation-class="paginationAnimationClass"
+      :current-page="pagination.currentPage.value"
       :loaded-chapters="chapterLoader.allLoadedContent.value"
       :transitioning="isTransitioning"
       @scroll="scrollManager.handleScroll()"
@@ -385,7 +388,7 @@ onUnmounted(() => {
       :current-result-index="search.currentResultIndex.value"
       :is-pagination-mode="isPaginationMode"
       :current-page="pagination.currentPage.value"
-      :pages-count="pagination.pages.value.length"
+      :pages-count="pagination.totalPages.value"
       :reading-progress="readingProgress"
       :current-chapter-title="currentChapterTitle"
       :can-prev="
@@ -395,7 +398,7 @@ onUnmounted(() => {
       "
       :can-next="
         isPaginationMode
-          ? pagination.currentPage.value < pagination.pages.value.length - 1 ||
+          ? pagination.currentPage.value < pagination.totalPages.value - 1 ||
             currentChapterIndex < chapters.length - 1
           : currentChapterIndex < chapters.length - 1
       "
@@ -412,7 +415,7 @@ onUnmounted(() => {
     <!-- Page Indicator -->
     <PageIndicator
       :current-page="pagination.currentPage.value"
-      :total-pages="pagination.pages.value.length"
+      :total-pages="pagination.totalPages.value"
       :show="showControls && isPaginationMode"
     />
 

@@ -1,173 +1,75 @@
-// Composable for pagination logic
+// Simplified pagination using CSS columns
+// No virtual containers, no height calculations
 
-import { ref, nextTick, type Ref } from "vue";
-import {
-  READER_HEADER_HEIGHT,
-  READER_FOOTER_HEIGHT,
-  FALLBACK_PAGE_HEIGHT,
-} from "../utils/constants";
-import type { ReaderSettings } from "../core/types";
+import { ref, nextTick } from "vue";
 
-export function usePagination(settings: Ref<ReaderSettings>, containerHeight: Ref<number>) {
-  const pages = ref<string[]>([]);
+export function usePagination() {
   const currentPage = ref(0);
+  const totalPages = ref(1);
   const isPaginating = ref(false);
-  const lastPageRatio = ref(0);
 
-  const calculatePages = (contentHtml: string): string[] => {
-    const pageContents: string[] = [];
+  // Calculate total pages from CSS column layout
+  function updateTotalPages(): void {
+    const el = document.querySelector(".pagination-content") as HTMLElement;
+    if (!el) return;
 
-    let pageHeight = containerHeight.value;
+    const columnCount = Math.ceil(el.scrollWidth / el.clientWidth);
+    totalPages.value = Math.max(1, columnCount);
+  }
 
-    if (!pageHeight || pageHeight <= 0) {
-      pageHeight = window.innerHeight - READER_HEADER_HEIGHT - READER_FOOTER_HEIGHT;
-    }
-
-    if (!pageHeight || pageHeight <= 0) {
-      pageHeight = FALLBACK_PAGE_HEIGHT;
-    }
-
-    const tempContainer = document.createElement("div");
-    tempContainer.className = "reader-content pagination-content temp-measure";
-    tempContainer.style.visibility = "hidden";
-    tempContainer.style.position = "absolute";
-    tempContainer.style.width = `${settings.value.columnWidth}px`;
-    tempContainer.style.padding = `${settings.value.margin}px`;
-    tempContainer.style.fontSize = `${settings.value.fontSize}px`;
-    tempContainer.style.fontFamily = settings.value.fontFamily;
-    tempContainer.style.lineHeight = String(settings.value.lineHeight);
-    tempContainer.style.left = "-9999px";
-    tempContainer.style.top = "0";
-
-    document.body.appendChild(tempContainer);
-
-    tempContainer.innerHTML = contentHtml;
-    const totalHeight = tempContainer.scrollHeight;
-
-    if (totalHeight <= pageHeight) {
-      document.body.removeChild(tempContainer);
-      return [contentHtml];
-    }
-
-    const wrapper = document.createElement("div");
-    wrapper.innerHTML = contentHtml;
-
-    const blocks: { html: string; height: number }[] = [];
-    const children = Array.from(wrapper.children);
-
-    for (const child of children) {
-      const html = (child as HTMLElement).outerHTML;
-      tempContainer.innerHTML = html;
-      const height = tempContainer.scrollHeight;
-      blocks.push({ html, height });
-    }
-
-    let currentPageBlocks: string[] = [];
-    let currentHeight = 0;
-
-    for (const block of blocks) {
-      if (block.height > pageHeight) {
-        if (currentPageBlocks.length > 0) {
-          pageContents.push(currentPageBlocks.join(""));
-          currentPageBlocks = [];
-          currentHeight = 0;
-        }
-        pageContents.push(block.html);
-        continue;
-      }
-
-      if (currentHeight + block.height > pageHeight && currentPageBlocks.length > 0) {
-        pageContents.push(currentPageBlocks.join(""));
-        currentPageBlocks = [block.html];
-        currentHeight = block.height;
-      } else {
-        currentPageBlocks.push(block.html);
-        currentHeight += block.height;
-      }
-    }
-
-    if (currentPageBlocks.length > 0) {
-      pageContents.push(currentPageBlocks.join(""));
-    }
-
-    document.body.removeChild(tempContainer);
-
-    return pageContents.length > 0 ? pageContents : [contentHtml];
-  };
-
-  const goToPage = async (
-    pageIndex: number,
-    totalChapters: number,
-    currentChapterIndex: number,
-  ) => {
-    if (pageIndex < 0 || pageIndex >= pages.value.length) return;
+  // Navigate to a specific page
+  async function goToPage(page: number): Promise<void> {
+    if (page < 0 || page >= totalPages.value) return;
 
     isPaginating.value = true;
-    currentPage.value = pageIndex;
-
-    const totalProgress =
-      (currentChapterIndex / totalChapters + pageIndex / pages.value.length / totalChapters) * 100;
+    currentPage.value = page;
 
     await nextTick();
     setTimeout(() => {
       isPaginating.value = false;
     }, 300);
+  }
 
-    return totalProgress;
-  };
-
-  const nextPage = (): { pageIndex: number; shouldGoToNextChapter: boolean } => {
-    if (currentPage.value < pages.value.length - 1) {
-      return { pageIndex: currentPage.value + 1, shouldGoToNextChapter: false };
+  // Go to next page, returns true if should go to next chapter
+  function nextPage(): boolean {
+    if (currentPage.value < totalPages.value - 1) {
+      currentPage.value++;
+      return false;
     }
-    return { pageIndex: 0, shouldGoToNextChapter: true };
-  };
+    return true;
+  }
 
-  const prevPage = (): { pageIndex: number; shouldGoToPrevChapter: boolean } => {
+  // Go to previous page, returns true if should go to previous chapter
+  function prevPage(): boolean {
     if (currentPage.value > 0) {
-      return { pageIndex: currentPage.value - 1, shouldGoToPrevChapter: false };
+      currentPage.value--;
+      return true; // 返回 true 表示需要上一章（当在第一页时）
     }
-    return { pageIndex: -1, shouldGoToPrevChapter: true };
-  };
+    return false;
+  }
 
-  const recalculatePages = async (content: string) => {
-    await nextTick();
-
-    const headerHeight = 60;
-    const footerHeight = 60;
-    containerHeight.value = window.innerHeight - headerHeight - footerHeight;
-
-    const oldPageCount = pages.value.length;
-    const oldPageIndex = currentPage.value;
-    if (oldPageCount > 0) {
-      lastPageRatio.value = (oldPageIndex + 0.5) / oldPageCount;
-    }
-
-    pages.value = calculatePages(content);
-
-    if (pages.value.length > 0 && lastPageRatio.value > 0) {
-      const newIndex = Math.floor(lastPageRatio.value * pages.value.length);
-      currentPage.value = Math.min(newIndex, pages.value.length - 1);
-    } else {
-      currentPage.value = 0;
-    }
-  };
-
-  const reset = () => {
-    pages.value = [];
+  // Reset pagination for new content
+  async function reset(): Promise<void> {
     currentPage.value = 0;
-    isPaginating.value = false;
-    lastPageRatio.value = 0;
-  };
+    await nextTick();
+    updateTotalPages();
+  }
+
+  // Get current page progress (0-100)
+  function getPageProgress(): number {
+    if (totalPages.value <= 1) return 100;
+    return ((currentPage.value + 1) / totalPages.value) * 100;
+  }
 
   return {
-    pages,
     currentPage,
+    totalPages,
     isPaginating,
     goToPage,
     nextPage,
     prevPage,
-    recalculatePages,
     reset,
+    updateTotalPages,
+    getPageProgress,
   };
 }
