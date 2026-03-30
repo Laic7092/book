@@ -17,6 +17,7 @@ const columnGap = ref(0);
 let resizeObserver: ResizeObserver | null = null;
 
 function updateWidth() {
+  if (props.transitioning) return;
   if (paginationRef.value) {
     const el = paginationRef.value;
     const style = getComputedStyle(el);
@@ -44,6 +45,15 @@ watch(
   () => props.isPaginationMode,
   () => {
     if (props.isPaginationMode) {
+      updateWidth();
+    }
+  },
+);
+
+watch(
+  () => props.transitioning,
+  (newVal, oldVal) => {
+    if (oldVal && !newVal) {
       updateWidth();
     }
   },
@@ -129,9 +139,7 @@ const paginationStyle = computed(() => {
 
 .reader-content {
   min-height: 100%;
-  transition:
-    opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-    transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   opacity: 1;
   word-wrap: break-word;
   overflow-wrap: break-word;
@@ -174,6 +182,7 @@ const paginationStyle = computed(() => {
 
 .reader-content.transitioning {
   opacity: 0;
+  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .reader-content :deep(p) {
@@ -190,6 +199,10 @@ const paginationStyle = computed(() => {
   width: 100%;
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   box-sizing: border-box;
+}
+
+.pagination-content.transitioning {
+  transition: none;
 }
 
 .pagination-content :deep(p),

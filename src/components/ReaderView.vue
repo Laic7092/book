@@ -131,9 +131,10 @@ const gestures = useReaderGestures({
 // Chapter navigation
 const handleSelectChapter = async (chapterId: string) => {
   isTransitioning.value = true;
+  const wasShowingControls = showControls.value;
   try {
     await readerStore.goToChapter(chapterId);
-    closeModal();
+    activeModal.value = null;
 
     if (isPaginationMode.value) {
       content.value = (await readerStore.getCurrentChapterContent()) || "";
@@ -146,9 +147,11 @@ const handleSelectChapter = async (chapterId: string) => {
 
     setTimeout(() => {
       isTransitioning.value = false;
+      showControls.value = wasShowingControls;
     }, 50);
   } catch {
     isTransitioning.value = false;
+    showControls.value = wasShowingControls;
   }
 };
 
