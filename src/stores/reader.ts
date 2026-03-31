@@ -134,6 +134,12 @@ export const useReaderStore = defineStore("reader", {
       this.isLoading = true;
       this.error = null;
 
+      // Revoke previous blob URLs before loading new book
+      if (this.resourceUrls) {
+        resourcesStore.revokeResourceUrls(this.resourceUrls);
+        this.resourceUrls = undefined;
+      }
+
       try {
         const book = await booksStore.getBook(bookId);
         if (!book) {
@@ -390,6 +396,10 @@ export const useReaderStore = defineStore("reader", {
      * Reset store to initial state
      */
     reset() {
+      // Revoke blob URLs before resetting to prevent memory leak
+      if (this.resourceUrls) {
+        resourcesStore.revokeResourceUrls(this.resourceUrls);
+      }
       this.$reset();
     },
 
