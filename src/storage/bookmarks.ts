@@ -1,6 +1,7 @@
 // Bookmarks storage module
 
 import type { Bookmark } from "../core/types";
+import { ErrorCode, createReaderError } from "../core/errors";
 import { STORES, dbPut, dbGet, dbGetAll, dbDelete, dbGetAllFromIndex } from "./db";
 
 /**
@@ -45,7 +46,7 @@ export async function getAllBookmarks(): Promise<Bookmark[]> {
 export async function updateBookmark(bookmark: Partial<Bookmark> & { id: string }): Promise<void> {
   const existing = await getBookmark(bookmark.id);
   if (!existing) {
-    throw new Error(`Bookmark ${bookmark.id} not found`);
+    throw createReaderError(`Bookmark ${bookmark.id} not found`, ErrorCode.BOOKMARK_NOT_FOUND);
   }
 
   await dbPut(STORES.BOOKMARKS, { ...existing, ...bookmark });

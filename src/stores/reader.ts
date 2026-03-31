@@ -2,6 +2,7 @@
 
 import { defineStore } from "pinia";
 import type { Book, Chapter, Bookmark, ReaderSettings, ParsedBook } from "../core/types";
+import { ErrorCode, createReaderError } from "../core/errors";
 import { TxtParser } from "../parsers/txt-parser";
 import { EpubParser } from "../parsers/epub-parser";
 import type { BookParser } from "../core/types";
@@ -96,7 +97,10 @@ export const useReaderStore = defineStore("reader", {
         const parser = getParserForFile(file);
 
         if (!parser) {
-          throw new Error(`Unsupported file format: ${file.type || file.name}`);
+          throw createReaderError(
+            `Unsupported file format: ${file.type || file.name}`,
+            ErrorCode.UNSUPPORTED_FORMAT,
+          );
         }
 
         const parsedBook: ParsedBook = await parser.parse(file);
@@ -130,7 +134,7 @@ export const useReaderStore = defineStore("reader", {
       try {
         const book = await booksStore.getBook(bookId);
         if (!book) {
-          throw new Error("Book not found");
+          throw createReaderError("Book not found", ErrorCode.BOOK_NOT_FOUND);
         }
 
         // Get chapters with titles from storage
@@ -191,18 +195,18 @@ export const useReaderStore = defineStore("reader", {
      */
     async goToChapter(chapterId: string): Promise<string> {
       if (!this.currentBook) {
-        throw new Error("No book loaded");
+        throw createReaderError("No book loaded", ErrorCode.NO_BOOK_LOADED);
       }
 
       const chapter = this.chapters.find((c) => c.id === chapterId);
       if (!chapter) {
-        throw new Error("Chapter not found");
+        throw createReaderError("Chapter not found", ErrorCode.CHAPTER_NOT_FOUND);
       }
 
       const content = await booksStore.getChapterContent(this.currentBook.id, chapterId);
 
       if (content === undefined) {
-        throw new Error("Chapter content not found");
+        throw createReaderError("Chapter content not found", ErrorCode.CHAPTER_CONTENT_NOT_FOUND);
       }
 
       this.currentChapter = chapter;
@@ -292,7 +296,7 @@ export const useReaderStore = defineStore("reader", {
       note?: string,
     ): Promise<Bookmark> {
       if (!this.currentBook || !this.currentChapter) {
-        throw new Error("No book/chapter loaded");
+        throw createReaderError("No book/chapter loaded", ErrorCode.NO_BOOK_LOADED);
       }
 
       const bookmark = bookmarksStore.createBookmark(
@@ -334,7 +338,7 @@ export const useReaderStore = defineStore("reader", {
      */
     async updateBookmark(bookmarkId: string, updates: Partial<Bookmark>): Promise<void> {
       const bookmark = await bookmarksStore.getBookmark(bookmarkId);
-      if (!bookmark) throw new Error("Bookmark not found");
+      if (!bookmark) throw createReaderError("Bookmark not found", ErrorCode.BOOKMARK_NOT_FOUND);
       const updated = { ...bookmark, ...updates };
       await bookmarksStore.updateBookmark(updated);
 

@@ -1,6 +1,7 @@
 // Base parser interface and utilities
 
 import type { BookParser, ParsedBook, Chapter } from "../core/types";
+import { ErrorCode, createReaderError } from "../core/errors";
 
 /**
  * Generate a unique ID
@@ -27,7 +28,7 @@ export function parseXML(content: string, mimeType = "application/xml"): Documen
 
   const parseError = doc.querySelector("parsererror");
   if (parseError) {
-    throw new Error(`XML parse error: ${parseError.textContent}`);
+    throw createReaderError(`XML parse error: ${parseError.textContent}`, ErrorCode.PARSE_FAILED);
   }
 
   return doc;

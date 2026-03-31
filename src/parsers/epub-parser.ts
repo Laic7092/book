@@ -3,6 +3,7 @@
 import JSZip from "jszip";
 import { BaseBookParser, generateId, parseXML, cleanHtml } from "./base";
 import type { BookParser, ParsedBook, Chapter } from "../core/types";
+import { ErrorCode, createReaderError } from "../core/errors";
 
 interface EpubMetadata {
   title: string;
@@ -61,7 +62,7 @@ export class EpubParser extends BaseBookParser implements BookParser {
     // Read container.xml to find content.opf
     const containerXml = await this.readZipEntry(zip, "META-INF/container.xml");
     if (!containerXml) {
-      throw new Error("Invalid EPUB: Missing container.xml");
+      throw createReaderError("Invalid EPUB: Missing container.xml", ErrorCode.PARSE_FAILED);
     }
 
     const containerDoc = parseXML(containerXml);
@@ -72,7 +73,7 @@ export class EpubParser extends BaseBookParser implements BookParser {
     const opfDir = opfPath.substring(0, opfPath.lastIndexOf("/") + 1);
     const opfXml = await this.readZipEntry(zip, opfPath);
     if (!opfXml) {
-      throw new Error("Invalid EPUB: Missing content.opf");
+      throw createReaderError("Invalid EPUB: Missing content.opf", ErrorCode.PARSE_FAILED);
     }
 
     const opfDoc = parseXML(opfXml);
@@ -199,7 +200,7 @@ export class EpubParser extends BaseBookParser implements BookParser {
   private extractMetadata(opfDoc: Document): EpubMetadata {
     const metadataEl = opfDoc.querySelector("metadata");
     if (!metadataEl) {
-      throw new Error("Invalid EPUB: Missing metadata");
+      throw createReaderError("Invalid EPUB: Missing metadata", ErrorCode.PARSE_FAILED);
     }
 
     const title = metadataEl.querySelector("dc\\:title, title")?.textContent || "Untitled";
@@ -240,7 +241,7 @@ export class EpubParser extends BaseBookParser implements BookParser {
   private extractSpine(opfDoc: Document): Array<{ id: string; href: string }> {
     const spine = opfDoc.querySelector("spine");
     if (!spine) {
-      throw new Error("Invalid EPUB: Missing spine");
+      throw createReaderError("Invalid EPUB: Missing spine", ErrorCode.PARSE_FAILED);
     }
 
     const items = spine.querySelectorAll("itemref");
