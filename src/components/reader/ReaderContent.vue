@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, computed } from "vue";
+import { ref, onMounted, onUnmounted, watch, computed, nextTick } from "vue";
 import type { ReaderSettings } from "../../core/types";
 
 const props = defineProps<{
@@ -9,6 +9,10 @@ const props = defineProps<{
   currentPage?: number;
   transitioning?: boolean;
   loadedChapters?: Array<{ chapterId: string; title: string; content: string }>;
+}>();
+
+const emit = defineEmits<{
+  (e: "resize"): void;
 }>();
 
 const paginationRef = ref<HTMLElement | null>(null);
@@ -23,15 +27,18 @@ function updateWidth() {
     const style = getComputedStyle(el);
     containerWidth.value = el.clientWidth;
     columnGap.value = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+    emit("resize");
   }
 }
 
 onMounted(() => {
-  updateWidth();
-  resizeObserver = new ResizeObserver(updateWidth);
-  if (paginationRef.value) {
-    resizeObserver.observe(paginationRef.value);
-  }
+  nextTick(() => {
+    updateWidth();
+    if (paginationRef.value) {
+      resizeObserver = new ResizeObserver(updateWidth);
+      resizeObserver.observe(paginationRef.value);
+    }
+  });
 });
 
 onUnmounted(() => {
@@ -43,9 +50,11 @@ onUnmounted(() => {
 
 watch(
   () => props.isPaginationMode,
-  () => {
-    if (props.isPaginationMode) {
-      updateWidth();
+  (newVal) => {
+    if (newVal) {
+      nextTick(() => {
+        updateWidth();
+      });
     }
   },
 );
@@ -56,6 +65,15 @@ watch(
     if (oldVal && !newVal) {
       updateWidth();
     }
+  },
+);
+
+watch(
+  () => props.settings.margin,
+  () => {
+    nextTick(() => {
+      updateWidth();
+    });
   },
 );
 
@@ -116,7 +134,6 @@ const paginationStyle = computed(() => {
         class="chapter-container"
         :data-chapter-id="chapter.chapterId"
       >
-        <h2 class="chapter-heading">{{ chapter.title }}</h2>
         <div class="chapter-body" v-html="chapter.content"></div>
       </div>
     </article>
@@ -161,18 +178,6 @@ const paginationStyle = computed(() => {
   margin-top: 3em;
   padding-top: 2em;
   border-top: 1px solid var(--border-subtle);
-}
-
-.chapter-heading {
-  font-family: var(--font-display);
-  font-size: 1.8em;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--reader-text);
-  text-align: center;
-  padding-bottom: 1.5em;
-  margin-bottom: 1em;
-  border-bottom: 1px solid var(--border-subtle);
 }
 
 .chapter-body {

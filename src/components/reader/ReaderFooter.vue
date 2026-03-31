@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { Chapter } from "../../core/types";
+import { ref } from "vue";
+import type { SearchResult } from "../../core/types";
 
 defineProps<{
   showControls: boolean;
@@ -25,238 +26,220 @@ const emit = defineEmits<{
   (e: "go-to-next-match"): void;
   (e: "clear-highlights"): void;
 }>();
+
+const showMenu = ref(false);
+
+function toggleMenu() {
+  showMenu.value = !showMenu.value;
+}
+
+function closeMenu() {
+  showMenu.value = false;
+}
+
+function openModal(modal: "toc" | "search" | "bookmarks" | "stats") {
+  closeMenu();
+  emit("open-modal", modal);
+}
 </script>
 
 <template>
   <footer class="reader-footer" :class="{ visible: showControls }">
-    <!-- Search Navigation -->
-    <template v-if="hasHighlights && searchResults.length > 0">
-      <button
-        class="footer-btn"
-        @click.stop="emit('go-to-previous-match')"
-        aria-label="Previous match"
-        title="Previous match"
-      >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <path d="M15 18l-6-6 6-6" />
-        </svg>
-      </button>
-      <div class="progress-info" style="min-width: 60px">
-        <span class="progress-text">{{ currentResultIndex + 1 }}/{{ searchResults.length }}</span>
+    <!-- Menu Backdrop -->
+    <Transition name="fade">
+      <div v-if="showMenu" class="menu-backdrop" @click.stop="closeMenu" />
+    </Transition>
+
+    <!-- Menu Popover -->
+    <Transition name="menu">
+      <div v-if="showMenu" class="menu-popover" @click.stop>
+        <button class="menu-item" @click.stop="openModal('search')">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <path d="M21 21l-4.35-4.35" />
+          </svg>
+          <span>Search</span>
+        </button>
+        <button class="menu-item" @click.stop="openModal('stats')">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          >
+            <path d="M12 20V10M18 20V4M6 20v-4" />
+          </svg>
+          <span>Statistics</span>
+        </button>
       </div>
-      <button
-        class="footer-btn"
-        @click.stop="emit('go-to-next-match')"
-        aria-label="Next match"
-        title="Next match"
-      >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <path d="M9 18l6-6-6-6" />
-        </svg>
-      </button>
-      <button
-        class="footer-btn"
-        @click.stop="emit('clear-highlights')"
-        aria-label="Exit search"
-        title="Exit search"
-      >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <path d="M18 6L6 18M6 6l12 12" />
-        </svg>
-      </button>
-    </template>
+    </Transition>
 
-    <!-- Normal Navigation -->
-    <template v-else>
-      <!-- Pagination Mode -->
-      <template v-if="isPaginationMode">
-        <button class="footer-btn" @click.stop="emit('prev-page')" :disabled="!canPrev">
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
+    <!-- Search Mode -->
+    <Transition name="slide-fade" mode="out-in">
+      <div v-if="hasHighlights && searchResults.length > 0" key="search" class="footer-sections">
+        <div class="actions-section">
+          <button
+            class="footer-btn"
+            @click.stop="emit('clear-highlights')"
+            aria-label="Exit search"
           >
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
-        </button>
-        <button
-          class="footer-btn icon-btn"
-          @click.stop="emit('open-modal', 'stats')"
-          aria-label="Statistics"
-          title="Reading statistics"
-        >
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-          >
-            <path d="M12 20V10M18 20V4M6 20v-4" />
-          </svg>
-        </button>
-        <button
-          class="footer-btn icon-btn"
-          @click.stop="emit('open-modal', 'bookmarks')"
-          aria-label="Bookmarks"
-        >
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-          >
-            <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
-          </svg>
-        </button>
-        <div class="progress-info" @click.stop="emit('open-modal', 'toc')">
-          <span class="progress-text"
-            >{{ isNaN(readingProgress) ? 0 : Math.round(readingProgress) }}%</span
-          >
-          <span class="chapter-info">{{ currentChapterTitle || "Chapter 1" }}</span>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
         </div>
-        <button
-          class="footer-btn icon-btn"
-          @click.stop="emit('open-modal', 'search')"
-          aria-label="Search"
-        >
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
+        <div class="center-section">
+          <span class="search-counter"
+            >{{ currentResultIndex + 1 }} / {{ searchResults.length }}</span
           >
-            <circle cx="11" cy="11" r="8" />
-            <path d="M21 21l-4.35-4.35" />
-          </svg>
-        </button>
-        <button class="footer-btn" @click.stop="emit('next-page')" :disabled="!canNext">
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
+        </div>
+        <div class="nav-section">
+          <button
+            class="footer-btn"
+            @click.stop="emit('go-to-previous-match')"
+            aria-label="Previous match"
           >
-            <path d="M9 18l6-6-6-6" />
-          </svg>
-        </button>
-      </template>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+          </button>
+          <button class="footer-btn" @click.stop="emit('go-to-next-match')" aria-label="Next match">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M9 18l6-6-6-6" />
+            </svg>
+          </button>
+        </div>
+      </div>
 
-      <!-- Vertical Mode -->
-      <template v-else>
-        <button class="footer-btn" @click.stop="emit('prev-chapter')" :disabled="!canPrev">
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
+      <!-- Normal Mode -->
+      <div v-else key="normal" class="footer-sections">
+        <div class="actions-section">
+          <button
+            class="footer-btn"
+            @click.stop="emit('open-modal', 'bookmarks')"
+            aria-label="Bookmarks"
           >
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
-        </button>
-        <button
-          class="footer-btn icon-btn"
-          @click.stop="emit('open-modal', 'stats')"
-          aria-label="Statistics"
-          title="Reading statistics"
-        >
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
+            </svg>
+          </button>
+          <button
+            class="footer-btn"
+            :class="{ active: showMenu }"
+            @click.stop="toggleMenu"
+            aria-label="More options"
           >
-            <path d="M12 20V10M18 20V4M6 20v-4" />
-          </svg>
-        </button>
-        <button
-          class="footer-btn icon-btn"
-          @click.stop="emit('open-modal', 'bookmarks')"
-          aria-label="Bookmarks"
-        >
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-          >
-            <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
-          </svg>
-        </button>
-        <div class="progress-info" @click.stop="emit('open-modal', 'toc')">
-          <span class="progress-text"
-            >{{ isNaN(readingProgress) ? 0 : Math.round(readingProgress) }}%</span
-          >
-          <span class="chapter-info">{{ currentChapterTitle || "Chapter 1" }}</span>
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <circle cx="12" cy="5" r="1" fill="currentColor" />
+              <circle cx="12" cy="12" r="1" fill="currentColor" />
+              <circle cx="12" cy="19" r="1" fill="currentColor" />
+            </svg>
+          </button>
         </div>
-        <button
-          class="footer-btn icon-btn"
-          @click.stop="emit('open-modal', 'search')"
-          aria-label="Search"
-        >
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
+
+        <div class="center-section">
+          <button
+            class="progress-btn"
+            @click.stop="emit('open-modal', 'toc')"
+            aria-label="Table of contents"
           >
-            <circle cx="11" cy="11" r="8" />
-            <path d="M21 21l-4.35-4.35" />
-          </svg>
-        </button>
-        <button class="footer-btn" @click.stop="emit('next-chapter')" :disabled="!canNext">
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
+            <span class="progress-text"
+              >{{ isNaN(readingProgress) ? 0 : Math.round(readingProgress) }}%</span
+            >
+            <span class="chapter-text">{{ currentChapterTitle || "Chapter 1" }}</span>
+          </button>
+        </div>
+
+        <div class="nav-section">
+          <button
+            class="footer-btn"
+            @click.stop="isPaginationMode ? emit('prev-page') : emit('prev-chapter')"
+            :disabled="!canPrev"
+            :aria-label="isPaginationMode ? 'Previous page' : 'Previous chapter'"
           >
-            <path d="M9 18l6-6-6-6" />
-          </svg>
-        </button>
-      </template>
-    </template>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+          </button>
+          <button
+            class="footer-btn"
+            @click.stop="isPaginationMode ? emit('next-page') : emit('next-chapter')"
+            :disabled="!canNext"
+            :aria-label="isPaginationMode ? 'Next page' : 'Next chapter'"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M9 18l6-6-6-6" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Integrated Progress Bar -->
+    <div class="footer-progress-track">
+      <div
+        class="footer-progress-bar"
+        :style="{ width: `${isNaN(readingProgress) ? 0 : readingProgress}%` }"
+      />
+    </div>
   </footer>
 </template>
 
@@ -266,11 +249,6 @@ const emit = defineEmits<{
   bottom: 0;
   left: env(safe-area-inset-left, 0);
   right: env(safe-area-inset-right, 0);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 12px;
-  padding-bottom: max(10px, env(safe-area-inset-bottom, 10px));
   background: var(--header-bg);
   border-top: 1px solid var(--border-subtle);
   z-index: 100;
@@ -280,7 +258,6 @@ const emit = defineEmits<{
   pointer-events: none;
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
-  min-height: 56px;
 }
 
 .reader-footer.visible {
@@ -289,30 +266,47 @@ const emit = defineEmits<{
   pointer-events: auto;
 }
 
+/* Layout Sections */
+.footer-sections {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  padding-bottom: max(10px, env(safe-area-inset-bottom, 10px));
+  min-height: 56px;
+  gap: 8px;
+}
+
+.nav-section,
+.actions-section {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.center-section {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+
+/* Buttons */
 .footer-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 10px 12px;
+  padding: 10px;
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   background: var(--bg-elevated, var(--reader-bg));
   color: var(--reader-text);
-  font-size: 13px;
-  font-weight: 500;
   cursor: pointer;
   transition: all var(--transition-fast);
-  position: relative;
-  overflow: hidden;
   flex-shrink: 0;
   min-width: 40px;
   min-height: 40px;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
-}
-
-.footer-btn.icon-btn {
-  padding: 10px 10px;
 }
 
 .footer-btn:hover:not(:disabled) {
@@ -329,108 +323,241 @@ const emit = defineEmits<{
   cursor: not-allowed;
 }
 
-.progress-info {
+.footer-btn.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Progress Button (TOC trigger) */
+.progress-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 2px;
+  padding: 6px 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  background: var(--bg-elevated, var(--reader-bg));
+  color: var(--reader-text);
   cursor: pointer;
-  padding: 8px 12px;
-  border-radius: 8px;
   transition: all var(--transition-fast);
-  position: relative;
-  overflow: hidden;
-  flex-shrink: 0;
-  min-width: 44px;
-  min-height: 40px;
   -webkit-tap-highlight-color: transparent;
+  min-height: 40px;
+  justify-content: center;
 }
 
-.progress-info:hover {
+.progress-btn:hover {
   background: var(--hover-bg);
+  border-color: var(--border);
+}
+
+.progress-btn:active {
+  transform: scale(0.97);
 }
 
 .progress-text {
   font-size: 14px;
   font-weight: 600;
-  color: var(--reader-text);
   line-height: 1.2;
 }
 
-.chapter-info {
+.chapter-text {
   font-size: 11px;
   color: var(--text-secondary);
-  max-width: 120px;
+  max-width: 140px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   line-height: 1.2;
 }
 
+.search-counter {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--reader-text);
+  padding: 8px 16px;
+  border-radius: 20px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+/* Menu */
+.menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+}
+
+.menu-popover {
+  position: absolute;
+  bottom: 100%;
+  left: 12px;
+  margin-bottom: 8px;
+  background: var(--bg-elevated, var(--reader-bg));
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 4px;
+  min-width: 160px;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.12),
+    0 2px 8px rgba(0, 0, 0, 0.08);
+  z-index: 10;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--reader-text);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.menu-item:hover {
+  background: var(--hover-bg);
+}
+
+.menu-item:active {
+  background: var(--border-subtle);
+}
+
+/* Integrated Progress Bar */
+.footer-progress-track {
+  height: 2px;
+  background: var(--progress-track);
+}
+
+.footer-progress-bar {
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    var(--accent) 0%,
+    color-mix(in srgb, var(--accent) 75%, white) 100%
+  );
+  transition: width 350ms cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 0 1px 1px 0;
+}
+
+/* Transitions */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 200ms ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+.menu-enter-active {
+  transition: all 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.menu-leave-active {
+  transition: all 150ms ease;
+}
+
+.menu-enter-from {
+  opacity: 0;
+  transform: translateY(8px) scale(0.95);
+}
+
+.menu-leave-to {
+  opacity: 0;
+  transform: translateY(4px) scale(0.98);
+}
+
+.slide-fade-enter-active {
+  transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.slide-fade-leave-active {
+  transition: all 200ms ease;
+}
+
+.slide-fade-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.slide-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
-  .reader-footer {
-    padding: 8px 8px;
+  .footer-sections {
+    padding: 8px;
     padding-bottom: max(8px, env(safe-area-inset-bottom, 8px));
     gap: 4px;
     min-height: 52px;
   }
 
   .footer-btn {
-    padding: 8px 10px;
     min-width: 36px;
     min-height: 36px;
+    padding: 8px;
   }
 
-  .footer-btn.icon-btn {
-    padding: 8px 8px;
-  }
-
-  .progress-info {
-    padding: 6px 8px;
-    min-width: 36px;
+  .progress-btn {
+    padding: 4px 12px;
+    min-height: 36px;
   }
 
   .progress-text {
     font-size: 13px;
   }
 
-  .chapter-info {
+  .chapter-text {
     font-size: 10px;
-    max-width: 80px;
+    max-width: 100px;
+  }
+
+  .menu-popover {
+    left: 8px;
   }
 }
 
-/* Small phones */
 @media (max-width: 380px) {
-  .reader-footer {
-    padding: 6px 6px;
-    gap: 2px;
+  .footer-sections {
+    padding: 6px;
+    gap: 3px;
   }
 
   .footer-btn {
-    padding: 8px;
     min-width: 34px;
     min-height: 34px;
+    padding: 7px;
   }
 
-  .progress-info {
-    padding: 4px 6px;
+  .progress-btn {
+    padding: 3px 10px;
   }
 
   .progress-text {
     font-size: 12px;
   }
 
-  .chapter-info {
+  .chapter-text {
     font-size: 9px;
-    max-width: 60px;
+    max-width: 70px;
   }
 }
 
-/* Landscape orientation */
+/* Landscape */
 @media (max-height: 500px) and (orientation: landscape) {
-  .reader-footer {
+  .footer-sections {
     padding: 6px 12px;
     min-height: 44px;
   }
@@ -438,9 +565,13 @@ const emit = defineEmits<{
 
 /* Safe area insets */
 @supports (padding: max(0px)) {
-  .reader-footer {
+  .footer-sections {
     padding-left: max(12px, env(safe-area-inset-left, 0));
     padding-right: max(12px, env(safe-area-inset-right, 0));
+  }
+
+  .menu-popover {
+    left: max(12px, env(safe-area-inset-left, 0));
   }
 }
 </style>

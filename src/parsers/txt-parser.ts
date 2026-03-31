@@ -171,7 +171,7 @@ export class TxtParser extends BaseBookParser implements BookParser {
       const next = markers[i + 1];
       let text = next ? content.slice(curr.start, next.start) : content.slice(curr.start);
 
-      // Remove title line from content
+      // Remove title line from content (will be re-inserted as <h2>)
       const titleLine = curr.title.split("\n")[0];
       if (text.startsWith(titleLine)) {
         text = text.slice(titleLine.length).replace(/^\n+/, "");
@@ -179,7 +179,7 @@ export class TxtParser extends BaseBookParser implements BookParser {
 
       const id = generateId("ch");
       chapters.push({ id, bookId, title: curr.title, order: i });
-      contentMap.set(id, this.toHtml(text));
+      contentMap.set(id, this.toHtml(text, curr.title));
     }
 
     // If first marker is not at start, add intro as chapter 0
@@ -188,7 +188,7 @@ export class TxtParser extends BaseBookParser implements BookParser {
       if (intro) {
         const id = generateId("ch");
         chapters.unshift({ id, bookId, title: "前言", order: -1 });
-        contentMap.set(id, this.toHtml(intro));
+        contentMap.set(id, this.toHtml(intro, "前言"));
         chapters.forEach((ch, i) => (ch.order = i));
       }
     }
@@ -214,7 +214,7 @@ export class TxtParser extends BaseBookParser implements BookParser {
       const id = generateId("ch");
       return {
         chapters: [{ id, bookId, title: bookTitle, order: 0 }],
-        content: new Map([[id, this.toHtml(content)]]),
+        content: new Map([[id, this.toHtml(content, bookTitle)]]),
       };
     }
 
@@ -236,21 +236,27 @@ export class TxtParser extends BaseBookParser implements BookParser {
     const contentMap = new Map<string, string>();
     const chapters: Chapter[] = chunks.map((chunk, i) => {
       const id = generateId("ch");
-      contentMap.set(id, this.toHtml(chunk));
-      return { id, bookId, title: `第 ${i + 1} 章`, order: i };
+      const title = `第 ${i + 1} 章`;
+      contentMap.set(id, this.toHtml(chunk, title));
+      return { id, bookId, title, order: i };
     });
 
     return { chapters, content: contentMap };
   }
 
   // --- Text to HTML ---
-  private toHtml(text: string): string {
-    return text
+  private toHtml(text: string, title?: string): string {
+    const body = text
       .split(/\n+/)
       .map((line) => line.trim())
       .filter(Boolean)
       .map((line) => `<p>${this.escapeHtml(line)}</p>`)
       .join("");
+
+    if (title) {
+      return `<h2 class="chapter-heading">${this.escapeHtml(title)}</h2>${body}`;
+    }
+    return body;
   }
 
   private escapeHtml(s: string): string {

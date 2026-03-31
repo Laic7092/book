@@ -318,6 +318,16 @@ watch(
   },
 );
 
+// Watch for settings changes that affect pagination
+watch(
+  () => [settings.value.margin, settings.value.fontSize, settings.value.lineHeight],
+  async () => {
+    if (!isPaginationMode.value) return;
+    await nextTick();
+    pagination.updateTotalPages();
+  },
+);
+
 // Display content for pagination mode (CSS column handles splitting)
 const displayContent = computed(() => {
   return content.value;
@@ -381,6 +391,7 @@ onUnmounted(() => {
       :loaded-chapters="chapterLoader.allLoadedContent.value"
       :transitioning="isTransitioning"
       @scroll="scrollManager.handleScroll()"
+      @resize="pagination.updateTotalPages()"
     />
 
     <!-- Footer -->
