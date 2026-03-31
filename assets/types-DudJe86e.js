@@ -1,1 +1,0 @@
-var e={fontSize:18,fontFamily:`Literata, Georgia, serif`,lineHeight:1.6,theme:`light`,margin:24,columnWidth:720,letterSpacing:0,paragraphSpacing:1.2,textAlign:`left`,contrast:`normal`,scrollMode:`vertical`,paginationAnimation:`slide`};export{e as DEFAULT_SETTINGS};
