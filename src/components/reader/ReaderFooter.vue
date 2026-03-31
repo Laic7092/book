@@ -198,9 +198,9 @@ function openModal(modal: "toc" | "search" | "bookmarks" | "stats") {
         <div class="nav-section">
           <button
             class="footer-btn"
-            @click.stop="isPaginationMode ? emit('prev-page') : emit('prev-chapter')"
+            @click.stop="emit('prev-chapter')"
             :disabled="!canPrev"
-            :aria-label="isPaginationMode ? 'Previous page' : 'Previous chapter'"
+            :aria-label="'Previous chapter'"
           >
             <svg
               width="16"
@@ -215,9 +215,9 @@ function openModal(modal: "toc" | "search" | "bookmarks" | "stats") {
           </button>
           <button
             class="footer-btn"
-            @click.stop="isPaginationMode ? emit('next-page') : emit('next-chapter')"
+            @click.stop="emit('next-chapter')"
             :disabled="!canNext"
-            :aria-label="isPaginationMode ? 'Next page' : 'Next chapter'"
+            :aria-label="'Next chapter'"
           >
             <svg
               width="16"

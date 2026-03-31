@@ -426,17 +426,8 @@ onUnmounted(() => {
       :reading-progress="readingProgress"
       :book-progress="totalBookProgress"
       :current-chapter-title="currentChapterTitle"
-      :can-prev="
-        isPaginationMode
-          ? pagination.currentPage.value > 0 || currentChapterIndex > 0
-          : currentChapterIndex > 0
-      "
-      :can-next="
-        isPaginationMode
-          ? pagination.currentPage.value < pagination.totalPages.value - 1 ||
-            currentChapterIndex < chapters.length - 1
-          : currentChapterIndex < chapters.length - 1
-      "
+      :can-prev="currentChapterIndex > 0"
+      :can-next="currentChapterIndex < chapters.length - 1"
       @prev-page="prevPage"
       @next-page="nextPage"
       @prev-chapter="handleSelectChapter(chapters[currentChapterIndex - 1]?.id)"

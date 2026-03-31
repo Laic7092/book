@@ -130,6 +130,7 @@ const paginationStyle = computed(() => {
         v-for="chapter in loadedChapters"
         :key="chapter.chapterId"
         :data-chapter-id="chapter.chapterId"
+        class="chapter-container"
       >
         <div v-html="chapter.content"></div>
       </div>
