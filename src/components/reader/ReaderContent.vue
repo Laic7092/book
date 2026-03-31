@@ -145,6 +145,7 @@ const paginationStyle = computed(() => {
   background-color: var(--reader-bg);
   position: relative;
   -webkit-overflow-scrolling: touch;
+  width: 100%;
   max-width: 700px;
   margin: auto;
 }
