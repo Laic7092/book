@@ -233,14 +233,6 @@ function openModal(modal: "toc" | "search" | "bookmarks" | "stats") {
         </div>
       </div>
     </Transition>
-
-    <!-- Integrated Progress Bar -->
-    <div class="footer-progress-track">
-      <div
-        class="footer-progress-bar"
-        :style="{ width: `${isNaN(readingProgress) ? 0 : readingProgress}%` }"
-      />
-    </div>
   </footer>
 </template>
 
@@ -430,23 +422,6 @@ function openModal(modal: "toc" | "search" | "bookmarks" | "stats") {
 
 .menu-item:active {
   background: var(--border-subtle);
-}
-
-/* Integrated Progress Bar */
-.footer-progress-track {
-  height: 2px;
-  background: var(--progress-track);
-}
-
-.footer-progress-bar {
-  height: 100%;
-  background: linear-gradient(
-    90deg,
-    var(--accent) 0%,
-    color-mix(in srgb, var(--accent) 75%, white) 100%
-  );
-  transition: width 350ms cubic-bezier(0.4, 0, 0.2, 1);
-  border-radius: 0 1px 1px 0;
 }
 
 /* Transitions */
