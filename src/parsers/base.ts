@@ -53,7 +53,7 @@ export function cleanHtml(html: string): string {
   temp.innerHTML = html;
 
   // Remove script and style elements
-  const scripts = temp.querySelectorAll("script, style, noscript, iframe, svg");
+  const scripts = temp.querySelectorAll("script, style, noscript");
   scripts.forEach((el) => el.remove());
 
   // Normalize whitespace in text nodes

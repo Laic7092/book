@@ -137,6 +137,7 @@ export class EpubParser extends BaseBookParser implements BookParser {
         const htmlContent = await this.readZipEntry(zip, fullPath);
         if (htmlContent) {
           // Just clean the HTML, don't rewrite resource paths
+          // const cleanedContent = cleanHtml(htmlContent);
           const cleanedContent = cleanHtml(htmlContent);
           content.set(chapter.id, cleanedContent);
         }

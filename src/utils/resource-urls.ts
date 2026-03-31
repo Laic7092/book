@@ -27,6 +27,16 @@ export function rewriteResourcePaths(
     }
   });
 
+  doc.querySelectorAll("image").forEach((img) => {
+    const src = img.getAttribute("xlink:href");
+    if (src) {
+      const blobUrl = findResourceUrl(src, resourceUrls);
+      if (blobUrl) {
+        img.setAttribute("xlink:href", blobUrl);
+      }
+    }
+  });
+
   // Rewrite link href for CSS stylesheets
   doc.querySelectorAll("link[rel='stylesheet']").forEach((link) => {
     const href = link.getAttribute("href");
