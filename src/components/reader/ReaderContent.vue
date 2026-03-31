@@ -118,7 +118,6 @@ const paginationStyle = computed(() => {
       class="reader-content vertical-content"
       :class="{ transitioning }"
       :style="{
-        margin: '0 auto',
         padding: `${settings.margin}px`,
         fontSize: `${settings.fontSize}px`,
         fontFamily: settings.fontFamily,
@@ -130,10 +129,9 @@ const paginationStyle = computed(() => {
       <div
         v-for="chapter in loadedChapters"
         :key="chapter.chapterId"
-        class="chapter-container"
         :data-chapter-id="chapter.chapterId"
       >
-        <div class="chapter-body" v-html="chapter.content"></div>
+        <div v-html="chapter.content"></div>
       </div>
     </article>
   </main>
@@ -147,6 +145,8 @@ const paginationStyle = computed(() => {
   background-color: var(--reader-bg);
   position: relative;
   -webkit-overflow-scrolling: touch;
+  max-width: 700px;
+  margin: auto;
 }
 
 .reader-view.pagination-mode {
@@ -168,20 +168,9 @@ const paginationStyle = computed(() => {
   padding-bottom: 40vh;
 }
 
-.chapter-container {
-  margin-bottom: 3em;
-  scroll-margin-top: 2em;
-}
-
-.chapter-container:not(:first-child) .chapter-heading {
-  margin-top: 3em;
-  padding-top: 2em;
-  border-top: 1px solid var(--border-subtle);
-}
-
-.chapter-body {
-  padding-top: 0.5em;
-  white-space: break-spaces;
+:deep(.reader-content) .chapter-heading {
+  margin-bottom: 1em;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .reader-content.transitioning {
