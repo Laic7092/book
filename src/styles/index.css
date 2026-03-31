@@ -67,3 +67,8 @@ body {
   --transition-fast: 150ms ease;
   --transition-base: 300ms ease;
 }
+
+img,
+image {
+  width: 100%;
+}

@@ -170,7 +170,7 @@ export class TxtParser extends BaseBookParser implements BookParser {
       const curr = markers[i];
       const next = markers[i + 1];
       let text = next ? content.slice(curr.start, next.start) : content.slice(curr.start);
-
+      text = text.trim();
       // Remove title line from content (will be re-inserted as <h2>)
       const titleLine = curr.title.split("\n")[0];
       if (text.startsWith(titleLine)) {
@@ -250,16 +250,12 @@ export class TxtParser extends BaseBookParser implements BookParser {
       .split(/\n+/)
       .map((line) => line.trim())
       .filter(Boolean)
-      .map((line) => `<p>${this.escapeHtml(line)}</p>`)
+      .map((line) => `<p>${line}</p>`)
       .join("");
 
     if (title) {
-      return `<h2 class="chapter-heading">${this.escapeHtml(title)}</h2>${body}`;
+      return `<h2 class="chapter-heading">${title}</h2>${body}`;
     }
     return body;
-  }
-
-  private escapeHtml(s: string): string {
-    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 }
