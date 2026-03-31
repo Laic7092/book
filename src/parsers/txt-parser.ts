@@ -86,34 +86,39 @@ export class TxtParser extends BaseBookParser implements BookParser {
     const seen = new Set<string>();
 
     const patterns: Array<{ re: RegExp; score: number }[]> = [
-      // Chinese: 第X章, 第X节, 第X卷, 第X部, 第X篇, 第X回
+      // 特殊章节（高优先级）
       [
         {
-          re: /^(?:楔子|序章|前言|引子|开篇|尾声|后记|番外|终章|大结局|完结|后日谈)[\s:：]*(.*)$/gim,
+          re: /^\s*(?:楔子|序章|前言|引子|开篇|尾声|后记|番外|终章|大结局|完结|后日谈)[\s:：]*(.*)$/gim,
           score: 90,
         },
       ],
+
+      // 标准中文章节：第X章、X章、第一章 标题
       [
         {
-          re: /^(?:第\s*)?[零〇一二三四五六七八九十百千万亿0-9]+\s*(?:章|节|卷|部|篇|集|回|话)[\s:：]*(.*)$/gim,
+          re: /^\s*(?:第\s*)?[零〇一二三四五六七八九十百千万亿0-9]+\s*(?:章|节|卷|部|篇|集|回|话)[\s:：]*(.*)$/gim,
           score: 100,
         },
       ],
-      [{ re: /^(?:卷|篇)\s*[零〇一二三四五六七八九十百千万亿0-9]+[\s:：]*(.*)$/gim, score: 80 }],
-      // Arabic/Roman: Chapter 1, Part I
-      [{ re: /^(?:chapter|section|part|book|volume)\s+[\dIVXLC]+[\s:：]*(.*)$/gim, score: 85 }],
-      // Markdown headers
-      [{ re: /^#{1,3}\s+(.+)$/gm, score: 70 }],
-      // Numbered: 1. Title, 一、标题
-      [{ re: /^[0-9]+[.、．]\s{0,4}(.{2,50})$/gm, score: 60 }],
-      [{ re: /^[零〇一二三四五六七八九十百]+[、.．]\s{0,4}(.{2,50})$/gm, score: 65 }],
-      // Bracketed: 【第一章】
+
+      // Markdown 标题（提升优先级）
+      [{ re: /^\s*#{1,3}\s+(.+)$/gm, score: 85 }],
+
+      // 英文章节：Chapter 1, Part I（支持罗马数字）
+      [{ re: /^\s*(?:chapter|section|part|book|volume)\s+[\dIVXLC]+[\s:：]*(.*)$/gim, score: 80 }],
+
+      // 括号标题：【第一章】标题
       [
         {
-          re: /^【\s*(?:第\s*)?[零〇一二三四五六七八九十百千万亿0-9]+\s*(?:章|节|卷)?\s*】/gim,
+          re: /^\s*【\s*(?:第\s*)?[零〇一二三四五六七八九十百千万亿0-9]+\s*(?:章|节|卷|部|篇|集|回)?\s*】[\s:：]*(.*)$/gim,
           score: 75,
         },
       ],
+
+      // 数字列表：1. 标题、一、标题
+      [{ re: /^\s*[0-9]+[.、．]\s{0,4}(.+)$/gm, score: 60 }],
+      [{ re: /^\s*[零〇一二三四五六七八九十百]+[、.．]\s{0,4}(.+)$/gm, score: 65 }],
     ];
 
     for (const group of patterns) {
