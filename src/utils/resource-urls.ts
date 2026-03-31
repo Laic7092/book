@@ -7,13 +7,13 @@
 export function rewriteResourcePaths(
   htmlContent: string,
   resourceUrls: Map<string, string>,
-): string {
-  if (!resourceUrls || resourceUrls.size === 0) {
-    return htmlContent;
-  }
-
+): Document {
   // Parse the HTML - use text/html to handle HTML fragments properly
   const parser = new DOMParser();
+
+  if (!resourceUrls || resourceUrls.size === 0) {
+    return parser.parseFromString(`<html></html>`, "text/html");
+  }
   const doc = parser.parseFromString(htmlContent, "text/html");
 
   // Rewrite img src attributes
@@ -62,7 +62,7 @@ export function rewriteResourcePaths(
 
   // Return the body innerHTML to preserve fragment structure
   // This strips the auto-added html/head/body wrapper tags
-  return doc.body.innerHTML;
+  return doc;
 }
 
 /**

@@ -52,6 +52,7 @@ export interface ReaderState {
   chapterProgress: number;
   bookmarks: Bookmark[];
   settings: ReaderSettings;
+  loadedResources: Set<string>;
 }
 
 export const useReaderStore = defineStore("reader", {
@@ -65,6 +66,7 @@ export const useReaderStore = defineStore("reader", {
     readingProgress: 0,
     chapterProgress: 0,
     bookmarks: [],
+    loadedResources: new Set(),
     settings: {
       fontSize: 18,
       fontFamily: "Literata, Georgia, serif",
@@ -87,6 +89,44 @@ export const useReaderStore = defineStore("reader", {
   },
 
   actions: {
+    /**
+     * 简单的哈希函数用于生成资源ID
+     */
+    hashCode(str: string): string {
+      let hash = 0;
+      for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = (hash << 5) - hash + char;
+        hash = hash & hash; // Convert to 32bit integer
+      }
+      return Math.abs(hash).toString(36);
+    },
+
+    /**
+     * 清理之前加载的资源（样式、脚本）
+     */
+    cleanupResources() {
+      // 清理之前添加的 head 元素
+      const elementsToRemove = document.querySelectorAll("[data-reader-resource]");
+      elementsToRemove.forEach((el) => el.remove());
+      this.loadedResources.clear();
+    },
+
+    /**
+     * 加载资源到 head 中，避免重复
+     */
+    loadResourceToHead(resource: HTMLElement, resourceId: string) {
+      // 如果已经加载过，跳过
+      if (this.loadedResources.has(resourceId)) {
+        return;
+      }
+
+      // 添加标记以便后续清理
+      resource.setAttribute("data-reader-resource", resourceId);
+      document.head.appendChild(resource);
+      this.loadedResources.add(resourceId);
+    },
+
     /**
      * Load a book from file
      */
@@ -133,6 +173,9 @@ export const useReaderStore = defineStore("reader", {
       validateBookId(bookId);
       this.isLoading = true;
       this.error = null;
+
+      // 清理所有资源
+      this.cleanupResources();
 
       // Revoke previous blob URLs before loading new book
       if (this.resourceUrls) {
@@ -378,6 +421,9 @@ export const useReaderStore = defineStore("reader", {
         await statsStore.endSession(this.currentBook.id, chapterId);
       }
 
+      // 清理 head 中的资源
+      this.cleanupResources();
+
       // Revoke blob URLs to free memory
       if (this.resourceUrls) {
         resourcesStore.revokeResourceUrls(this.resourceUrls);
@@ -396,11 +442,16 @@ export const useReaderStore = defineStore("reader", {
      * Reset store to initial state
      */
     reset() {
+      // 清理 head 中的资源
+      this.cleanupResources();
+
       // Revoke blob URLs before resetting to prevent memory leak
       if (this.resourceUrls) {
         resourcesStore.revokeResourceUrls(this.resourceUrls);
       }
       this.$reset();
+      // 重置后重新初始化 loadedResources
+      this.loadedResources = new Set();
     },
 
     /**
@@ -433,10 +484,46 @@ export const useReaderStore = defineStore("reader", {
         return null;
       }
 
+      // 清理之前章节的资源
+      this.cleanupResources();
+
       // Rewrite resource URLs if available
       if (this.resourceUrls && this.resourceUrls.size > 0) {
         const { rewriteResourcePaths } = await import("../utils/resource-urls");
-        return rewriteResourcePaths(content, this.resourceUrls);
+        const doc = rewriteResourcePaths(content, this.resourceUrls);
+
+        // 加载新的 head 资源，避免重复
+        const headElements = Array.from(doc.head.children);
+        for (const element of headElements) {
+          // 为每个资源生成唯一标识
+          let resourceId = element.tagName;
+
+          if (element instanceof HTMLLinkElement && element.href) {
+            resourceId = `link-${element.href}`;
+          } else if (element instanceof HTMLStyleElement) {
+            // 为 style 元素生成基于内容的哈希
+            resourceId = `style-${this.hashCode(element.textContent || "")}`;
+          } else if (element instanceof HTMLScriptElement && element.src) {
+            resourceId = `script-${element.src}`;
+          } else if (element instanceof HTMLScriptElement && element.textContent) {
+            resourceId = `script-${this.hashCode(element.textContent)}`;
+          } else if (element instanceof HTMLLinkElement && element.rel === "stylesheet") {
+            resourceId = `stylesheet-${element.href}`;
+          } else if (element instanceof HTMLMetaElement) {
+            resourceId = `meta-${element.name || ""}`;
+          } else if (element instanceof HTMLTitleElement) {
+            resourceId = `title-${element.textContent || ""}`;
+          } else {
+            // 对于其他类型的元素，使用内容哈希
+            resourceId = `${element.tagName}-${this.hashCode(element.outerHTML)}`;
+          }
+
+          // 克隆元素避免引用问题
+          const clonedElement = element.cloneNode(true) as HTMLElement;
+          this.loadResourceToHead(clonedElement, resourceId);
+        }
+
+        return doc.body.innerHTML;
       }
 
       return content;
