@@ -3,6 +3,7 @@
 
 import { ref, type Ref } from "vue";
 import { throttle } from "../utils/debounce";
+import { SCROLL_SAVE_DELAY } from "../utils/constants";
 
 interface UseScrollManagerOptions {
   isPaginationMode: Ref<boolean>;
@@ -86,7 +87,7 @@ export function useScrollManager(options: UseScrollManagerOptions) {
     if (saveTimer.value) clearTimeout(saveTimer.value);
     saveTimer.value = window.setTimeout(() => {
       updateProgress(percentage, percentage, currentId || undefined);
-    }, 1000);
+    }, SCROLL_SAVE_DELAY);
   }, 16);
 
   // Jump to chapter instantly (no animation)

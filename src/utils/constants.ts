@@ -12,6 +12,18 @@ export const READER_SAFE_BOTTOM = "max(10px, env(safe-area-inset-bottom, 10px))"
 export const SWIPE_THRESHOLD = 50;
 export const PAGE_CHANGE_COOLDOWN_MS = 300;
 
+// Debounce and throttle delays
+export const DEBOUNCE_DELAY = 1000;
+export const SCROLL_SAVE_DELAY = 1000;
+export const TOAST_DURATION = 3000;
+
+// Chapter loading constants
+export const CHAPTER_BUFFER_SIZE = 2;
+
+// Parser chunking constants
+export const PARAGRAPHS_PER_CHUNK = 80;
+export const MIN_PARAGRAPHS_FOR_SPLIT = 50;
+
 // Tap zone ratios for pagination (left 30%, right 30%)
 export const TAP_ZONE_LEFT = 0.3;
 export const TAP_ZONE_RIGHT = 0.7;

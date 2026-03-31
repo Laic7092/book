@@ -1,6 +1,7 @@
 // UI Store - Manages UI state
 
 import { defineStore } from "pinia";
+import { TOAST_DURATION } from "../utils/constants";
 
 export type ModalType = "toc" | "search" | "bookmarks" | "settings" | "stats" | null;
 
@@ -71,7 +72,7 @@ export const useUIStore = defineStore("ui", {
       this.showToast = true;
       setTimeout(() => {
         this.showToast = false;
-      }, 3000);
+      }, TOAST_DURATION);
     },
 
     /**

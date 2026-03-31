@@ -2,14 +2,9 @@
 
 import { BaseBookParser, generateId } from "./base";
 import type { BookParser, ParsedBook, Chapter } from "../core/types";
+import { PARAGRAPHS_PER_CHUNK, MIN_PARAGRAPHS_FOR_SPLIT } from "../utils/constants";
 
 const ENCODINGS_TO_TRY = ["utf-8", "gbk", "gb2312", "big5", "iso-8859-1"];
-
-// Paragraphs per chunk when no chapters detected
-const DEFAULT_PARAGRAPHS_PER_CHUNK = 80;
-
-// Minimum paragraphs to warrant splitting
-const MIN_PARAGRAPHS_FOR_SPLIT = 50;
 
 export class TxtParser extends BaseBookParser implements BookParser {
   private static readonly SUPPORTED_MIME_TYPES = [
@@ -229,7 +224,7 @@ export class TxtParser extends BaseBookParser implements BookParser {
 
     for (const p of paragraphs) {
       current.push(p);
-      if (current.length >= DEFAULT_PARAGRAPHS_PER_CHUNK) {
+      if (current.length >= PARAGRAPHS_PER_CHUNK) {
         chunks.push(current.join("\n\n"));
         current = [];
       }
