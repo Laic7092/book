@@ -1,17 +1,25 @@
-// Simplified chapter loader - loads current chapter and adjacent chapters
-// No virtual scrolling, no complex range management
+// Simplified chapter loader with LRU cache for chapter content
 
 import { ref, computed, type Ref } from "vue";
 import type { Chapter } from "../core/types";
 import * as booksStore from "../storage/books";
+import { LRUCache } from "../utils/lru-cache";
+import { CHAPTER_CACHE_MAX_SIZE } from "../utils/constants";
 
 export function useChapterLoader(
   bookId: Ref<string | undefined>,
   chapters: Ref<Chapter[]>,
   currentChapterIndex: Ref<number>,
 ) {
-  const loadedContents = ref<Map<string, string>>(new Map());
+  const cache = new LRUCache<string>(CHAPTER_CACHE_MAX_SIZE);
   const isLoading = ref(false);
+
+  // Sync LRU cache contents to a reactive Map for Vue reactivity
+  const loadedContents = ref(new Map<string, string>());
+
+  function syncCacheToRef() {
+    loadedContents.value = new Map(cache.entries());
+  }
 
   // All loaded content sorted by chapter order
   const allLoadedContent = computed(() => {
@@ -32,10 +40,11 @@ export function useChapterLoader(
 
   // Load a single chapter
   async function loadChapter(chapterId: string): Promise<void> {
-    if (!bookId.value || loadedContents.value.has(chapterId)) return;
+    if (!bookId.value || cache.has(chapterId)) return;
     const content = await booksStore.getChapterContent(bookId.value, chapterId);
     if (content !== undefined) {
-      loadedContents.value.set(chapterId, content);
+      cache.set(chapterId, content);
+      syncCacheToRef();
     }
   }
 
@@ -52,7 +61,7 @@ export function useChapterLoader(
       const promises: Promise<void>[] = [];
       for (let i = start; i <= end; i++) {
         const chapter = chapters.value[i];
-        if (chapter && !loadedContents.value.has(chapter.id)) {
+        if (chapter && !cache.has(chapter.id)) {
           promises.push(loadChapter(chapter.id));
         }
       }
@@ -68,7 +77,7 @@ export function useChapterLoader(
     isLoading.value = true;
     try {
       const promises = chapters.value
-        .filter((ch) => !loadedContents.value.has(ch.id))
+        .filter((ch) => !cache.has(ch.id))
         .map((ch) => loadChapter(ch.id));
       await Promise.all(promises);
     } finally {
@@ -81,24 +90,28 @@ export function useChapterLoader(
     const index = currentChapterIndex.value;
     if (index < 0) return;
 
-    for (const [chapterId] of loadedContents.value) {
+    let changed = false;
+    for (const [chapterId] of cache.entries()) {
       const chapterIndex = chapters.value.findIndex((c) => c.id === chapterId);
       if (chapterIndex < 0 || Math.abs(chapterIndex - index) > keepRange) {
-        loadedContents.value.delete(chapterId);
+        cache.delete(chapterId);
+        changed = true;
       }
     }
+    if (changed) syncCacheToRef();
   }
 
   function isLoaded(chapterId: string): boolean {
-    return loadedContents.value.has(chapterId);
+    return cache.has(chapterId);
   }
 
   function getContent(chapterId: string): string | undefined {
-    return loadedContents.value.get(chapterId);
+    return cache.get(chapterId);
   }
 
   function reset(): void {
-    loadedContents.value.clear();
+    cache.clear();
+    loadedContents.value = new Map();
     isLoading.value = false;
   }
 

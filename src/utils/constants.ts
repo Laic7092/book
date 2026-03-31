@@ -19,6 +19,7 @@ export const TOAST_DURATION = 3000;
 
 // Chapter loading constants
 export const CHAPTER_BUFFER_SIZE = 2;
+export const CHAPTER_CACHE_MAX_SIZE = 10;
 
 // Parser chunking constants
 export const PARAGRAPHS_PER_CHUNK = 80;
