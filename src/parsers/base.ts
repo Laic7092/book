@@ -240,14 +240,12 @@ export abstract class BaseBookParser implements BookParser {
     content: string,
     chapters: { title: string; start: number }[],
   ): Map<string, string> {
-    console.log("[splitByChapters] Input chapters:", chapters);
     const result = new Map<string, string>();
 
     if (chapters.length === 0) {
       // No chapters detected, treat as single chapter
       const id = generateId("ch");
       result.set(id, content);
-      console.log("[splitByChapters] No chapters, created single chapter:", id);
       return result;
     }
 
@@ -270,13 +268,9 @@ export abstract class BaseBookParser implements BookParser {
       }
 
       const id = generateId("ch");
-      console.log(
-        `[splitByChapters] Chapter ${i}: "${current.title}" -> ID: ${id}, content length: ${chapterContent.length}`,
-      );
       result.set(id, chapterContent);
     }
 
-    console.log("[splitByChapters] Result map keys:", Array.from(result.keys()));
     return result;
   }
 }

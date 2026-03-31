@@ -192,7 +192,6 @@ export async function getChapterIds(bookId: string): Promise<string[]> {
 export async function getChapters(
   bookId: string,
 ): Promise<Array<{ id: string; title: string; order: number }>> {
-  console.log("[getChapters] Fetching chapters for book:", bookId);
   const db = await import("./db");
   const chaptersStore = await db.openDB();
   const tx = chaptersStore.transaction(STORES.CHAPTERS, "readonly");
@@ -208,7 +207,6 @@ export async function getChapters(
         title: string;
         order: number;
       }>;
-      console.log("[getChapters] Raw results from DB:", results);
       // Sort by the stored order field
       results.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
       const mapped = results.map((ch) => ({
@@ -216,7 +214,6 @@ export async function getChapters(
         title: ch.title || `Chapter ${ch.order + 1}`,
         order: ch.order ?? 0,
       }));
-      console.log("[getChapters] Mapped chapters:", mapped);
       resolve(mapped);
     };
     request.onerror = () => reject(request.error);

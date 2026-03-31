@@ -6,7 +6,6 @@ export const DEFAULT_READER_SETTINGS: ReaderSettings = {
   lineHeight: 1.6,
   theme: "light",
   margin: 24,
-  columnWidth: 720,
   letterSpacing: 0,
   paragraphSpacing: 1.2,
   textAlign: "left",
@@ -65,5 +64,4 @@ export const ANIMATION_OPTIONS = [
 // Size presets
 export const FONT_SIZE_PRESETS = [14, 16, 18, 20, 22, 24] as const;
 export const LINE_HEIGHT_PRESETS = [1.4, 1.6, 1.8, 2.0] as const;
-export const COLUMN_WIDTH_PRESETS = [600, 700, 800, 900] as const;
 export const MARGIN_PRESETS = [16, 24, 32, 48] as const;

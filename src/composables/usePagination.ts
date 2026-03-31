@@ -1,5 +1,4 @@
-// Simplified pagination using CSS columns
-// No virtual containers, no height calculations
+// Pagination composable using CSS columns with accurate calculations
 
 import { ref, nextTick } from "vue";
 
@@ -8,16 +7,49 @@ export function usePagination() {
   const totalPages = ref(1);
   const isPaginating = ref(false);
 
-  // Calculate total pages from CSS column layout
-  function updateTotalPages(): void {
-    const el = document.querySelector(".pagination-content") as HTMLElement;
-    if (!el) return;
+  let resizeObserver: ResizeObserver | null = null;
+  let debounceTimer: number | null = null;
 
-    const columnCount = Math.ceil(el.scrollWidth / el.clientWidth);
-    totalPages.value = Math.max(1, columnCount);
+  function calculatePageCount(): number {
+    const el = document.querySelector(".pagination-content") as HTMLElement;
+    if (!el) return 1;
+
+    const rect = el.getBoundingClientRect();
+    const contentWidth = el.scrollWidth;
+    const containerWidth = rect.width;
+
+    if (containerWidth <= 0 || contentWidth <= 0) return 1;
+
+    const pageCount = Math.ceil(contentWidth / containerWidth);
+    return Math.max(1, pageCount);
   }
 
-  // Navigate to a specific page
+  function updateTotalPages(): void {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+    }
+
+    debounceTimer = window.setTimeout(() => {
+      const newCount = calculatePageCount();
+      if (newCount !== totalPages.value) {
+        totalPages.value = newCount;
+        if (currentPage.value >= newCount) {
+          currentPage.value = Math.max(0, newCount - 1);
+        }
+      }
+    }, 100);
+  }
+
+  function setupResizeObserver(): void {
+    const el = document.querySelector(".pagination-content");
+    if (!el || resizeObserver) return;
+
+    resizeObserver = new ResizeObserver(() => {
+      updateTotalPages();
+    });
+    resizeObserver.observe(el);
+  }
+
   async function goToPage(page: number): Promise<void> {
     if (page < 0 || page >= totalPages.value) return;
 
@@ -30,7 +62,6 @@ export function usePagination() {
     }, 300);
   }
 
-  // Go to next page, returns true if should go to next chapter
   function nextPage(): boolean {
     if (currentPage.value < totalPages.value - 1) {
       currentPage.value++;
@@ -39,26 +70,35 @@ export function usePagination() {
     return true;
   }
 
-  // Go to previous page, returns true if should go to previous chapter
   function prevPage(): boolean {
     if (currentPage.value > 0) {
       currentPage.value--;
-      return true; // 返回 true 表示需要上一章（当在第一页时）
+      return true;
     }
     return false;
   }
 
-  // Reset pagination for new content
   async function reset(): Promise<void> {
     currentPage.value = 0;
     await nextTick();
     updateTotalPages();
+    setupResizeObserver();
   }
 
-  // Get current page progress (0-100)
   function getPageProgress(): number {
     if (totalPages.value <= 1) return 100;
     return ((currentPage.value + 1) / totalPages.value) * 100;
+  }
+
+  function cleanup(): void {
+    if (resizeObserver) {
+      resizeObserver.disconnect();
+      resizeObserver = null;
+    }
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+      debounceTimer = null;
+    }
   }
 
   return {
@@ -71,5 +111,6 @@ export function usePagination() {
     reset,
     updateTotalPages,
     getPageProgress,
+    cleanup,
   };
 }

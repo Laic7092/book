@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Bookmark } from "../../core/types";
+import ModalHeader from "./ModalHeader.vue";
 
 defineProps<{
   bookmarks: Bookmark[];
@@ -20,21 +21,7 @@ function getChapterTitle(bookmark: Bookmark): string {
 
 <template>
   <div class="modal-content-inner">
-    <div class="modal-header">
-      <h3>Bookmarks</h3>
-      <button class="modal-close" @click="emit('close')">
-        <svg
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
-        >
-          <path d="M18 6L6 18M6 6l12 12" />
-        </svg>
-      </button>
-    </div>
+    <ModalHeader title="Bookmarks" @close="emit('close')" />
     <div class="bookmark-bar-fixed">
       <button class="add-bookmark-btn" @click="emit('add-bookmark')">
         <svg
@@ -105,45 +92,14 @@ function getChapterTitle(bookmark: Bookmark): string {
 </template>
 
 <style scoped>
+@import "../../styles/modal-shared.css";
+
 .modal-content-inner {
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
   min-height: 0;
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 18px 22px;
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--modal-bg);
-  flex-shrink: 0;
-}
-
-.modal-header h3 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 19px;
-  font-weight: 500;
-  color: var(--modal-text);
-}
-
-.modal-close {
-  padding: 6px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  cursor: pointer;
-  color: var(--text-secondary);
-  transition: all 150ms ease;
-}
-
-.modal-close:hover {
-  background: var(--hover-bg);
-  color: var(--modal-text);
 }
 
 .bookmark-bar-fixed {

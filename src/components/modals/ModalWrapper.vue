@@ -134,6 +134,7 @@ function handleClose() {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -160,6 +161,7 @@ function handleClose() {
 .modal-toc,
 .modal-bookmarks,
 .modal-search,
+.modal-stats,
 .modal-settings {
   height: 85vh;
   max-height: 600px;
@@ -172,6 +174,7 @@ function handleClose() {
   from {
     transform: translateY(100%);
   }
+
   to {
     transform: translateY(0);
   }

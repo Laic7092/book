@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import type { SearchResult } from "../../core/types";
+import ModalHeader from "./ModalHeader.vue";
 
 const props = defineProps<{
   searchQuery: string;
@@ -40,21 +41,7 @@ function highlightMatch(context: string): string {
 <template>
   <div class="modal-content-inner">
     <div class="search-header-fixed">
-      <div class="modal-header">
-        <h3>Search</h3>
-        <button class="modal-close" @click="emit('close')">
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-          >
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
+      <ModalHeader title="Search" @close="emit('close')" />
       <div class="search-box-wrapper">
         <div class="search-box">
           <input
@@ -109,6 +96,8 @@ function highlightMatch(context: string): string {
 </template>
 
 <style scoped>
+@import "../../styles/modal-shared.css";
+
 .modal-content-inner {
   display: flex;
   flex-direction: column;
@@ -165,7 +154,6 @@ function highlightMatch(context: string): string {
 .search-box {
   display: flex;
   gap: 8px;
-  padding: 16px 20px;
   border-bottom: 1px solid var(--border-subtle);
 }
 

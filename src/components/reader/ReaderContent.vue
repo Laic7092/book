@@ -118,7 +118,6 @@ const paginationStyle = computed(() => {
       class="reader-content vertical-content"
       :class="{ transitioning }"
       :style="{
-        maxWidth: `${settings.columnWidth}px`,
         margin: '0 auto',
         padding: `${settings.margin}px`,
         fontSize: `${settings.fontSize}px`,

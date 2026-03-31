@@ -69,7 +69,6 @@ export const useReaderStore = defineStore("reader", {
       lineHeight: 1.6,
       theme: "light",
       margin: 24,
-      columnWidth: 720,
       letterSpacing: 0,
       paragraphSpacing: 1.2,
       textAlign: "left",
@@ -129,17 +128,13 @@ export const useReaderStore = defineStore("reader", {
       this.error = null;
 
       try {
-        console.log("[readerStore.openBook] Loading book:", bookId);
-
         const book = await booksStore.getBook(bookId);
         if (!book) {
           throw new Error("Book not found");
         }
-        console.log("[readerStore.openBook] Book loaded:", book);
 
         // Get chapters with titles from storage
         const chaptersData = await booksStore.getChapters(bookId);
-        console.log("[readerStore.openBook] Chapters data from DB:", chaptersData);
 
         const chapters: Chapter[] = chaptersData.map((ch) => ({
           id: ch.id,
@@ -147,7 +142,6 @@ export const useReaderStore = defineStore("reader", {
           title: ch.title,
           order: ch.order,
         }));
-        console.log("[readerStore.openBook] Chapters mapped:", chapters);
 
         this.currentBook = book;
         this.chapters = chapters;

@@ -11,6 +11,7 @@ defineProps<{
   currentPage: number;
   pagesCount: number;
   readingProgress: number;
+  bookProgress: number;
   currentChapterTitle: string;
   canPrev: boolean;
   canNext: boolean;
@@ -188,7 +189,7 @@ function openModal(modal: "toc" | "search" | "bookmarks" | "stats") {
             aria-label="Table of contents"
           >
             <span class="progress-text"
-              >{{ isNaN(readingProgress) ? 0 : Math.round(readingProgress) }}%</span
+              >{{ isNaN(bookProgress) ? 0 : Math.round(bookProgress) }}%</span
             >
             <span class="chapter-text">{{ currentChapterTitle || "Chapter 1" }}</span>
           </button>

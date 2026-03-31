@@ -28,7 +28,6 @@ async function saveSessions(sessions: ReadingSession[]): Promise<void> {
  */
 export async function startSession(bookId: string): Promise<void> {
   const sessions = await getSessions();
-  console.log("[stats.startSession] Starting session for:", bookId);
 
   // Close any unclosed sessions for this book
   sessions.forEach((session) => {
@@ -46,7 +45,6 @@ export async function startSession(bookId: string): Promise<void> {
 
   sessions.push(newSession);
   await saveSessions(sessions);
-  console.log("[stats.startSession] Session saved, total sessions:", sessions.length);
 }
 
 /**
@@ -62,15 +60,8 @@ export async function endSession(
   // Find the most recent unclosed session for this book
   const sessionIndex = sessions.findIndex((s) => s.bookId === bookId && !s.endTime);
 
-  console.log("[stats.endSession] Looking for session:", {
-    bookId,
-    totalSessions: sessions.length,
-    foundIndex: sessionIndex,
-  });
-
   if (sessionIndex === -1) {
     // No active session, return current stats or empty stats
-    console.log("[stats.endSession] No active session found, returning existing stats");
     const existingStats = await getStats(bookId);
     return (
       existingStats || {
@@ -103,14 +94,8 @@ export async function endSession(
   sessions[sessionIndex] = session;
   await saveSessions(sessions);
 
-  console.log("[stats.endSession] Session ended, updating stats...", {
-    sessionId: sessionIndex,
-    duration: session.endTime - session.startTime,
-  });
-
   // Update and return stats
   const stats = await updateStats(bookId);
-  console.log("[stats.endSession] Stats updated:", stats);
   return stats;
 }
 

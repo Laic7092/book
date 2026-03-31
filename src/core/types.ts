@@ -52,7 +52,6 @@ export interface ReaderSettings {
   lineHeight: number;
   theme: "light" | "dark" | "sepia";
   margin: number;
-  columnWidth: number;
   letterSpacing?: number;
   paragraphSpacing?: number;
   textAlign?: "left" | "center" | "justify";
@@ -125,7 +124,6 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
   lineHeight: 1.6,
   theme: "light",
   margin: 24,
-  columnWidth: 720,
   letterSpacing: 0,
   paragraphSpacing: 1.2,
   textAlign: "left",

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, nextTick, computed, watch } from "vue";
 import type { Chapter } from "../../core/types";
+import ModalHeader from "./ModalHeader.vue";
 
 const props = defineProps<{
   chapters: Chapter[];
@@ -74,21 +75,7 @@ function setRef(el: HTMLElement | null, chapterId: string) {
 
 <template>
   <div class="modal-content-inner">
-    <div class="modal-header">
-      <h3>Contents</h3>
-      <button class="modal-close" @click="emit('close')">
-        <svg
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
-        >
-          <path d="M18 6L6 18M6 6l12 12" />
-        </svg>
-      </button>
-    </div>
+    <ModalHeader title="Contents" @close="emit('close')" />
     <div ref="tocListRef" class="modal-body scroll-body">
       <div v-if="chapters.length === 0" class="no-chapters">No chapters available</div>
       <ul v-else class="toc-list">
@@ -108,45 +95,14 @@ function setRef(el: HTMLElement | null, chapterId: string) {
 </template>
 
 <style scoped>
+@import "../../styles/modal-shared.css";
+
 .modal-content-inner {
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
   min-height: 0;
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 18px 22px;
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--modal-bg);
-  flex-shrink: 0;
-}
-
-.modal-header h3 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 19px;
-  font-weight: 500;
-  color: var(--modal-text);
-}
-
-.modal-close {
-  padding: 6px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  cursor: pointer;
-  color: var(--text-secondary);
-  transition: all 150ms ease;
-}
-
-.modal-close:hover {
-  background: var(--hover-bg);
-  color: var(--modal-text);
 }
 
 .modal-body {
