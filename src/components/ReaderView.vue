@@ -307,6 +307,15 @@ watch(
   },
 );
 
+// Watch for theme changes
+watch(
+  () => settings.value.theme,
+  () => {
+    updateThemeClass();
+  },
+  { immediate: true },
+);
+
 // Watch for chapter changes (pagination mode)
 watch(
   () => currentChapterId.value,
