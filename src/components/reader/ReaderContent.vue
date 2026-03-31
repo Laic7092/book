@@ -200,7 +200,6 @@ const paginationStyle = computed(() => {
   transition: none;
 }
 
-.pagination-content :deep(p),
 .pagination-content :deep(h1),
 .pagination-content :deep(h2),
 .pagination-content :deep(h3),
