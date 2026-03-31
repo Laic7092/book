@@ -4,6 +4,7 @@ import { defineStore } from "pinia";
 import type { Book } from "../core/types";
 import { dbGetAll, STORES } from "../storage/db";
 import * as statsStore from "../storage/stats";
+import { assertValidBookFile } from "../utils/validation";
 
 export interface BookshelfState {
   books: Book[];
@@ -63,6 +64,7 @@ export const useBookshelfStore = defineStore("bookshelf", {
      * Add a book from file upload
      */
     async addBookFromFile(file: File) {
+      assertValidBookFile(file);
       this.isUploading = true;
       try {
         const { useReaderStore } = await import("./reader");

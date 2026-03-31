@@ -36,6 +36,10 @@ export const TRANSITION_SLOW = 300;
 // Fallback page height for pagination
 export const FALLBACK_PAGE_HEIGHT = 600;
 
+// File validation constants
+export const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 100MB
+export const ALLOWED_FILE_EXTENSIONS = [".txt", ".epub"] as const;
+
 // Block tags for pagination splitting
 export const BLOCK_TAGS = [
   "p",

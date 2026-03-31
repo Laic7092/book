@@ -4,6 +4,7 @@ import { useBookshelfStore } from "../stores/bookshelf";
 import { useUIStore } from "../stores/ui";
 import { getBookGradient, getInitial } from "../utils/colors";
 import { formatDuration } from "../utils/time";
+import { validateBookFile } from "../utils/validation";
 import type { Book } from "../core/types";
 
 const emit = defineEmits<{
@@ -32,15 +33,22 @@ const searchFocused = ref(false);
 
 async function handleFileUpload(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0];
-  if (file) {
-    try {
-      const result = await bookshelfStore.addBookFromFile(file);
-      uiStore.triggerToast(`"${result.book.title}" added to library`);
-      emit("book:select", result.book);
-    } catch (err) {
-      console.error("Failed to add book:", err);
-      uiStore.triggerToast("Failed to load book. Please try again.", true);
-    }
+  if (!file) return;
+
+  const validation = validateBookFile(file);
+  if (!validation.valid) {
+    uiStore.triggerToast(validation.error!, true);
+    (e.target as HTMLInputElement).value = "";
+    return;
+  }
+
+  try {
+    const result = await bookshelfStore.addBookFromFile(file);
+    uiStore.triggerToast(`"${result.book.title}" added to library`);
+    emit("book:select", result.book);
+  } catch (err) {
+    console.error("Failed to add book:", err);
+    uiStore.triggerToast("Failed to load book. Please try again.", true);
   }
   (e.target as HTMLInputElement).value = "";
 }

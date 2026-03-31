@@ -12,6 +12,7 @@ import * as bookmarksStore from "../storage/bookmarks";
 import * as settingsStore from "../storage/settings";
 import * as resourcesStore from "../storage/resources";
 import * as statsStore from "../storage/stats";
+import { assertValidBookFile, validateBookId } from "../utils/validation";
 
 /**
  * Parser registry
@@ -90,6 +91,7 @@ export const useReaderStore = defineStore("reader", {
      * Load a book from file
      */
     async loadBook(file: File): Promise<{ book: Book; chapters: Chapter[] }> {
+      assertValidBookFile(file);
       this.isLoading = true;
       this.error = null;
 
@@ -128,6 +130,7 @@ export const useReaderStore = defineStore("reader", {
      * Open a book from storage by ID
      */
     async openBook(bookId: string): Promise<{ book: Book; chapters: Chapter[] }> {
+      validateBookId(bookId);
       this.isLoading = true;
       this.error = null;
 
