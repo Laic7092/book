@@ -225,7 +225,7 @@ export const useReaderStore = defineStore("reader", {
           if (lastChapter) {
             this.currentChapter = lastChapter;
             this.readingProgress = savedProgress.percentage || 0;
-            this.chapterProgress = savedProgress.percentage || 0;
+            this.chapterProgress = savedProgress.chapterPercentage || 0;
           } else {
             this.currentChapter = chapters.length > 0 ? chapters[0] : null;
           }
@@ -305,25 +305,26 @@ export const useReaderStore = defineStore("reader", {
     },
 
     /**
-     * Update reading progress
+     * Update progress state (memory only)
      */
-    async updateProgress(
-      scrollPosition: number,
-      percentage: number,
-      chapterId?: string,
-    ): Promise<void> {
+    updateProgress(reading: number, chapter: number): void {
+      this.readingProgress = reading;
+      this.chapterProgress = chapter;
+    },
+
+    /**
+     * Save progress to storage
+     */
+    async saveProgress(chapterId?: string): Promise<void> {
       if (!this.currentBook || !this.currentChapter) {
         return;
       }
 
-      this.readingProgress = percentage;
-      this.chapterProgress = percentage;
-
       await progressStore.updateProgress(
         this.currentBook.id,
         chapterId || this.currentChapter.id,
-        scrollPosition,
-        percentage,
+        this.chapterProgress,
+        this.readingProgress,
       );
     },
 

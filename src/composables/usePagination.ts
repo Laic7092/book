@@ -141,7 +141,7 @@ export function usePagination(containerRef: Ref<HTMLElement | null>) {
     return result;
   }
 
-  async function paginate(html: string): Promise<void> {
+  async function paginate(html: string, targetPage?: number): Promise<void> {
     isReady.value = false;
     isPaginating.value = true;
     rawHtml = html;
@@ -165,7 +165,13 @@ export function usePagination(containerRef: Ref<HTMLElement | null>) {
     pages.value = calculated;
     totalPages.value = calculated.length;
 
-    if (currentPage.value >= calculated.length) {
+    if (targetPage !== undefined) {
+      if (targetPage < 0) {
+        currentPage.value = Math.max(0, calculated.length - 1);
+      } else {
+        currentPage.value = Math.min(targetPage, calculated.length - 1);
+      }
+    } else if (currentPage.value >= calculated.length) {
       currentPage.value = Math.max(0, calculated.length - 1);
     }
 
@@ -200,9 +206,8 @@ export function usePagination(containerRef: Ref<HTMLElement | null>) {
     return true;
   }
 
-  async function reset(html: string): Promise<void> {
-    currentPage.value = 0;
-    await paginate(html);
+  async function reset(html: string, targetPage?: number): Promise<void> {
+    await paginate(html, targetPage);
   }
 
   function getPageProgress(): number {

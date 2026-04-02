@@ -31,6 +31,7 @@ export interface ReadingProgress {
   chapterId: string;
   scrollPosition: number;
   percentage: number;
+  chapterPercentage: number;
   updatedAt: number;
 }
 

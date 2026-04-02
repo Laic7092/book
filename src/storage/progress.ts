@@ -26,14 +26,15 @@ export async function getProgress(bookId: string): Promise<ReadingProgress | und
 export async function updateProgress(
   bookId: string,
   chapterId: string,
-  scrollPosition: number,
+  chapterPercentage: number,
   percentage: number,
 ): Promise<void> {
   const progress: ReadingProgress = {
     bookId,
     chapterId,
-    scrollPosition,
+    scrollPosition: chapterPercentage,
     percentage,
+    chapterPercentage,
     updatedAt: Date.now(),
   };
 

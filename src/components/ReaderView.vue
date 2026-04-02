@@ -54,16 +54,6 @@ const chapters = computed(() => readerStore.chapters);
 const currentChapterId = computed(() => readerStore.currentChapter?.id || null);
 const bookmarks = computed(() => readerStore.bookmarks);
 const settings = computed(() => readerStore.settings);
-const readingProgress = computed({
-  get: () => readerStore.readingProgress,
-  set: (val) => readerStore.updateProgress(val, val),
-});
-const chapterProgress = computed({
-  get: () => readerStore.chapterProgress,
-  set: (val) => {
-    readerStore.chapterProgress = val;
-  },
-});
 const currentChapterTitle = computed(() => readerStore.currentChapter?.title || "");
 const showControls = computed({
   get: () => uiStore.showControls,
@@ -87,15 +77,24 @@ const currentChapterIndex = computed(() => {
 
 const isPaginationMode = computed(() => (settings.value.scrollMode || "vertical") === "pagination");
 
-// 全书进度：结合章节位置和章节内进度
-const totalBookProgress = computed(() => {
+// 章节进度：分页模式自动计算，滚动模式从 store 读取
+const chapterProgress = computed(() => {
+  if (isPaginationMode.value) {
+    const total = pagination.totalPages.value;
+    if (total <= 1) return 100;
+    return ((pagination.currentPage.value + 1) / total) * 100;
+  }
+  return readerStore.chapterProgress;
+});
+
+// 阅读进度：自动计算
+const readingProgress = computed(() => {
   const total = chapters.value.length;
-  if (total <= 1) return Math.max(1, Math.round(chapterProgress.value));
+  if (total <= 1) return chapterProgress.value;
 
   const current = currentChapterIndex.value;
   const chapterPortion = 100 / total;
-  const chapterProgressValue = chapterProgress.value / 100;
-  return Math.round(current * chapterPortion + chapterProgressValue * chapterPortion);
+  return Math.round(current * chapterPortion + (chapterProgress.value / 100) * chapterPortion);
 });
 
 // Initialize composables
@@ -125,10 +124,7 @@ const search = useReaderSearch({
 
 const scrollManager = useScrollManager({
   isPaginationMode,
-  readingProgress,
-  chapterProgress,
-  updateProgress: (scrollPos, percentage, chapterId) =>
-    readerStore.updateProgress(scrollPos, percentage, chapterId),
+  onProgressUpdate: (reading, chapter) => readerStore.updateProgress(reading, chapter),
   onChapterChange: async (chapterId) => {
     const chapter = chapters.value.find((c) => c.id === chapterId);
     if (chapter && chapter.id !== currentChapterId.value) {
@@ -136,6 +132,15 @@ const scrollManager = useScrollManager({
       readerStore.chapterProgress = 0;
     }
   },
+});
+
+// Save progress on change (debounced)
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+watch([readingProgress, chapterProgress], () => {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    readerStore.saveProgress(readerStore.currentChapter?.id);
+  }, 1000);
 });
 
 // Toggle controls
@@ -157,7 +162,7 @@ const gestures = useReaderGestures({
 });
 
 // Chapter navigation
-const handleSelectChapter = async (chapterId: string) => {
+const handleSelectChapter = async (chapterId: string, targetPage?: number) => {
   isTransitioning.value = true;
   const wasShowingControls = showControls.value;
   try {
@@ -166,7 +171,7 @@ const handleSelectChapter = async (chapterId: string) => {
 
     if (isPaginationMode.value) {
       const html = (await readerStore.getCurrentChapterContent()) || "";
-      await pagination.reset(html);
+      await pagination.reset(html, targetPage);
     } else {
       await chapterLoader.loadCurrentAndAdjacent(2);
       scrollManager.scrollToChapter(chapterId);
@@ -199,8 +204,6 @@ async function nextPage() {
       if (currentIndex < chapters.value.length - 1) {
         await handleSelectChapter(chapters.value[currentIndex + 1].id);
       }
-    } else {
-      readerStore.updateProgress(pagination.getPageProgress(), pagination.getPageProgress());
     }
   } else {
     const currentIndex = currentChapterIndex.value;
@@ -216,14 +219,10 @@ async function prevPage() {
   if (isPaginationMode.value) {
     if (pagination.currentPage.value > 0) {
       pagination.prevPage();
-      readerStore.updateProgress(pagination.getPageProgress(), pagination.getPageProgress());
     } else {
       const currentIndex = currentChapterIndex.value;
       if (currentIndex > 0) {
-        await handleSelectChapter(chapters.value[currentIndex - 1].id);
-        // Jump to last page of previous chapter
-        await nextTick();
-        pagination.currentPage.value = pagination.totalPages.value - 1;
+        await handleSelectChapter(chapters.value[currentIndex - 1].id, -1);
       }
     }
   } else {
@@ -383,7 +382,7 @@ onMounted(async () => {
     await chapterLoader.loadCurrentAndAdjacent(2);
     // Restore scroll position
     setTimeout(() => {
-      const progress = readerStore.readingProgress;
+      const progress = readerStore.chapterProgress;
       const chapterId = readerStore.currentChapter?.id;
       if (progress > 0 && chapterId) {
         scrollManager.restoreScrollPosition(progress, chapterId);

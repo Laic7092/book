@@ -1,24 +1,19 @@
 // Simplified scroll manager for vertical reading mode
-// Core responsibilities: track scroll position, detect current chapter, save/restore progress
+// Core responsibilities: track scroll position, detect current chapter
 
 import { ref, type Ref } from "vue";
 import { throttle } from "../utils/debounce";
-import { SCROLL_SAVE_DELAY } from "../utils/constants";
 
 interface UseScrollManagerOptions {
   isPaginationMode: Ref<boolean>;
-  readingProgress: Ref<number>;
-  chapterProgress: Ref<number>;
-  updateProgress: (scrollPosition: number, percentage: number, chapterId?: string) => void;
+  onProgressUpdate: (reading: number, chapter: number, chapterId?: string) => void;
   onChapterChange?: (chapterId: string) => void;
 }
 
 export function useScrollManager(options: UseScrollManagerOptions) {
-  const { isPaginationMode, readingProgress, chapterProgress, updateProgress, onChapterChange } =
-    options;
+  const { isPaginationMode, onProgressUpdate, onChapterChange } = options;
 
   const lastChapterId = ref<string | null>(null);
-  const saveTimer = ref<number | null>(null);
 
   // Get the main scroll container
   function getContainer(): HTMLElement | null {
@@ -70,24 +65,18 @@ export function useScrollManager(options: UseScrollManagerOptions) {
   const handleScroll = throttle(() => {
     if (isPaginationMode.value) return;
 
-    const percentage = getScrollPercentage();
-    readingProgress.value = percentage;
-
+    const reading = getScrollPercentage();
     const currentId = getCurrentChapterId();
+
     if (currentId && currentId !== lastChapterId.value) {
       lastChapterId.value = currentId;
       onChapterChange?.(currentId);
     }
 
-    if (currentId) {
-      chapterProgress.value = getChapterProgress(currentId);
-    }
+    const chapterId = currentId || lastChapterId.value || undefined;
+    const chapter = chapterId ? getChapterProgress(chapterId) : 0;
 
-    // Debounced save
-    if (saveTimer.value) clearTimeout(saveTimer.value);
-    saveTimer.value = window.setTimeout(() => {
-      updateProgress(percentage, percentage, currentId || undefined);
-    }, SCROLL_SAVE_DELAY);
+    onProgressUpdate(reading, chapter, chapterId);
   }, 16);
 
   // Jump to chapter instantly (no animation)
@@ -114,16 +103,9 @@ export function useScrollManager(options: UseScrollManagerOptions) {
     container.scrollTop = scrollPosition;
   }
 
-  function cleanup(): void {
-    if (saveTimer.value) clearTimeout(saveTimer.value);
-  }
-
   return {
-    getScrollPercentage,
-    getCurrentChapterId,
     handleScroll,
     scrollToChapter,
     restoreScrollPosition,
-    cleanup,
   };
 }
