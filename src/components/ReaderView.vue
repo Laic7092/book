@@ -97,6 +97,17 @@ const readingProgress = computed(() => {
   return Math.round(current * chapterPortion + (chapterProgress.value / 100) * chapterPortion);
 });
 
+// 全书进度：结合章节位置和章节内进度
+const totalBookProgress = computed(() => {
+  const total = chapters.value.length;
+  if (total <= 1) return Math.max(1, Math.round(chapterProgress.value));
+
+  const current = currentChapterIndex.value;
+  const chapterPortion = 100 / total;
+  const chapterProgressValue = chapterProgress.value / 100;
+  return Math.round(current * chapterPortion + chapterProgressValue * chapterPortion);
+});
+
 // Initialize composables
 const pagination = usePagination(articleEl);
 
