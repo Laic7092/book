@@ -173,7 +173,7 @@ const gestures = useReaderGestures({
 });
 
 // Chapter navigation
-const handleSelectChapter = async (chapterId: string, targetPage?: number) => {
+const handleSelectChapter = async (chapterId: string, targetPage: number = 0) => {
   isTransitioning.value = true;
   const wasShowingControls = showControls.value;
   try {
@@ -275,7 +275,6 @@ const addBookmark = async () => {
   await readerStore.addBookmark(
     `Reading position - ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
     preview,
-    scrollManager.getScrollPercentage(),
   );
   closeModal();
 };
