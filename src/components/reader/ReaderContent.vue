@@ -15,28 +15,22 @@ const emit = defineEmits<{
   (e: "resize"): void;
 }>();
 
-const paginationRef = ref<HTMLElement | null>(null);
-const containerWidth = ref(0);
-const columnGap = ref(0);
+const containerRef = ref<HTMLElement | null>(null);
+const articleRef = ref<HTMLElement | null>(null);
 let resizeObserver: ResizeObserver | null = null;
 
-function updateWidth() {
-  if (props.transitioning) return;
-  if (paginationRef.value) {
-    const el = paginationRef.value;
-    const style = getComputedStyle(el);
-    containerWidth.value = el.clientWidth;
-    columnGap.value = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+function emitResize() {
+  if (!props.transitioning) {
     emit("resize");
   }
 }
 
 onMounted(() => {
   nextTick(() => {
-    updateWidth();
-    if (paginationRef.value) {
-      resizeObserver = new ResizeObserver(updateWidth);
-      resizeObserver.observe(paginationRef.value);
+    emitResize();
+    if (containerRef.value) {
+      resizeObserver = new ResizeObserver(emitResize);
+      resizeObserver.observe(containerRef.value);
     }
   });
 });
@@ -52,9 +46,7 @@ watch(
   () => props.isPaginationMode,
   (newVal) => {
     if (newVal) {
-      nextTick(() => {
-        updateWidth();
-      });
+      nextTick(emitResize);
     }
   },
 );
@@ -63,52 +55,46 @@ watch(
   () => props.transitioning,
   (newVal, oldVal) => {
     if (oldVal && !newVal) {
-      updateWidth();
+      emitResize();
     }
   },
 );
 
 watch(
-  () => props.settings.margin,
+  () => [props.settings.margin, props.settings.fontSize, props.settings.lineHeight],
   () => {
-    nextTick(() => {
-      updateWidth();
-    });
+    nextTick(emitResize);
   },
 );
 
-const paginationStyle = computed(() => {
-  const baseStyle = {
-    padding: `${props.settings.margin}px`,
-    fontSize: `${props.settings.fontSize}px`,
-    fontFamily: props.settings.fontFamily,
-    lineHeight: String(props.settings.lineHeight),
-    letterSpacing: `${props.settings.letterSpacing || 0}em`,
-    textAlign: props.settings.textAlign || "left",
-  };
+const contentStyle = computed(() => ({
+  fontSize: `${props.settings.fontSize}px`,
+  fontFamily: props.settings.fontFamily,
+  lineHeight: String(props.settings.lineHeight),
+  letterSpacing: `${props.settings.letterSpacing || 0}em`,
+  textAlign: props.settings.textAlign || "left",
+  height: props.isPaginationMode ? "100%" : "auto",
+}));
 
-  if (props.isPaginationMode) {
-    return {
-      ...baseStyle,
-      columnWidth: `${containerWidth.value}px`,
-      columnGap: `${columnGap.value}px`,
-      transform: `translateX(-${(props.currentPage || 0) * containerWidth.value}px)`,
-    };
-  }
-
-  return baseStyle;
-});
+defineExpose({ articleRef });
 </script>
 
 <template>
-  <main class="reader-view" :class="{ 'pagination-mode': isPaginationMode }">
-    <!-- Pagination Mode: CSS column layout -->
+  <main
+    class="reader-view"
+    :class="{ 'pagination-mode': isPaginationMode }"
+    ref="containerRef"
+    :style="{
+      padding: `${props.settings.margin}px`,
+    }"
+  >
+    <!-- Pagination Mode: Pre-calculated single page -->
     <article
       v-if="isPaginationMode"
-      ref="paginationRef"
-      class="reader-content pagination-content"
+      ref="articleRef"
+      class="reader-content"
       :class="{ transitioning }"
-      :style="paginationStyle"
+      :style="contentStyle"
       v-html="content"
     ></article>
 
@@ -117,14 +103,7 @@ const paginationStyle = computed(() => {
       v-else
       class="reader-content vertical-content"
       :class="{ transitioning }"
-      :style="{
-        padding: `${settings.margin}px`,
-        fontSize: `${settings.fontSize}px`,
-        fontFamily: settings.fontFamily,
-        lineHeight: String(settings.lineHeight),
-        letterSpacing: `${settings.letterSpacing || 0}em`,
-        textAlign: settings.textAlign || 'left',
-      }"
+      :style="contentStyle"
     >
       <div
         v-for="chapter in loadedChapters"
@@ -140,6 +119,7 @@ const paginationStyle = computed(() => {
 
 <style scoped>
 .reader-view {
+  min-height: 0;
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
@@ -165,7 +145,6 @@ const paginationStyle = computed(() => {
   -webkit-hyphens: auto;
 }
 
-/* Vertical scrolling */
 .vertical-content {
   padding-bottom: 40vh;
 }
@@ -185,31 +164,15 @@ const paginationStyle = computed(() => {
   text-rendering: optimizeLegibility;
 }
 
-/* Pagination Mode: CSS Columns */
-.pagination-content {
-  column-fill: auto;
-  column-gap: 0;
-  height: calc(100vh - 120px);
-  height: calc(100dvh - 120px);
-  width: 100%;
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-sizing: border-box;
-}
-
-.pagination-content.transitioning {
-  transition: none;
-}
-
-.pagination-content :deep(h1),
-.pagination-content :deep(h2),
-.pagination-content :deep(h3),
-.pagination-content :deep(h4),
-.pagination-content :deep(h5),
-.pagination-content :deep(h6) {
+.reader-content :deep(h1),
+.reader-content :deep(h2),
+.reader-content :deep(h3),
+.reader-content :deep(h4),
+.reader-content :deep(h5),
+.reader-content :deep(h6) {
   break-inside: avoid;
 }
 
-/* Scrollbar */
 .reader-view::-webkit-scrollbar {
   width: 7px;
 }
@@ -225,5 +188,12 @@ const paginationStyle = computed(() => {
 
 .reader-view::-webkit-scrollbar-thumb:hover {
   background: color-mix(in srgb, var(--border) 70%, var(--reader-text));
+}
+</style>
+
+<style>
+.reader-content p {
+  margin-bottom: calc(var(--paragraph-spacing, 1.2) * 1em);
+  text-rendering: optimizeLegibility;
 }
 </style>

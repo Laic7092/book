@@ -1,5 +1,13 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
+import {
+  ref,
+  computed,
+  onMounted,
+  onUnmounted,
+  watch,
+  nextTick,
+  type ComponentInstance,
+} from "vue";
 import { useReaderStore } from "../stores/reader";
 import { useUIStore } from "../stores/ui";
 import {
@@ -31,6 +39,10 @@ const emit = defineEmits<{
 // Stores
 const readerStore = useReaderStore();
 const uiStore = useUIStore();
+
+// Template refs
+const readerContentRef = ref<ComponentInstance<typeof ReaderContent> | null>(null);
+const articleEl = computed(() => readerContentRef.value?.articleRef ?? null);
 
 // Local state
 const stats = ref<BookReadingStats | null>(null);
@@ -86,11 +98,16 @@ const totalBookProgress = computed(() => {
   return Math.round(current * chapterPortion + chapterProgressValue * chapterPortion);
 });
 
-// Content state for pagination
-const content = ref("");
-
 // Initialize composables
-const pagination = usePagination();
+const pagination = usePagination(articleEl);
+
+// Display content for pagination mode
+const displayContent = computed(() => {
+  if (isPaginationMode.value) {
+    return pagination.currentHtml.value;
+  }
+  return "";
+});
 const chapterLoader = useChapterLoader(
   computed(() => props.book.id),
   chapters,
@@ -148,9 +165,8 @@ const handleSelectChapter = async (chapterId: string) => {
     activeModal.value = null;
 
     if (isPaginationMode.value) {
-      content.value = (await readerStore.getCurrentChapterContent()) || "";
-      await nextTick();
-      await pagination.reset();
+      const html = (await readerStore.getCurrentChapterContent()) || "";
+      await pagination.reset(html);
     } else {
       await chapterLoader.loadCurrentAndAdjacent(2);
       scrollManager.scrollToChapter(chapterId);
@@ -166,13 +182,19 @@ const handleSelectChapter = async (chapterId: string) => {
   }
 };
 
+async function handleResize() {
+  if (!isPaginationMode.value) return;
+  const html = (await readerStore.getCurrentChapterContent()) || "";
+  await pagination.paginate(html);
+}
+
 // Pagination handlers
 async function nextPage() {
   if (pagination.isPaginating.value) return;
 
   if (isPaginationMode.value) {
-    const atEnd = pagination.nextPage();
-    if (atEnd) {
+    const movedToNext = pagination.nextPage();
+    if (!movedToNext) {
       const currentIndex = currentChapterIndex.value;
       if (currentIndex < chapters.value.length - 1) {
         await handleSelectChapter(chapters.value[currentIndex + 1].id);
@@ -238,7 +260,7 @@ const goToPreviousMatch = async () => {
 const addBookmark = async () => {
   const chapter = readerStore.getCurrentChapter();
   if (!chapter) return;
-  const article = document.querySelector("article");
+  const article = articleEl.value;
   const preview = article?.textContent?.slice(0, 100).replace(/\s+/g, " ").trim() || "";
   await readerStore.addBookmark(
     `Reading position - ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
@@ -269,12 +291,9 @@ const closeModal = () => {
 };
 
 const updateCSSVariables = () => {
-  const contentEl = document.querySelector(".reader-content") as HTMLElement;
-  if (contentEl) {
-    contentEl.style.setProperty(
-      "--paragraph-spacing",
-      String(settings.value.paragraphSpacing || 1.2),
-    );
+  const el = articleEl.value;
+  if (el) {
+    el.style.setProperty("--paragraph-spacing", String(settings.value.paragraphSpacing || 1.2));
   }
 };
 
@@ -300,9 +319,8 @@ watch(
     if (newMode === "vertical" && chapters.value.length > 0) {
       await chapterLoader.loadCurrentAndAdjacent(2);
     } else if (newMode === "pagination" && readerStore.currentChapter) {
-      content.value = (await readerStore.getCurrentChapterContent()) || "";
-      await nextTick();
-      await pagination.reset();
+      const html = (await readerStore.getCurrentChapterContent()) || "";
+      await pagination.reset(html);
     }
   },
 );
@@ -322,9 +340,8 @@ watch(
   async (newChapterId) => {
     if (!newChapterId || !isPaginationMode.value) return;
     if (readerStore.currentBook) {
-      content.value = (await readerStore.getCurrentChapterContent()) || "";
-      await nextTick();
-      await pagination.reset();
+      const html = (await readerStore.getCurrentChapterContent()) || "";
+      await pagination.reset(html);
     }
   },
 );
@@ -343,15 +360,10 @@ watch(
   () => [settings.value.margin, settings.value.fontSize, settings.value.lineHeight],
   async () => {
     if (!isPaginationMode.value) return;
-    await nextTick();
-    pagination.updateTotalPages();
+    const html = (await readerStore.getCurrentChapterContent()) || "";
+    await pagination.paginate(html);
   },
 );
-
-// Display content for pagination mode (CSS column handles splitting)
-const displayContent = computed(() => {
-  return content.value;
-});
 
 // Lifecycle
 onMounted(async () => {
@@ -365,9 +377,8 @@ onMounted(async () => {
   uiStore.setControls(true);
 
   if (isPaginationMode.value && readerStore.currentChapter) {
-    content.value = (await readerStore.getCurrentChapterContent()) || "";
-    await nextTick();
-    await pagination.reset();
+    const html = (await readerStore.getCurrentChapterContent()) || "";
+    await pagination.reset(html);
   } else {
     await chapterLoader.loadCurrentAndAdjacent(2);
     // Restore scroll position
@@ -385,6 +396,7 @@ onUnmounted(() => {
   document.removeEventListener("touchstart", gestures.handleTouchStart);
   document.removeEventListener("touchend", gestures.handleTouchEnd);
   scrollManager.cleanup();
+  pagination.cleanup();
 });
 </script>
 
@@ -404,6 +416,7 @@ onUnmounted(() => {
 
     <!-- Main Content -->
     <ReaderContent
+      ref="readerContentRef"
       :content="displayContent"
       :settings="settings"
       :is-pagination-mode="isPaginationMode"
@@ -411,7 +424,7 @@ onUnmounted(() => {
       :loaded-chapters="chapterLoader.allLoadedContent.value"
       :transitioning="isTransitioning"
       @scroll="scrollManager.handleScroll()"
-      @resize="pagination.updateTotalPages()"
+      @resize="handleResize"
     />
 
     <!-- Footer -->
