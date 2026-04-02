@@ -202,7 +202,7 @@ async function nextPage() {
     if (!movedToNext) {
       const currentIndex = currentChapterIndex.value;
       if (currentIndex < chapters.value.length - 1) {
-        await handleSelectChapter(chapters.value[currentIndex + 1].id);
+        await handleSelectChapter(chapters.value[currentIndex + 1].id, 0);
       }
     }
   } else {
@@ -394,7 +394,7 @@ onMounted(async () => {
 onUnmounted(() => {
   document.removeEventListener("touchstart", gestures.handleTouchStart);
   document.removeEventListener("touchend", gestures.handleTouchEnd);
-  scrollManager.cleanup();
+  // scrollManager.cleanup();
   pagination.cleanup();
 });
 </script>
