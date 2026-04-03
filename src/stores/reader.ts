@@ -7,7 +7,6 @@ import { TxtParser } from "../parsers/txt-parser";
 import { EpubParser } from "../parsers/epub-parser";
 import type { BookParser } from "../core/types";
 import * as booksStore from "../storage/books";
-import * as progressStore from "../storage/progress";
 import * as resourcesStore from "../storage/resources";
 import * as statsStore from "../storage/stats";
 import { assertValidBookFile, validateBookId } from "../utils/validation";
@@ -192,20 +191,7 @@ export const useReaderStore = defineStore("reader", {
         // Start reading session
         await statsStore.startSession(bookId);
 
-        // Load saved reading progress and set current chapter
-        const savedProgress = await progressStore.getProgress(bookId);
-        if (savedProgress?.chapterId) {
-          const lastChapter = chapters.find((c) => c.id === savedProgress!.chapterId);
-          if (lastChapter) {
-            this.currentChapter = lastChapter;
-            this.readingProgress = savedProgress.percentage || 0;
-            this.chapterProgress = savedProgress.chapterPercentage || 0;
-          } else {
-            this.currentChapter = chapters.length > 0 ? chapters[0] : null;
-          }
-        } else {
-          this.currentChapter = chapters.length > 0 ? chapters[0] : null;
-        }
+        this.currentChapter = chapters.length > 0 ? chapters[0] : null;
 
         return { book, chapters };
       } catch (error) {
@@ -284,32 +270,6 @@ export const useReaderStore = defineStore("reader", {
     updateProgress(reading: number, chapter: number): void {
       this.readingProgress = reading;
       this.chapterProgress = chapter;
-    },
-
-    /**
-     * Save progress to storage
-     */
-    async saveProgress(chapterId?: string): Promise<void> {
-      if (!this.currentBook || !this.currentChapter) {
-        return;
-      }
-
-      await progressStore.updateProgress(
-        this.currentBook.id,
-        chapterId || this.currentChapter.id,
-        this.chapterProgress,
-        this.readingProgress,
-      );
-    },
-
-    /**
-     * Get current progress
-     */
-    async getCurrentProgress() {
-      if (!this.currentBook) {
-        return undefined;
-      }
-      return progressStore.getProgress(this.currentBook.id);
     },
 
     /**

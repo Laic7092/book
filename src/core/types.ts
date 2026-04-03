@@ -26,15 +26,6 @@ export interface BookContent {
   htmlContent?: string;
 }
 
-export interface ReadingProgress {
-  bookId: string;
-  chapterId: string;
-  scrollPosition: number;
-  percentage: number;
-  chapterPercentage: number;
-  updatedAt: number;
-}
-
 export interface Bookmark {
   id: string;
   bookId: string;

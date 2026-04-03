@@ -11,10 +11,9 @@ import SearchPanel from "./SearchPanel.vue";
 import BookmarksPanel from "./BookmarksPanel.vue";
 import ReaderSettings from "./ReaderSettings.vue";
 import StatsPanel from "./StatsPanel.vue";
-import BookmarkEditor from "./BookmarkEditor.vue";
 
 defineProps<{
-  modalType: "toc" | "search" | "bookmarks" | "settings" | "stats" | "bookmark-editor" | null;
+  modalType: "toc" | "search" | "bookmarks" | "settings" | "stats" | null;
   chapters: Chapter[];
   currentChapterId: string | null;
   bookmarks: Bookmark[];
@@ -24,7 +23,6 @@ defineProps<{
   hasHighlights: boolean;
   stats: BookReadingStats | null;
   totalChapters: number;
-  editingBookmark: Bookmark | null;
 }>();
 
 const emit = defineEmits<{
@@ -38,8 +36,6 @@ const emit = defineEmits<{
   (e: "clear-highlights"): void;
   (e: "add-bookmark"): void;
   (e: "delete-bookmark", bookmarkId: string, event: MouseEvent): void;
-  (e: "update:bookmark", bookmark: Bookmark): void;
-  (e: "save-bookmark-edit"): void;
 }>();
 
 function handleClose() {
@@ -97,15 +93,6 @@ function handleClose() {
           :stats="stats"
           :total-chapters="totalChapters"
           @close="handleClose"
-        />
-
-        <!-- Bookmark Editor -->
-        <BookmarkEditor
-          v-else-if="modalType === 'bookmark-editor'"
-          :bookmark="editingBookmark!"
-          @save="emit('save-bookmark-edit', $event)"
-          @close="handleClose"
-          @update:bookmark="emit('update:bookmark', $event)"
         />
       </div>
     </div>

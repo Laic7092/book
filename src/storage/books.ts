@@ -90,7 +90,7 @@ export async function getAllBooks(): Promise<Book[]> {
  */
 export async function deleteBook(bookId: string): Promise<void> {
   await dbTransaction(
-    [STORES.BOOKS, STORES.CHAPTERS, STORES.PROGRESS, STORES.BOOKMARKS, STORES.RESOURCES],
+    [STORES.BOOKS, STORES.CHAPTERS, STORES.BOOKMARKS, STORES.RESOURCES],
     "readwrite",
     async (stores) => {
       // Delete book metadata
@@ -109,9 +109,6 @@ export async function deleteBook(bookId: string): Promise<void> {
         };
         request.onerror = () => reject(request.error);
       });
-
-      // Delete progress
-      stores.get(STORES.PROGRESS)!.delete(bookId);
 
       // Delete bookmarks for this book
       const bookmarksStore = stores.get(STORES.BOOKMARKS)!;

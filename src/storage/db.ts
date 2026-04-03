@@ -6,7 +6,6 @@ const DB_VERSION = 6;
 export const STORES = {
   BOOKS: "books",
   CHAPTERS: "chapters",
-  PROGRESS: "progress",
   BOOKMARKS: "bookmarks",
   SETTINGS: "settings",
   RESOURCES: "resources",
@@ -69,12 +68,6 @@ export async function openDB(): Promise<IDBDatabase> {
 
       // v2: title field added (optional, no index needed)
       // v3: order field added for proper chapter sorting
-
-      // Progress store
-      if (!db.objectStoreNames.contains(STORES.PROGRESS)) {
-        const progressStore = db.createObjectStore(STORES.PROGRESS, { keyPath: "bookId" });
-        progressStore.createIndex("updatedAt", "updatedAt");
-      }
 
       // Bookmarks store
       if (!db.objectStoreNames.contains(STORES.BOOKMARKS)) {

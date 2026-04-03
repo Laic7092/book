@@ -59,7 +59,6 @@ const articleEl = computed(() => readerContentRef.value?.articleRef ?? null);
 // Local state
 const stats = ref<BookReadingStats | null>(null);
 const isTransitioning = ref(false);
-const editingBookmark = ref<Bookmark | null>(null);
 
 // Store computed refs
 const chapters = computed(() => readerStore.chapters);
@@ -155,15 +154,6 @@ const scrollManager = useScrollManager({
       readerStore.chapterProgress = 0;
     }
   },
-});
-
-// Save progress on change (debounced)
-let saveTimer: ReturnType<typeof setTimeout> | null = null;
-watch([readingProgress, chapterProgress], () => {
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    readerStore.saveProgress(readerStore.currentChapter?.id);
-  }, 1000);
 });
 
 // Toggle controls
@@ -636,7 +626,6 @@ onUnmounted(() => {
       :has-highlights="search.hasHighlights.value"
       :stats="stats"
       :total-chapters="chapters.length"
-      :editing-bookmark="editingBookmark"
       @close="closeModal"
       @select-chapter="handleSelectChapter"
       @navigate-bookmark="navigateToBookmark"
@@ -650,6 +639,7 @@ onUnmounted(() => {
       @clear-highlights="search.clearHighlights"
       @add-bookmark="addBookmark"
       @delete-bookmark="deleteBookmark"
+      @update-settings="settingsStore.updateSettings"
     />
   </div>
 </template>
