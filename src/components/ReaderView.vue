@@ -289,6 +289,8 @@ const addBookmark = async () => {
       const pageText = pages[i]?.html.replace(/<[^>]*>/g, "") || "";
       charOffset += pageText.length;
     }
+    // 预留给下一页
+    charOffset += 1;
 
     cfi = generateCfiFromCharOffset(
       readerStore.currentChapter?.order ?? 0,
@@ -327,13 +329,8 @@ const addBookmark = async () => {
   closeModal();
 };
 
-function extractPreviewAround(text: string, offset: number, length = 100): string {
-  const half = Math.floor(length / 2);
-  const start = Math.max(0, offset - half);
-  const end = Math.min(text.length, start + length);
-  const snippet = text.slice(start, end).trim();
-  if (start > 0) return `…${snippet}`;
-  return snippet;
+function extractPreviewAround(text: string, offset: number): string {
+  return text.slice(Math.max(offset - 1, 0), offset + 50);
 }
 
 function createTempContainer(html: string): Element {

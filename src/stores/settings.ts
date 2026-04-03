@@ -9,16 +9,16 @@ import * as settingsStorage from "../storage/settings";
  * Default reader settings - single source of truth
  */
 export const DEFAULT_SETTINGS: ReaderSettings = {
-  fontSize: 18,
+  fontSize: 20,
   fontFamily: "Literata, Georgia, serif",
   lineHeight: 1.6,
-  theme: "light",
+  theme: "sepia",
   margin: 24,
   letterSpacing: 0,
   paragraphSpacing: 1.2,
   textAlign: "left",
   contrast: "normal",
-  scrollMode: "vertical",
+  scrollMode: "pagination",
   paginationAnimation: "slide",
 };
 
