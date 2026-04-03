@@ -59,6 +59,7 @@ const articleEl = computed(() => readerContentRef.value?.articleRef ?? null);
 // Local state
 const stats = ref<BookReadingStats | null>(null);
 const isTransitioning = ref(false);
+const isInitialized = ref(false);
 
 // Store computed refs
 const chapters = computed(() => readerStore.chapters);
@@ -120,7 +121,7 @@ const totalBookProgress = computed(() => {
 });
 
 // Initialize composables
-const pagination = usePagination(articleEl);
+const pagination = usePagination(articleEl, props.book.id, chapters);
 
 // Display content for pagination mode
 const displayContent = computed(() => {
@@ -184,7 +185,7 @@ const handleSelectChapter = async (chapterId: string, targetPage: number = 0) =>
 
     if (isPaginationMode.value) {
       const html = (await readerStore.getCurrentChapterContent()) || "";
-      await pagination.reset(html, targetPage);
+      await pagination.paginate(chapterId, html, targetPage);
     } else {
       await chapterLoader.loadCurrentAndAdjacent(2);
       scrollManager.scrollToChapter(chapterId);
@@ -202,8 +203,10 @@ const handleSelectChapter = async (chapterId: string, targetPage: number = 0) =>
 
 async function handleResize() {
   if (!isPaginationMode.value) return;
-  const html = (await readerStore.getCurrentChapterContent()) || "";
-  await pagination.paginate(html);
+  if (currentChapterId.value) {
+    const html = (await readerStore.getCurrentChapterContent()) || "";
+    await pagination.paginate(currentChapterId.value, html);
+  }
 }
 
 // Pagination handlers
@@ -467,11 +470,12 @@ watch(
 watch(
   () => settings.value.scrollMode,
   async (newMode) => {
+    if (!isInitialized.value) return;
     if (newMode === "vertical" && chapters.value.length > 0) {
       await chapterLoader.loadCurrentAndAdjacent(2);
     } else if (newMode === "pagination" && readerStore.currentChapter) {
       const html = (await readerStore.getCurrentChapterContent()) || "";
-      await pagination.reset(html);
+      await pagination.paginate(readerStore.currentChapter.id, html);
     }
   },
 );
@@ -485,34 +489,16 @@ watch(
   { immediate: true },
 );
 
-// Watch for chapter changes (pagination mode)
-watch(
-  () => currentChapterId.value,
-  async (newChapterId) => {
-    if (!newChapterId || !isPaginationMode.value) return;
-    if (readerStore.currentBook) {
-      const html = (await readerStore.getCurrentChapterContent()) || "";
-      await pagination.reset(html);
-    }
-  },
-);
-
-// Watch for chapter changes (vertical scroll mode)
-watch(
-  () => currentChapterId.value,
-  async (newChapterId) => {
-    if (!newChapterId || isPaginationMode.value) return;
-    await chapterLoader.loadCurrentAndAdjacent(2);
-  },
-);
-
 // Watch for settings changes that affect pagination
 watch(
   () => [settings.value.margin, settings.value.fontSize, settings.value.lineHeight],
   async () => {
+    if (!isInitialized.value) return;
     if (!isPaginationMode.value) return;
-    const html = (await readerStore.getCurrentChapterContent()) || "";
-    await pagination.paginate(html);
+    if (currentChapterId.value) {
+      const html = (await readerStore.getCurrentChapterContent()) || "";
+      await pagination.paginate(currentChapterId.value, html);
+    }
   },
 );
 
@@ -531,7 +517,7 @@ onMounted(async () => {
 
   if (isPaginationMode.value && readerStore.currentChapter) {
     const html = (await readerStore.getCurrentChapterContent()) || "";
-    await pagination.reset(html);
+    await pagination.paginate(readerStore.currentChapter.id, html);
   } else {
     await chapterLoader.loadCurrentAndAdjacent(2);
     // Restore scroll position
@@ -543,6 +529,8 @@ onMounted(async () => {
       }
     }, 200);
   }
+
+  isInitialized.value = true;
 });
 
 onUnmounted(() => {

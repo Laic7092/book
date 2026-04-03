@@ -7,16 +7,37 @@ export interface Page {
   blockEnd: number;
 }
 
-export function usePagination(containerRef: Ref<HTMLElement | null>) {
+// 模块级缓存：bookId:chapterId -> Page[]
+const PagesMap = new Map<string, Page[]>();
+const CACHE_CAPACITY = 10;
+
+export interface Chapter {
+  id: string;
+  html: string;
+}
+
+export function usePagination(
+  containerRef: Ref<HTMLElement | null>,
+  bookId: string,
+  _chapters: Chapter[],
+) {
   const currentPage = ref(0);
   const totalPages = ref(1);
   const isPaginating = ref(false);
   const pages = shallowRef<Page[]>([]);
   const currentHtml = ref("");
   const isReady = ref(false);
+  const computedCount = ref(0); // 已计算的页数
 
   let measureEl: HTMLElement | null = null;
   const rawHtml = ref("");
+
+  // 当前章节的 pages - 非响应式存储，用于内部快速访问
+  let currentPages: Page[] = [];
+
+  // 用于取消后台计算的标志
+  let backgroundCalcActive = true;
+  let backgroundCalcId = 0; // 每次计算递增 ID
 
   function getPageHeight(): number {
     const el = containerRef.value;
@@ -97,55 +118,96 @@ export function usePagination(containerRef: Ref<HTMLElement | null>) {
     return measureEl.offsetHeight;
   }
 
-  function paginateBlocks(maxHeight: number): Page[] {
-    if (!measureEl || rawHtml.value.length === 0) {
-      return [{ index: 0, html: rawHtml.value, blockStart: 0, blockEnd: 1 }];
-    }
+  // 计算单页内容
+  function computeSinglePage(
+    blocks: string[],
+    startIdx: number,
+    maxHeight: number,
+    pageIndex: number,
+  ): Page {
+    let low = startIdx + 1;
+    let high = blocks.length;
+    let bestEnd = startIdx + 1;
 
-    const blocks = splitIntoBlocks(rawHtml.value);
-    if (blocks.length === 0) {
-      return [{ index: 0, html: "", blockStart: 0, blockEnd: 0 }];
-    }
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      const testHtml = blocks.slice(startIdx, mid).join("");
 
-    measureEl.innerHTML = "";
-    const result: Page[] = [];
-    let startIdx = 0;
+      measureEl!.innerHTML = testHtml;
+      const h = getContentHeight();
 
-    while (startIdx < blocks.length) {
-      let low = startIdx + 1;
-      let high = blocks.length;
-      let bestEnd = startIdx + 1;
-
-      while (low <= high) {
-        const mid = Math.floor((low + high) / 2);
-        const testHtml = blocks.slice(startIdx, mid).join("");
-
-        measureEl.innerHTML = testHtml;
-        const h = getContentHeight();
-
-        if (h <= maxHeight) {
-          bestEnd = mid;
-          low = mid + 1;
-        } else {
-          high = mid - 1;
-        }
+      if (h <= maxHeight) {
+        bestEnd = mid;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
       }
-
-      const pageHtml = blocks.slice(startIdx, bestEnd).join("");
-      result.push({
-        index: result.length,
-        html: pageHtml,
-        blockStart: startIdx,
-        blockEnd: bestEnd,
-      });
-
-      startIdx = bestEnd;
     }
 
-    return result;
+    const pageHtml = blocks.slice(startIdx, bestEnd).join("");
+    return {
+      index: pageIndex,
+      html: pageHtml,
+      blockStart: startIdx,
+      blockEnd: bestEnd,
+    };
   }
 
-  async function paginate(html: string, targetPage?: number): Promise<void> {
+  // LRU 缓存管理
+  function updateCache(chapterId: string, pages: Page[]) {
+    const cacheKey = `${bookId}:${chapterId}`;
+    if (PagesMap.has(cacheKey)) {
+      PagesMap.delete(cacheKey);
+    }
+    while (PagesMap.size >= CACHE_CAPACITY) {
+      const firstKey = PagesMap.keys().next().value;
+      if (firstKey !== undefined) {
+        PagesMap.delete(firstKey);
+      } else {
+        break;
+      }
+    }
+    PagesMap.set(cacheKey, pages);
+  }
+
+  function clampPage(target: number | undefined, length: number): number {
+    if (length <= 0) return 0;
+    if (target === undefined) return 0;
+    if (target < 0) return Math.max(0, length - 1);
+    return Math.min(target, length - 1);
+  }
+
+  async function paginate(
+    chapterId: string,
+    htmlOrTargetPage?: number | string,
+    maybeTargetPage?: number,
+  ): Promise<void> {
+    let html: string;
+    let targetPage: number | undefined;
+
+    if (typeof htmlOrTargetPage === "string") {
+      html = htmlOrTargetPage;
+      targetPage = maybeTargetPage;
+    } else if (typeof htmlOrTargetPage === "number") {
+      const chapter = _chapters.find((c) => c.id === chapterId);
+      if (!chapter || !("html" in chapter)) {
+        isPaginating.value = false;
+        isReady.value = true;
+        return;
+      }
+      html = (chapter as any).html;
+      targetPage = htmlOrTargetPage;
+    } else {
+      const chapter = _chapters.find((c) => c.id === chapterId);
+      if (!chapter || !("html" in chapter)) {
+        isPaginating.value = false;
+        isReady.value = true;
+        return;
+      }
+      html = (chapter as any).html;
+      targetPage = undefined;
+    }
+
     isReady.value = false;
     isPaginating.value = true;
     rawHtml.value = html;
@@ -157,61 +219,165 @@ export function usePagination(containerRef: Ref<HTMLElement | null>) {
       return;
     }
 
+    // 检查缓存
+    const cacheKey = `${bookId}:${chapterId}`;
+    if (PagesMap.has(cacheKey)) {
+      const cached = PagesMap.get(cacheKey)!;
+      currentPages = cached;
+      pages.value = [...cached];
+      totalPages.value = cached.length;
+      computedCount.value = cached.length;
+
+      const pageIdx = clampPage(targetPage, cached.length);
+      currentPage.value = pageIdx;
+      currentHtml.value = cached[pageIdx].html;
+
+      isPaginating.value = false;
+      isReady.value = true;
+      return;
+    }
+
+    // 取消正在运行的后台计算
+    backgroundCalcActive = false;
+    backgroundCalcId++;
+
+    // 初始化测量元素
     if (measureEl) {
       measureEl.remove();
     }
     measureEl = createMeasureEl(article);
 
     const maxHeight = getPageHeight();
+    const blocks = splitIntoBlocks(rawHtml.value);
 
-    const calculated = paginateBlocks(maxHeight);
-
-    pages.value = calculated;
-    totalPages.value = calculated.length;
-
-    if (targetPage !== undefined) {
-      if (targetPage < 0) {
-        currentPage.value = Math.max(0, calculated.length - 1);
-      } else {
-        currentPage.value = Math.min(targetPage, calculated.length - 1);
-      }
-    } else if (currentPage.value >= calculated.length) {
-      currentPage.value = Math.max(0, calculated.length - 1);
+    if (blocks.length === 0) {
+      currentPages = [{ index: 0, html: "", blockStart: 0, blockEnd: 0 }];
+      totalPages.value = 1;
+      computedCount.value = 1;
+      currentPage.value = 0;
+      currentHtml.value = "";
+      updateCache(chapterId, currentPages);
+      isPaginating.value = false;
+      isReady.value = true;
+      return;
     }
 
-    updateCurrentHtml();
+    // 逐页计算，增量更新
+    currentPages = [];
+    let startIdx = 0;
+    let pageIndex = 0;
+
+    while (startIdx < blocks.length) {
+      const page = computeSinglePage(blocks, startIdx, maxHeight, pageIndex);
+      currentPages.push(page);
+
+      computedCount.value = currentPages.length;
+      totalPages.value = currentPages.length;
+
+      // 目标页就绪，立即返回
+      if (targetPage !== undefined && page.index === targetPage) {
+        currentPage.value = targetPage;
+        currentHtml.value = page.html;
+        pages.value = [...currentPages];
+
+        isPaginating.value = false;
+        isReady.value = true;
+
+        // 启动后台计算剩余页面
+        const currentCalcId = backgroundCalcId;
+        backgroundCalcActive = true;
+        computeRemainingInBackground(
+          blocks,
+          page.blockEnd,
+          pageIndex + 1,
+          maxHeight,
+          chapterId,
+          currentCalcId,
+        );
+        return;
+      }
+
+      // 让出渲染
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      startIdx = page.blockEnd;
+      pageIndex++;
+    }
+
+    // 最终赋值
+    pages.value = [...currentPages];
+
+    // 默认值
+    if (targetPage === undefined || targetPage >= currentPages.length) {
+      currentPage.value = 0;
+      currentHtml.value = currentPages[0]?.html || "";
+    }
+
+    updateCache(chapterId, currentPages);
 
     isPaginating.value = false;
     isReady.value = true;
   }
 
-  function updateCurrentHtml(): void {
-    const page = pages.value[currentPage.value];
-    currentHtml.value = page?.html || "";
+  // 后台计算剩余页面（不阻塞用户交互）
+  function computeRemainingInBackground(
+    blocks: string[],
+    startIdx: number,
+    pageIndex: number,
+    maxHeight: number,
+    chapterId: string,
+    calcId: number,
+  ): void {
+    let currentIdx = startIdx;
+    let currentPageIdx = pageIndex;
+
+    function computeChunk(deadline: IdleDeadline) {
+      if (!backgroundCalcActive || calcId !== backgroundCalcId) {
+        return;
+      }
+
+      while (currentIdx < blocks.length && deadline.timeRemaining() > 2) {
+        const page = computeSinglePage(blocks, currentIdx, maxHeight, currentPageIdx);
+        currentPages.push(page);
+        computedCount.value = currentPages.length;
+        totalPages.value = currentPages.length;
+        pages.value = [...currentPages];
+        currentIdx = page.blockEnd;
+        currentPageIdx++;
+      }
+
+      if (currentIdx < blocks.length) {
+        requestIdleCallback(computeChunk);
+      } else {
+        updateCache(chapterId, currentPages);
+      }
+    }
+
+    requestIdleCallback(computeChunk);
   }
 
   function goToPage(page: number): void {
-    if (page < 0 || page >= totalPages.value) return;
+    if (page < 0 || page >= currentPages.length) return;
     currentPage.value = page;
-    updateCurrentHtml();
+    currentHtml.value = currentPages[page].html;
   }
 
   function nextPage(): boolean {
-    if (currentPage.value >= totalPages.value - 1) return false;
+    if (currentPage.value >= currentPages.length - 1) return false;
     currentPage.value++;
-    updateCurrentHtml();
+    currentHtml.value = currentPages[currentPage.value].html;
     return true;
   }
 
   function prevPage(): boolean {
     if (currentPage.value <= 0) return false;
     currentPage.value--;
-    updateCurrentHtml();
+    currentHtml.value = currentPages[currentPage.value].html;
     return true;
   }
 
-  async function reset(html: string, targetPage?: number): Promise<void> {
-    await paginate(html, targetPage);
+  async function reset(chapterId: string, targetPage?: number): Promise<void> {
+    await paginate(chapterId, targetPage);
   }
 
   function getPageProgress(): number {
@@ -225,6 +391,11 @@ export function usePagination(containerRef: Ref<HTMLElement | null>) {
       measureEl = null;
     }
     rawHtml.value = "";
+    currentPages = [];
+  }
+
+  function clearCache(): void {
+    PagesMap.clear();
   }
 
   return {
@@ -235,6 +406,7 @@ export function usePagination(containerRef: Ref<HTMLElement | null>) {
     currentHtml,
     pages,
     rawHtml,
+    computedCount,
     goToPage,
     nextPage,
     prevPage,
@@ -242,5 +414,6 @@ export function usePagination(containerRef: Ref<HTMLElement | null>) {
     paginate,
     getPageProgress,
     cleanup,
+    clearCache,
   };
 }
