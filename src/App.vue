@@ -5,9 +5,12 @@ import ReaderView from "./components/ReaderView.vue";
 import { useReaderStore } from "./stores/reader";
 import { useUIStore } from "./stores/ui";
 import type { Book } from "./core/types";
+import { useSettingsStore } from "./stores/settings";
 
 const readerStore = useReaderStore();
 const uiStore = useUIStore();
+const settingsStore = useSettingsStore();
+settingsStore.init();
 
 const currentBook = computed(() => readerStore.currentBook);
 const isTransitioning = computed(() => uiStore.isTransitioning);

@@ -59,7 +59,6 @@ const articleEl = computed(() => readerContentRef.value?.articleRef ?? null);
 // Local state
 const stats = ref<BookReadingStats | null>(null);
 const isTransitioning = ref(false);
-const isInitialized = ref(false);
 
 // Store computed refs
 const chapters = computed(() => readerStore.chapters);
@@ -202,11 +201,7 @@ const handleSelectChapter = async (chapterId: string, targetPage: number = 0) =>
 };
 
 async function handleResize() {
-  if (!isPaginationMode.value) return;
-  if (currentChapterId.value) {
-    const html = (await readerStore.getCurrentChapterContent()) || "";
-    await pagination.paginate(currentChapterId.value, html);
-  }
+  await reRenderContent();
 }
 
 // Pagination handlers
@@ -470,7 +465,6 @@ watch(
 watch(
   () => settings.value.scrollMode,
   async (newMode) => {
-    if (!isInitialized.value) return;
     if (newMode === "vertical" && chapters.value.length > 0) {
       await chapterLoader.loadCurrentAndAdjacent(2);
     } else if (newMode === "pagination" && readerStore.currentChapter) {
@@ -486,20 +480,21 @@ watch(
   () => {
     updateThemeClass();
   },
-  { immediate: true },
 );
+
+const reRenderContent = async () => {
+  if (!isPaginationMode.value) return;
+  if (currentChapterId.value) {
+    const html = (await readerStore.getCurrentChapterContent()) || "";
+    pagination.clearCache();
+    await pagination.paginate(currentChapterId.value, html);
+  }
+};
 
 // Watch for settings changes that affect pagination
 watch(
   () => [settings.value.margin, settings.value.fontSize, settings.value.lineHeight],
-  async () => {
-    if (!isInitialized.value) return;
-    if (!isPaginationMode.value) return;
-    if (currentChapterId.value) {
-      const html = (await readerStore.getCurrentChapterContent()) || "";
-      await pagination.paginate(currentChapterId.value, html);
-    }
-  },
+  reRenderContent,
 );
 
 // Lifecycle
@@ -507,7 +502,6 @@ onMounted(async () => {
   document.addEventListener("touchstart", gestures.handleTouchStart, { passive: true });
   document.addEventListener("touchend", gestures.handleTouchEnd, { passive: true });
 
-  await settingsStore.init();
   await readerStore.openBook(props.book.id);
   await bookmarksStore.loadBookmarks(props.book.id);
   updateThemeClass();
@@ -529,8 +523,6 @@ onMounted(async () => {
       }
     }, 200);
   }
-
-  isInitialized.value = true;
 });
 
 onUnmounted(() => {

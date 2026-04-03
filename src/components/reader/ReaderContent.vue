@@ -27,7 +27,6 @@ function emitResize() {
 
 onMounted(() => {
   nextTick(() => {
-    emitResize();
     if (containerRef.value) {
       resizeObserver = new ResizeObserver(emitResize);
       resizeObserver.observe(containerRef.value);
@@ -41,31 +40,6 @@ onUnmounted(() => {
     resizeObserver = null;
   }
 });
-
-watch(
-  () => props.isPaginationMode,
-  (newVal) => {
-    if (newVal) {
-      nextTick(emitResize);
-    }
-  },
-);
-
-watch(
-  () => props.transitioning,
-  (newVal, oldVal) => {
-    if (oldVal && !newVal) {
-      emitResize();
-    }
-  },
-);
-
-watch(
-  () => [props.settings.margin, props.settings.fontSize, props.settings.lineHeight],
-  () => {
-    nextTick(emitResize);
-  },
-);
 
 const contentStyle = computed(() => ({
   fontSize: `${props.settings.fontSize}px`,
