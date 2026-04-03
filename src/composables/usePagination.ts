@@ -330,6 +330,8 @@ export function usePagination(
   ): void {
     let currentIdx = startIdx;
     let currentPageIdx = pageIndex;
+    // 使用局部数组，避免与新的 paginate 调用竞争
+    const localPages: Page[] = [];
 
     function computeChunk(deadline: IdleDeadline) {
       if (!backgroundCalcActive || calcId !== backgroundCalcId) {
@@ -338,10 +340,7 @@ export function usePagination(
 
       while (currentIdx < blocks.length && deadline.timeRemaining() > 2) {
         const page = computeSinglePage(blocks, currentIdx, maxHeight, currentPageIdx);
-        currentPages.push(page);
-        computedCount.value = currentPages.length;
-        totalPages.value = currentPages.length;
-        pages.value = [...currentPages];
+        localPages.push(page);
         currentIdx = page.blockEnd;
         currentPageIdx++;
       }
@@ -349,7 +348,14 @@ export function usePagination(
       if (currentIdx < blocks.length) {
         requestIdleCallback(computeChunk);
       } else {
-        updateCache(chapterId, currentPages);
+        // 后台计算完成，合并到主数组
+        if (calcId === backgroundCalcId) {
+          currentPages.push(...localPages);
+          pages.value = [...currentPages];
+          computedCount.value = currentPages.length;
+          totalPages.value = currentPages.length;
+          updateCache(chapterId, currentPages);
+        }
       }
     }
 
