@@ -9,13 +9,23 @@ defineProps<{
 const emit = defineEmits<{
   (e: "add-bookmark"): void;
   (e: "delete-bookmark", bookmarkId: string, event: MouseEvent): void;
-  (e: "edit-bookmark", bookmark: Bookmark): void;
-  (e: "select-chapter", chapterId: string): void;
+  (e: "navigate-bookmark", bookmark: Bookmark): void;
   (e: "close"): void;
 }>();
 
-function getChapterTitle(bookmark: Bookmark): string {
-  return bookmark.title || "";
+function formatDate(timestamp: number): string {
+  const date = new Date(timestamp);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString();
 }
 </script>
 
@@ -40,53 +50,54 @@ function getChapterTitle(bookmark: Bookmark): string {
     <div class="modal-body scroll-body">
       <ul class="bookmarks-list">
         <li v-for="bm in bookmarks" :key="bm.id" class="bookmark-item">
-          <div class="bookmark-content" @click.stop="emit('select-chapter', bm.chapterId)">
-            <div class="bookmark-header">
-              <div class="bookmark-title">{{ bm.title }}</div>
-              <div class="bookmark-actions">
-                <button
-                  class="bookmark-edit-btn"
-                  @click.stop="emit('edit-bookmark', bm)"
-                  aria-label="Edit bookmark"
-                  title="Edit bookmark"
-                >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                  >
-                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-                  </svg>
-                </button>
-                <button
-                  class="bookmark-delete-btn"
-                  @click.stop="emit('delete-bookmark', bm.id, $event)"
-                  aria-label="Delete bookmark"
-                  title="Delete bookmark"
-                >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                  >
-                    <path d="M18 6L6 18M6 6l12 12" />
-                  </svg>
-                </button>
+          <div class="bookmark-card" @click.stop="emit('navigate-bookmark', bm)">
+            <div
+              class="bookmark-color-indicator"
+              :style="{ backgroundColor: bm.color || 'var(--accent)' }"
+            ></div>
+            <div class="bookmark-main">
+              <div class="bookmark-title-row">
+                <span class="bookmark-title">{{ bm.title }}</span>
+                <span class="bookmark-date">{{ formatDate(bm.createdAt) }}</span>
               </div>
+              <p v-if="bm.contentPreview" class="bookmark-preview">{{ bm.contentPreview }}</p>
             </div>
-            <div class="bookmark-preview">{{ bm.contentPreview }}</div>
-            <div class="bookmark-chapter">{{ getChapterTitle(bm) }}</div>
+            <button
+              class="action-btn delete-btn"
+              @click.stop="emit('delete-bookmark', bm.id, $event)"
+              aria-label="Delete bookmark"
+              title="Delete bookmark"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"
+                />
+              </svg>
+            </button>
           </div>
         </li>
       </ul>
-      <p v-if="bookmarks.length === 0" class="no-bookmarks">No bookmarks yet</p>
+      <div v-if="bookmarks.length === 0" class="empty-state">
+        <svg
+          width="48"
+          height="48"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+        >
+          <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
+        </svg>
+        <p>No bookmarks yet</p>
+        <span>Click the button above to add your first bookmark</span>
+      </div>
     </div>
   </div>
 </template>
@@ -173,24 +184,42 @@ function getChapterTitle(bookmark: Bookmark): string {
   margin-bottom: 8px;
 }
 
-.bookmark-content {
+.bookmark-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
   padding: 14px;
   border-radius: 10px;
   border: 1px solid var(--border-subtle);
   cursor: pointer;
   transition: all 150ms ease;
   background: var(--hover-bg);
+  position: relative;
 }
 
-.bookmark-content:hover {
+.bookmark-card:hover {
   background: var(--bg-elevated, var(--modal-bg));
   border-color: var(--border);
 }
 
-.bookmark-header {
+.bookmark-color-indicator {
+  width: 4px;
+  min-height: 100%;
+  border-radius: 4px;
+  flex-shrink: 0;
+  align-self: stretch;
+}
+
+.bookmark-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.bookmark-title-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
   margin-bottom: 6px;
 }
 
@@ -198,38 +227,17 @@ function getChapterTitle(bookmark: Bookmark): string {
   font-weight: 600;
   font-size: 14px;
   color: var(--modal-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
 }
 
-.bookmark-actions {
-  display: flex;
-  gap: 4px;
-  opacity: 0;
-  transition: opacity 150ms ease;
-}
-
-.bookmark-content:hover .bookmark-actions {
-  opacity: 1;
-}
-
-.bookmark-edit-btn,
-.bookmark-delete-btn {
-  padding: 4px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  color: var(--text-secondary);
-  border-radius: 4px;
-  transition: all 150ms ease;
-}
-
-.bookmark-edit-btn:hover {
-  background: var(--hover-bg);
-  color: var(--accent);
-}
-
-.bookmark-delete-btn:hover {
-  background: #fef2f2;
-  color: #dc2626;
+.bookmark-date {
+  font-size: 11px;
+  color: var(--text-tertiary, var(--text-secondary));
+  flex-shrink: 0;
 }
 
 .bookmark-preview {
@@ -240,14 +248,56 @@ function getChapterTitle(bookmark: Bookmark): string {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  margin: 0 0 6px;
 }
 
-.bookmark-chapter {
-  font-size: 11px;
-  color: var(--accent);
-  margin-top: 8px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
+.action-btn {
+  padding: 6px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  transition: all 150ms ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.action-btn:hover {
+  background: var(--hover-bg);
+}
+
+.delete-btn:hover {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  color: var(--text-secondary);
+  gap: 8px;
+}
+
+.empty-state svg {
+  color: var(--text-tertiary, var(--text-secondary));
+  opacity: 0.5;
+}
+
+.empty-state p {
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.empty-state span {
+  font-size: 12px;
+  opacity: 0.7;
 }
 </style>

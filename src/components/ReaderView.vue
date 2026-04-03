@@ -9,7 +9,9 @@ import {
   type ComponentInstance,
 } from "vue";
 import { useReaderStore } from "../stores/reader";
+import { useBookmarksStore } from "../stores/bookmarks";
 import { useUIStore } from "../stores/ui";
+import { useSettingsStore } from "../stores/settings";
 import {
   useReaderGestures,
   usePagination,
@@ -26,7 +28,15 @@ import {
 } from "../components/reader";
 import { ModalWrapper } from "../components/modals";
 import type { Bookmark, SearchResult, Chapter, Book, BookReadingStats } from "../core/types";
-import type { ReaderSettings } from "../core/types";
+import {
+  generateCfiFromElement,
+  generateCfiFromRange,
+  generateCfiFromCharOffset,
+  navigateToCfi,
+  resolveCfi,
+  parseCfi,
+} from "../utils/epub-cfi";
+import type { ParsedCfi, CfiStep } from "../utils/epub-cfi";
 
 const props = defineProps<{
   book: Book;
@@ -38,7 +48,9 @@ const emit = defineEmits<{
 
 // Stores
 const readerStore = useReaderStore();
+const bookmarksStore = useBookmarksStore();
 const uiStore = useUIStore();
+const settingsStore = useSettingsStore();
 
 // Template refs
 const readerContentRef = ref<ComponentInstance<typeof ReaderContent> | null>(null);
@@ -52,8 +64,8 @@ const editingBookmark = ref<Bookmark | null>(null);
 // Store computed refs
 const chapters = computed(() => readerStore.chapters);
 const currentChapterId = computed(() => readerStore.currentChapter?.id || null);
-const bookmarks = computed(() => readerStore.bookmarks);
-const settings = computed(() => readerStore.settings);
+const bookmarks = computed(() => bookmarksStore.bookmarks);
+const settings = computed(() => settingsStore.settings);
 const currentChapterTitle = computed(() => readerStore.currentChapter?.title || "");
 const showControls = computed({
   get: () => uiStore.showControls,
@@ -271,29 +283,172 @@ const addBookmark = async () => {
   const chapter = readerStore.getCurrentChapter();
   if (!chapter) return;
   const article = articleEl.value;
-  const preview = article?.textContent?.slice(0, 100).replace(/\s+/g, " ").trim() || "";
-  await readerStore.addBookmark(
-    `Reading position - ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
-    preview,
-  );
+  if (!article) return;
+
+  let cfi: string;
+  let preview: string;
+
+  if (isPaginationMode.value) {
+    const fullHtml = pagination.rawHtml.value;
+    if (!fullHtml) return;
+
+    const currentPage = pagination.currentPage.value;
+    const pages = pagination.pages.value;
+    let charOffset = 0;
+    for (let i = 0; i < currentPage; i++) {
+      const pageText = pages[i]?.html.replace(/<[^>]*>/g, "") || "";
+      charOffset += pageText.length;
+    }
+
+    cfi = generateCfiFromCharOffset(
+      readerStore.currentChapter?.order ?? 0,
+      createTempContainer(fullHtml),
+      charOffset,
+    );
+
+    const plainText = fullHtml
+      .replace(/<[^>]*>/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    preview = extractPreviewAround(plainText, charOffset);
+  } else {
+    const viewportCenter = article.getBoundingClientRect().top + article.clientHeight * 0.2;
+    const elementAtPoint = document.elementFromPoint(
+      article.getBoundingClientRect().left + 20,
+      viewportCenter,
+    );
+
+    let targetEl: Element;
+    if (elementAtPoint && article.contains(elementAtPoint)) {
+      targetEl = elementAtPoint.closest("p, h1, h2, h3, h4, h5, h6, li, div, section") || article;
+    } else {
+      targetEl = article;
+    }
+
+    cfi = generateCfiFromElement(readerStore.currentChapter?.order ?? 0, targetEl, article);
+
+    const plainText = article.textContent?.replace(/\s+/g, " ").trim() || "";
+    const targetText = targetEl.textContent?.replace(/\s+/g, " ").trim() || "";
+    const offsetInArticle = plainText.indexOf(targetText.slice(0, 30));
+    preview = extractPreviewAround(plainText, Math.max(0, offsetInArticle));
+  }
+
+  await bookmarksStore.addBookmark(props.book.id, chapter.id, cfi, chapter.title, preview);
   closeModal();
 };
 
+function extractPreviewAround(text: string, offset: number, length = 100): string {
+  const half = Math.floor(length / 2);
+  const start = Math.max(0, offset - half);
+  const end = Math.min(text.length, start + length);
+  const snippet = text.slice(start, end).trim();
+  if (start > 0) return `…${snippet}`;
+  return snippet;
+}
+
+function createTempContainer(html: string): Element {
+  const container = document.createElement("div");
+  container.innerHTML = html;
+  return container;
+}
+
 const deleteBookmark = async (bookmarkId: string, e: MouseEvent) => {
   e.stopPropagation();
-  await readerStore.removeBookmark(bookmarkId);
+  await bookmarksStore.removeBookmark(bookmarkId);
 };
 
-const openBookmarkEditor = (bookmark: Bookmark) => {
-  editingBookmark.value = { ...bookmark };
-  uiStore.openModal("bookmark-editor");
+const navigateToBookmark = async (bookmark: Bookmark) => {
+  const parsed = parseCfi(bookmark.cfi);
+  if (!parsed) return;
+
+  const targetChapter = chapters.value.find((c) => c.order === parsed.spineIndex);
+  if (!targetChapter) {
+    const fallbackChapter = chapters.value.find((c) => c.id === bookmark.chapterId);
+    if (!fallbackChapter) return;
+    await handleSelectChapter(fallbackChapter.id);
+    return;
+  }
+
+  if (targetChapter.id !== currentChapterId.value) {
+    await handleSelectChapter(targetChapter.id);
+    await nextTick();
+  }
+
+  if (isPaginationMode.value) {
+    const fullHtml = pagination.rawHtml.value;
+    if (!fullHtml) return;
+
+    // Calculate absolute character offset from the CFI
+    const tempContainer = createTempContainer(fullHtml);
+    const target = resolveCfi(bookmark.cfi, tempContainer);
+    tempContainer.remove();
+
+    if (!target) {
+      pagination.goToPage(0);
+      activeModal.value = null;
+      return;
+    }
+
+    // Use the textOffset from the parsed CFI directly
+    // Calculate absolute char offset by walking text nodes up to the target
+    const charOffset = calculateAbsoluteCharOffset(fullHtml, parsed);
+
+    if (charOffset !== null) {
+      let textAccum = 0;
+      for (const page of pagination.pages.value) {
+        const pageText = page.html.replace(/<[^>]*>/g, "");
+        const pageEnd = textAccum + pageText.length;
+        if (charOffset >= textAccum && charOffset < pageEnd) {
+          pagination.goToPage(page.index);
+          activeModal.value = null;
+          return;
+        }
+        textAccum += pageText.length;
+      }
+    }
+
+    pagination.goToPage(0);
+    activeModal.value = null;
+  } else {
+    if (!articleEl.value) return;
+    const success = navigateToCfi(bookmark.cfi, articleEl.value);
+    if (success) {
+      activeModal.value = null;
+    }
+  }
 };
 
-const saveBookmarkEdit = async (updatedBookmark: Bookmark) => {
-  await readerStore.updateBookmark(updatedBookmark.id, updatedBookmark);
-  uiStore.closeModal();
-  editingBookmark.value = null;
-};
+function calculateAbsoluteCharOffset(fullHtml: string, parsed: ParsedCfi): number | null {
+  const tempContainer = document.createElement("div");
+  tempContainer.innerHTML = fullHtml;
+
+  const target = resolveCfi(`epubcfi(/6/1${buildPathFromSteps(parsed.steps)})`, tempContainer);
+  if (!target) return null;
+
+  // Walk all text nodes and sum up to the target
+  const walker = document.createTreeWalker(tempContainer, NodeFilter.SHOW_TEXT, null);
+  let charOffset = 0;
+
+  if (target.node.nodeType === Node.TEXT_NODE) {
+    let node: Node | null = walker.nextNode();
+    while (node) {
+      if (node === target.node) {
+        charOffset += target.offset;
+        tempContainer.remove();
+        return charOffset;
+      }
+      charOffset += (node.textContent || "").length;
+      node = walker.nextNode();
+    }
+  }
+
+  tempContainer.remove();
+  return null;
+}
+
+function buildPathFromSteps(steps: CfiStep[]): string {
+  return steps.length > 0 ? `/${steps.map((s) => s.index).join("/")}` : "";
+}
 
 const closeModal = () => {
   uiStore.closeModal();
@@ -379,7 +534,9 @@ onMounted(async () => {
   document.addEventListener("touchstart", gestures.handleTouchStart, { passive: true });
   document.addEventListener("touchend", gestures.handleTouchEnd, { passive: true });
 
+  await settingsStore.init();
   await readerStore.openBook(props.book.id);
+  await bookmarksStore.loadBookmarks(props.book.id);
   updateThemeClass();
   updateCSSVariables();
 
@@ -482,6 +639,7 @@ onUnmounted(() => {
       :editing-bookmark="editingBookmark"
       @close="closeModal"
       @select-chapter="handleSelectChapter"
+      @navigate-bookmark="navigateToBookmark"
       @update:search-query="
         (val) => {
           search.searchQuery.value = val;
@@ -492,14 +650,6 @@ onUnmounted(() => {
       @clear-highlights="search.clearHighlights"
       @add-bookmark="addBookmark"
       @delete-bookmark="deleteBookmark"
-      @edit-bookmark="(_bookmark) => openBookmarkEditor(_bookmark)"
-      @update:bookmark="
-        (val) => {
-          editingBookmark = val;
-        }
-      "
-      @save-bookmark-edit="saveBookmarkEdit"
-      @update-settings="readerStore.updateSettings"
     />
   </div>
 </template>

@@ -6,12 +6,11 @@ import { STORES, dbPut, dbGet } from "./db";
 const SETTINGS_KEY = "reader-settings";
 
 /**
- * Get reader settings, with defaults
+ * Get reader settings
  */
-export async function getSettings(): Promise<ReaderSettings> {
-  const { DEFAULT_SETTINGS } = await import("../core/types");
+export async function getSettings(): Promise<ReaderSettings | null> {
   const stored = await dbGet<{ value: ReaderSettings }>(STORES.SETTINGS, SETTINGS_KEY);
-  return stored?.value || DEFAULT_SETTINGS;
+  return stored?.value ?? null;
 }
 
 /**
@@ -32,16 +31,18 @@ export async function updateSetting<K extends keyof ReaderSettings>(
   value: ReaderSettings[K],
 ): Promise<ReaderSettings> {
   const current = await getSettings();
+  if (!current) {
+    throw new Error("Settings not initialized");
+  }
   const updated = { ...current, [key]: value };
   await saveSettings(updated);
   return updated;
 }
 
 /**
- * Reset settings to defaults
+ * Reset stored settings (delete from storage)
  */
-export async function resetSettings(): Promise<ReaderSettings> {
-  const { DEFAULT_SETTINGS } = await import("../core/types");
-  await saveSettings(DEFAULT_SETTINGS);
-  return DEFAULT_SETTINGS;
+export async function resetSettings(): Promise<void> {
+  const { dbDelete } = await import("./db");
+  await dbDelete(STORES.SETTINGS, SETTINGS_KEY);
 }

@@ -1,15 +1,13 @@
 // Reader Store - Manages book reading state and operations
 
 import { defineStore } from "pinia";
-import type { Book, Chapter, Bookmark, ReaderSettings, ParsedBook } from "../core/types";
+import type { Book, Chapter, ParsedBook } from "../core/types";
 import { ErrorCode, createReaderError } from "../core/errors";
 import { TxtParser } from "../parsers/txt-parser";
 import { EpubParser } from "../parsers/epub-parser";
 import type { BookParser } from "../core/types";
 import * as booksStore from "../storage/books";
 import * as progressStore from "../storage/progress";
-import * as bookmarksStore from "../storage/bookmarks";
-import * as settingsStore from "../storage/settings";
 import * as resourcesStore from "../storage/resources";
 import * as statsStore from "../storage/stats";
 import { assertValidBookFile, validateBookId } from "../utils/validation";
@@ -50,8 +48,6 @@ export interface ReaderState {
   resourceUrls: Map<string, string> | undefined;
   readingProgress: number;
   chapterProgress: number;
-  bookmarks: Bookmark[];
-  settings: ReaderSettings;
   loadedResources: Set<string>;
 }
 
@@ -65,21 +61,7 @@ export const useReaderStore = defineStore("reader", {
     resourceUrls: undefined,
     readingProgress: 0,
     chapterProgress: 0,
-    bookmarks: [],
     loadedResources: new Set(),
-    settings: {
-      fontSize: 18,
-      fontFamily: "Literata, Georgia, serif",
-      lineHeight: 1.6,
-      theme: "light",
-      margin: 24,
-      letterSpacing: 0,
-      paragraphSpacing: 1.2,
-      textAlign: "left",
-      contrast: "normal",
-      scrollMode: "vertical",
-      paginationAnimation: "slide",
-    },
   }),
 
   getters: {
@@ -152,7 +134,6 @@ export const useReaderStore = defineStore("reader", {
 
         this.currentBook = parsedBook.book;
         this.chapters = parsedBook.chapters;
-        this.bookmarks = await bookmarksStore.getBookmarks(parsedBook.book.id);
 
         return {
           book: parsedBook.book,
@@ -210,13 +191,6 @@ export const useReaderStore = defineStore("reader", {
 
         // Start reading session
         await statsStore.startSession(bookId);
-
-        // Load bookmarks
-        this.bookmarks = await bookmarksStore.getBookmarks(bookId);
-
-        // Load settings
-        const settings = await settingsStore.getSettings();
-        this.settings = { ...this.settings, ...settings };
 
         // Load saved reading progress and set current chapter
         const savedProgress = await progressStore.getProgress(bookId);
@@ -339,80 +313,6 @@ export const useReaderStore = defineStore("reader", {
     },
 
     /**
-     * Add a bookmark
-     */
-    async addBookmark(
-      title: string,
-      contentPreview: string,
-      position: number,
-      color?: string,
-      note?: string,
-    ): Promise<Bookmark> {
-      if (!this.currentBook || !this.currentChapter) {
-        throw createReaderError("No book/chapter loaded", ErrorCode.NO_BOOK_LOADED);
-      }
-
-      const bookmark = bookmarksStore.createBookmark(
-        this.currentBook.id,
-        this.currentChapter.id,
-        title,
-        contentPreview,
-        position,
-        color,
-        note,
-      );
-
-      await bookmarksStore.addBookmark(bookmark);
-      this.bookmarks.push(bookmark);
-
-      return bookmark;
-    },
-
-    /**
-     * Get all bookmarks for current book
-     */
-    async getBookmarks(): Promise<Bookmark[]> {
-      if (!this.currentBook) {
-        return [];
-      }
-      return bookmarksStore.getBookmarks(this.currentBook.id);
-    },
-
-    /**
-     * Remove a bookmark
-     */
-    async removeBookmark(bookmarkId: string): Promise<void> {
-      await bookmarksStore.deleteBookmark(bookmarkId);
-      this.bookmarks = this.bookmarks.filter((b) => b.id !== bookmarkId);
-    },
-
-    /**
-     * Update a bookmark
-     */
-    async updateBookmark(bookmarkId: string, updates: Partial<Bookmark>): Promise<void> {
-      const bookmark = await bookmarksStore.getBookmark(bookmarkId);
-      if (!bookmark) throw createReaderError("Bookmark not found", ErrorCode.BOOKMARK_NOT_FOUND);
-      const updated = { ...bookmark, ...updates };
-      await bookmarksStore.updateBookmark(updated);
-
-      const index = this.bookmarks.findIndex((b) => b.id === bookmarkId);
-      if (index !== -1) {
-        this.bookmarks[index] = { ...this.bookmarks[index], ...updates };
-      }
-    },
-
-    /**
-     * Update settings
-     */
-    async updateSettings(updates: Partial<ReaderSettings>): Promise<ReaderSettings> {
-      const current = await settingsStore.getSettings();
-      const updated = { ...current, ...updates };
-      await settingsStore.saveSettings(updated);
-      this.settings = updated;
-      return updated;
-    },
-
-    /**
      * Close current book
      */
     async closeBook(): Promise<void> {
@@ -434,7 +334,6 @@ export const useReaderStore = defineStore("reader", {
       this.currentChapter = null;
       this.chapters = [];
       this.resourceUrls = undefined;
-      this.bookmarks = [];
       this.readingProgress = 0;
       this.chapterProgress = 0;
     },
@@ -569,9 +468,4 @@ export const useReaderStore = defineStore("reader", {
       await statsStore.deleteStats(bookId);
     },
   },
-});
-
-// Initialize default settings on load
-settingsStore.getSettings().catch(() => {
-  // Ignore errors during initialization
 });

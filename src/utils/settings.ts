@@ -1,19 +1,3 @@
-import type { ReaderSettings } from "../core/types";
-
-export const DEFAULT_READER_SETTINGS: ReaderSettings = {
-  fontSize: 20,
-  fontFamily: "Literata, Georgia, serif",
-  lineHeight: 1.6,
-  theme: "sepia",
-  margin: 24,
-  letterSpacing: 0,
-  paragraphSpacing: 1.2,
-  textAlign: "left",
-  contrast: "normal",
-  scrollMode: "pagination",
-  paginationAnimation: "slide",
-};
-
 // Font options for settings UI
 export const FONT_OPTIONS = [
   { label: "Literata", value: "Literata, Georgia, serif", preview: "Literata" },

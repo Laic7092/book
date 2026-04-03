@@ -30,6 +30,7 @@ defineProps<{
 const emit = defineEmits<{
   (e: "close"): void;
   (e: "select-chapter", chapterId: string): void;
+  (e: "navigate-bookmark", bookmark: Bookmark): void;
   (e: "update-settings", settings: Partial<ReaderSettings>): void;
   (e: "update:searchQuery", value: string): void;
   (e: "search"): void;
@@ -37,7 +38,6 @@ const emit = defineEmits<{
   (e: "clear-highlights"): void;
   (e: "add-bookmark"): void;
   (e: "delete-bookmark", bookmarkId: string, event: MouseEvent): void;
-  (e: "edit-bookmark", bookmark: Bookmark): void;
   (e: "update:bookmark", bookmark: Bookmark): void;
   (e: "save-bookmark-edit"): void;
 }>();
@@ -79,8 +79,7 @@ function handleClose() {
           :bookmarks="bookmarks"
           @add-bookmark="emit('add-bookmark')"
           @delete-bookmark="(id, evt) => emit('delete-bookmark', id, evt)"
-          @edit-bookmark="emit('edit-bookmark', $event)"
-          @select-chapter="emit('select-chapter', $event)"
+          @navigate-bookmark="emit('navigate-bookmark', $event)"
           @close="handleClose"
         />
 

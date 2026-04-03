@@ -39,9 +39,9 @@ export interface Bookmark {
   id: string;
   bookId: string;
   chapterId: string;
+  cfi: string;
   title: string;
   contentPreview: string;
-  position: number;
   createdAt: number;
   color?: string;
   note?: string;
@@ -118,20 +118,6 @@ export interface BookReadingStats {
   firstReadAt?: number; // Timestamp of first reading session
   lastReadAt?: number; // Timestamp of most recent session end
 }
-
-export const DEFAULT_SETTINGS: ReaderSettings = {
-  fontSize: 18,
-  fontFamily: "Literata, Georgia, serif",
-  lineHeight: 1.6,
-  theme: "light",
-  margin: 24,
-  letterSpacing: 0,
-  paragraphSpacing: 1.2,
-  textAlign: "left",
-  contrast: "normal",
-  scrollMode: "vertical",
-  paginationAnimation: "slide",
-};
 
 export const THEME_COLORS = {
   light: {

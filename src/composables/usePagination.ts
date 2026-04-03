@@ -3,6 +3,8 @@ import { ref, shallowRef, type Ref } from "vue";
 export interface Page {
   index: number;
   html: string;
+  blockStart: number;
+  blockEnd: number;
 }
 
 export function usePagination(containerRef: Ref<HTMLElement | null>) {
@@ -14,7 +16,7 @@ export function usePagination(containerRef: Ref<HTMLElement | null>) {
   const isReady = ref(false);
 
   let measureEl: HTMLElement | null = null;
-  let rawHtml = "";
+  const rawHtml = ref("");
 
   function getPageHeight(): number {
     const el = containerRef.value;
@@ -96,13 +98,13 @@ export function usePagination(containerRef: Ref<HTMLElement | null>) {
   }
 
   function paginateBlocks(maxHeight: number): Page[] {
-    if (!measureEl || rawHtml.length === 0) {
-      return [{ index: 0, html: rawHtml }];
+    if (!measureEl || rawHtml.value.length === 0) {
+      return [{ index: 0, html: rawHtml.value, blockStart: 0, blockEnd: 1 }];
     }
 
-    const blocks = splitIntoBlocks(rawHtml);
+    const blocks = splitIntoBlocks(rawHtml.value);
     if (blocks.length === 0) {
-      return [{ index: 0, html: "" }];
+      return [{ index: 0, html: "", blockStart: 0, blockEnd: 0 }];
     }
 
     measureEl.innerHTML = "";
@@ -133,6 +135,8 @@ export function usePagination(containerRef: Ref<HTMLElement | null>) {
       result.push({
         index: result.length,
         html: pageHtml,
+        blockStart: startIdx,
+        blockEnd: bestEnd,
       });
 
       startIdx = bestEnd;
@@ -144,7 +148,7 @@ export function usePagination(containerRef: Ref<HTMLElement | null>) {
   async function paginate(html: string, targetPage?: number): Promise<void> {
     isReady.value = false;
     isPaginating.value = true;
-    rawHtml = html;
+    rawHtml.value = html;
 
     const article = containerRef.value;
     if (!article) {
@@ -220,7 +224,7 @@ export function usePagination(containerRef: Ref<HTMLElement | null>) {
       measureEl.remove();
       measureEl = null;
     }
-    rawHtml = "";
+    rawHtml.value = "";
   }
 
   return {
@@ -230,6 +234,7 @@ export function usePagination(containerRef: Ref<HTMLElement | null>) {
     isReady,
     currentHtml,
     pages,
+    rawHtml,
     goToPage,
     nextPage,
     prevPage,

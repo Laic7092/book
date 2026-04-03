@@ -1,7 +1,7 @@
 // IndexedDB wrapper with Promise-based API
 
 const DB_NAME = "reader-db";
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 
 export const STORES = {
   BOOKS: "books",
@@ -48,7 +48,7 @@ export async function openDB(): Promise<IDBDatabase> {
       resolve(request.result);
     };
 
-    request.onupgradeneeded = (event) => {
+    request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
       const db = (event.target as IDBOpenDBRequest).result;
 
       // Books store
@@ -103,6 +103,8 @@ export async function openDB(): Promise<IDBDatabase> {
         statsStore.createIndex("lastActiveDate", "lastActiveDate");
         statsStore.createIndex("lastReadAt", "lastReadAt");
       }
+
+      // v6: CFI field added to bookmarks (migration handled lazily in getBookmarks)
     };
   });
 
