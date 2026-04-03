@@ -330,13 +330,13 @@ export function usePagination(
   ): void {
     let currentIdx = startIdx;
     let currentPageIdx = pageIndex;
+    const CHUNK_TIME_MS = 8; // 每个时间片最多执行 8ms
 
-    function computeChunk(deadline: IdleDeadline) {
-      if (!backgroundCalcActive || calcId !== backgroundCalcId) {
-        return;
-      }
+    function computeChunk() {
+      if (!backgroundCalcActive || calcId !== backgroundCalcId) return;
 
-      while (currentIdx < blocks.length && deadline.timeRemaining() > 2) {
+      const startTime = performance.now();
+      while (currentIdx < blocks.length && performance.now() - startTime < CHUNK_TIME_MS) {
         const page = computeSinglePage(blocks, currentIdx, maxHeight, currentPageIdx);
         currentPages.push(page);
         computedCount.value = currentPages.length;
@@ -347,13 +347,14 @@ export function usePagination(
       }
 
       if (currentIdx < blocks.length) {
-        requestIdleCallback(computeChunk);
+        // 让出主线程，继续下一批
+        setTimeout(computeChunk, 0);
       } else {
         updateCache(chapterId, currentPages);
       }
     }
 
-    requestIdleCallback(computeChunk);
+    setTimeout(computeChunk, 0);
   }
 
   function goToPage(page: number): void {

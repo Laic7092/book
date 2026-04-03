@@ -7,7 +7,6 @@ const props = defineProps<{
   settings: ReaderSettings;
   isPaginationMode: boolean;
   currentPage?: number;
-  transitioning?: boolean;
   loadedChapters?: Array<{ chapterId: string; title: string; content: string }>;
 }>();
 
@@ -20,9 +19,7 @@ const articleRef = ref<HTMLElement | null>(null);
 let resizeObserver: ResizeObserver | null = null;
 
 function emitResize() {
-  if (!props.transitioning) {
-    emit("resize");
-  }
+  emit("resize");
 }
 
 onMounted(() => {
