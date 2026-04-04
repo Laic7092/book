@@ -22,8 +22,7 @@ export const CHAPTER_BUFFER_SIZE = 2;
 export const CHAPTER_CACHE_MAX_SIZE = 10;
 
 // Parser chunking constants
-export const PARAGRAPHS_PER_CHUNK = 80;
-export const MIN_PARAGRAPHS_FOR_SPLIT = 50;
+export const PARAGRAPHS_PER_CHUNK = 320;
 export const MAX_CHARS_PER_CHUNK = 50_000; // Maximum characters per chunk (~50KB)
 export const MAX_CHARS_PER_CHAPTER = 100_000; // Hard limit for a single chapter (~100KB)
 

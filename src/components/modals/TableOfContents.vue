@@ -85,9 +85,10 @@ function setRef(el: HTMLElement | null, chapterId: string) {
             :class="['toc-item', { active: ch.id === currentChapterId }]"
             @click.stop="handleTocClick(ch.id)"
           >
-            <span class="toc-number">{{ index + 1 }}</span>
+            <!-- <span class="toc-number">{{ index + 1 }}</span> -->
             <span class="toc-title">{{ ch.title }}</span>
           </button>
+          <div style="margin: 0 8px; border: 1px solid rgba(0, 0, 0, 0.2)"></div>
         </li>
       </ul>
     </div>
@@ -145,7 +146,7 @@ function setRef(el: HTMLElement | null, chapterId: string) {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 14px 16px;
+  padding: 14px 8px;
   text-align: left;
   background: transparent;
   border: none;
@@ -187,8 +188,5 @@ function setRef(el: HTMLElement | null, chapterId: string) {
 
 .toc-title {
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 </style>
