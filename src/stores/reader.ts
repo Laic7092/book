@@ -47,7 +47,6 @@ export interface ReaderState {
   resourceUrls: Map<string, string> | undefined;
   readingProgress: number;
   chapterProgress: number;
-  loadedResources: Set<string>;
 }
 
 export const useReaderStore = defineStore("reader", {
@@ -60,7 +59,6 @@ export const useReaderStore = defineStore("reader", {
     resourceUrls: undefined,
     readingProgress: 0,
     chapterProgress: 0,
-    loadedResources: new Set(),
   }),
 
   getters: {
@@ -71,48 +69,7 @@ export const useReaderStore = defineStore("reader", {
 
   actions: {
     /**
-     * 简单的哈希函数用于生成资源ID
-     */
-    hashCode(str: string): string {
-      let hash = 0;
-      for (let i = 0; i < str.length; i++) {
-        const char = str.charCodeAt(i);
-        hash = (hash << 5) - hash + char;
-        hash = hash & hash; // Convert to 32bit integer
-      }
-      return Math.abs(hash).toString(36);
-    },
-
-    /**
-     * 清理之前加载的资源（样式、脚本）
-     */
-    cleanupResources() {
-      // 清理之前添加的 head 元素
-      const elementsToRemove = document.querySelectorAll("[data-reader-resource]");
-      elementsToRemove.forEach((el) => el.remove());
-      this.loadedResources.clear();
-    },
-
-    /**
-     * 加载资源到目标 document 中，避免重复
-     * @param targetDoc - 目标 document（如 iframe.contentDocument），默认为主 document
-     */
-    loadResourceToHead(resource: HTMLElement, resourceId: string, targetDoc?: Document) {
-      // 如果已经加载过，跳过
-      if (this.loadedResources.has(resourceId)) {
-        return;
-      }
-
-      const doc = targetDoc || document;
-
-      // 添加标记以便后续清理
-      resource.setAttribute("data-reader-resource", resourceId);
-      doc.head.appendChild(resource);
-      this.loadedResources.add(resourceId);
-    },
-
-    /**
-     * Load a book from file
+     * Load a book from file (parse and save to storage, but don't open)
      */
     async loadBook(file: File): Promise<{ book: Book; chapters: Chapter[] }> {
       assertValidBookFile(file);
@@ -134,9 +91,8 @@ export const useReaderStore = defineStore("reader", {
         // Save to storage
         await booksStore.saveBook(parsedBook);
 
-        this.currentBook = parsedBook.book;
-        this.chapters = parsedBook.chapters;
-
+        // Don't set currentBook here - just parse and save
+        // The book will be opened when user clicks on it
         return {
           book: parsedBook.book,
           chapters: parsedBook.chapters,
@@ -156,9 +112,6 @@ export const useReaderStore = defineStore("reader", {
       validateBookId(bookId);
       this.isLoading = true;
       this.error = null;
-
-      // 清理所有资源
-      this.cleanupResources();
 
       // Revoke previous blob URLs before loading new book
       if (this.resourceUrls) {
@@ -285,9 +238,6 @@ export const useReaderStore = defineStore("reader", {
         await statsStore.endSession(this.currentBook.id, chapterId);
       }
 
-      // 清理 head 中的资源
-      this.cleanupResources();
-
       // Revoke blob URLs to free memory
       if (this.resourceUrls) {
         resourcesStore.revokeResourceUrls(this.resourceUrls);
@@ -305,16 +255,11 @@ export const useReaderStore = defineStore("reader", {
      * Reset store to initial state
      */
     reset() {
-      // 清理 head 中的资源
-      this.cleanupResources();
-
       // Revoke blob URLs before resetting to prevent memory leak
       if (this.resourceUrls) {
         resourcesStore.revokeResourceUrls(this.resourceUrls);
       }
       this.$reset();
-      // 重置后重新初始化 loadedResources
-      this.loadedResources = new Set();
     },
 
     /**
@@ -350,9 +295,6 @@ export const useReaderStore = defineStore("reader", {
       if (!content) {
         return null;
       }
-
-      // 清理之前章节的资源
-      this.cleanupResources();
 
       // Rewrite resource URLs if available
       if (this.resourceUrls && this.resourceUrls.size > 0) {

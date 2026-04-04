@@ -34,7 +34,6 @@ async function handleFileUpload(e: Event) {
     const result = await bookshelfStore.addBookFromFile(file);
     const toast = formatBookToast(result.book.title, "added to library");
     uiStore.triggerToastWithTitle(toast.title, toast.message);
-    emit("book:select", result.book);
   } catch (err) {
     console.error("Failed to add book:", err);
     uiStore.triggerToast("Failed to load book. Please try again.", true);

@@ -501,7 +501,6 @@ watch(
 
 // Lifecycle
 onMounted(async () => {
-  await readerStore.openBook(props.book.id);
   await bookmarksStore.loadBookmarks(props.book.id);
   updateThemeClass();
 
