@@ -1,19 +1,15 @@
 <script setup lang="ts">
-import { computed } from "vue";
 import Bookshelf from "./components/Bookshelf.vue";
 import ReaderView from "./components/ReaderView.vue";
 import { useReaderStore } from "./stores/reader";
 import { useUIStore } from "./stores/ui";
-import type { Book } from "./core/types";
 import { useSettingsStore } from "./stores/settings";
+import type { Book } from "./core/types";
 
 const readerStore = useReaderStore();
 const uiStore = useUIStore();
 const settingsStore = useSettingsStore();
 settingsStore.init();
-
-const currentBook = computed(() => readerStore.currentBook);
-const isTransitioning = computed(() => uiStore.isTransitioning);
 
 async function handleBookSelect(book: Book) {
   uiStore.setTransitioning(true);
@@ -39,10 +35,10 @@ async function handleCloseReader() {
 </script>
 
 <template>
-  <div class="app" :class="{ transitioning: isTransitioning }">
+  <div class="app" :class="{ transitioning: uiStore.isTransitioning }">
     <Transition name="page" mode="out-in">
-      <Bookshelf v-if="!currentBook" @book:select="handleBookSelect" />
-      <ReaderView v-else :book="currentBook" @close="handleCloseReader" />
+      <Bookshelf v-if="!readerStore.currentBook" @book:select="handleBookSelect" />
+      <ReaderView v-else :book="readerStore.currentBook" @close="handleCloseReader" />
     </Transition>
   </div>
 </template>

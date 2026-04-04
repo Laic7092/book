@@ -60,33 +60,21 @@ const articleEl = computed(() => readerContentRef.value?.articleRef ?? null);
 const stats = ref<BookReadingStats | null>(null);
 const isTransitioning = ref(false);
 
-// Store computed refs
-const chapters = computed(() => readerStore.chapters);
-const currentChapterId = computed(() => readerStore.currentChapter?.id || null);
-const bookmarks = computed(() => bookmarksStore.bookmarks);
-const settings = computed(() => settingsStore.settings);
-const currentChapterTitle = computed(() => readerStore.currentChapter?.title || "");
-const showControls = computed({
-  get: () => uiStore.showControls,
-  set: (val) => uiStore.setControls(val),
-});
-const activeModal = computed({
-  get: () => uiStore.activeModal,
-  set: (val) => {
-    if (val) uiStore.openModal(val as any);
-    else uiStore.closeModal();
-  },
-});
-
 const openModal = (modal: string) => {
   uiStore.openModal(modal as any);
 };
 
+const closeModal = () => {
+  uiStore.closeModal();
+};
+
 const currentChapterIndex = computed(() => {
-  return chapters.value.findIndex((c) => c.id === currentChapterId.value);
+  return readerStore.chapters.findIndex((c) => c.id === readerStore.currentChapter?.id);
 });
 
-const isPaginationMode = computed(() => (settings.value.scrollMode || "vertical") === "pagination");
+const isPaginationMode = computed(
+  () => (settingsStore.settings.scrollMode || "vertical") === "pagination",
+);
 
 // 章节进度：分页模式自动计算，滚动模式从 store 读取
 const chapterProgress = computed(() => {
@@ -100,7 +88,7 @@ const chapterProgress = computed(() => {
 
 // 阅读进度：自动计算
 const readingProgress = computed(() => {
-  const total = chapters.value.length;
+  const total = readerStore.chapters.length;
   if (total <= 1) return chapterProgress.value;
 
   const current = currentChapterIndex.value;
@@ -110,7 +98,7 @@ const readingProgress = computed(() => {
 
 // 全书进度：结合章节位置和章节内进度
 const totalBookProgress = computed(() => {
-  const total = chapters.value.length;
+  const total = readerStore.chapters.length;
   if (total <= 1) return Math.max(1, Math.round(chapterProgress.value));
 
   const current = currentChapterIndex.value;
@@ -120,7 +108,7 @@ const totalBookProgress = computed(() => {
 });
 
 // Initialize composables
-const pagination = usePagination(articleEl, props.book.id, chapters);
+const pagination = usePagination(articleEl, props.book.id, readerStore.$state.chapters);
 
 // Display content for pagination mode
 const displayContent = computed(() => {
@@ -131,12 +119,12 @@ const displayContent = computed(() => {
 });
 const chapterLoader = useChapterLoader(
   computed(() => props.book.id),
-  chapters,
+  readerStore.$state,
   currentChapterIndex,
 );
 const search = useReaderSearch({
   bookId: computed(() => props.book.id),
-  chapters,
+  chapters: computed(() => readerStore.chapters),
   isPaginationMode,
   loadedChapters: computed(
     () => new Set(chapterLoader.allLoadedContent.value.map((c) => c.chapterId)),
@@ -148,8 +136,8 @@ const scrollManager = useScrollManager({
   isPaginationMode,
   onProgressUpdate: (reading, chapter) => readerStore.updateProgress(reading, chapter),
   onChapterChange: async (chapterId) => {
-    const chapter = chapters.value.find((c) => c.id === chapterId);
-    if (chapter && chapter.id !== currentChapterId.value) {
+    const chapter = readerStore.chapters.find((c) => c.id === chapterId);
+    if (chapter && chapter.id !== readerStore.currentChapter?.id) {
       readerStore.currentChapter = chapter;
       readerStore.chapterProgress = 0;
     }
@@ -177,10 +165,10 @@ const gestures = useReaderGestures({
 // Chapter navigation
 const handleSelectChapter = async (chapterId: string, targetPage: number = 0) => {
   isTransitioning.value = true;
-  const wasShowingControls = showControls.value;
+  const wasShowingControls = uiStore.showControls;
   try {
     await readerStore.goToChapter(chapterId);
-    activeModal.value = null;
+    closeModal();
 
     if (isPaginationMode.value) {
       const html = (await readerStore.getCurrentChapterContent()) || "";
@@ -192,11 +180,11 @@ const handleSelectChapter = async (chapterId: string, targetPage: number = 0) =>
 
     setTimeout(() => {
       isTransitioning.value = false;
-      showControls.value = wasShowingControls;
+      uiStore.showControls = wasShowingControls;
     }, 50);
   } catch {
     isTransitioning.value = false;
-    showControls.value = wasShowingControls;
+    uiStore.showControls = wasShowingControls;
   }
 };
 
@@ -212,14 +200,14 @@ async function nextPage() {
     const movedToNext = pagination.nextPage();
     if (!movedToNext) {
       const currentIndex = currentChapterIndex.value;
-      if (currentIndex < chapters.value.length - 1) {
-        await handleSelectChapter(chapters.value[currentIndex + 1].id, 0);
+      if (currentIndex < readerStore.chapters.length - 1) {
+        await handleSelectChapter(readerStore.chapters[currentIndex + 1].id, 0);
       }
     }
   } else {
     const currentIndex = currentChapterIndex.value;
-    if (currentIndex < chapters.value.length - 1) {
-      await handleSelectChapter(chapters.value[currentIndex + 1].id);
+    if (currentIndex < readerStore.chapters.length - 1) {
+      await handleSelectChapter(readerStore.chapters[currentIndex + 1].id);
     }
   }
 }
@@ -233,13 +221,13 @@ async function prevPage() {
     } else {
       const currentIndex = currentChapterIndex.value;
       if (currentIndex > 0) {
-        await handleSelectChapter(chapters.value[currentIndex - 1].id, -1);
+        await handleSelectChapter(readerStore.chapters[currentIndex - 1].id, -1);
       }
     }
   } else {
     const currentIndex = currentChapterIndex.value;
     if (currentIndex > 0) {
-      await handleSelectChapter(chapters.value[currentIndex - 1].id);
+      await handleSelectChapter(readerStore.chapters[currentIndex - 1].id);
     }
   }
 }
@@ -346,15 +334,15 @@ const navigateToBookmark = async (bookmark: Bookmark) => {
   const parsed = parseCfi(bookmark.cfi);
   if (!parsed) return;
 
-  const targetChapter = chapters.value.find((c) => c.order === parsed.spineIndex);
+  const targetChapter = readerStore.chapters.find((c) => c.order === parsed.spineIndex);
   if (!targetChapter) {
-    const fallbackChapter = chapters.value.find((c) => c.id === bookmark.chapterId);
+    const fallbackChapter = readerStore.chapters.find((c) => c.id === bookmark.chapterId);
     if (!fallbackChapter) return;
     await handleSelectChapter(fallbackChapter.id);
     return;
   }
 
-  if (targetChapter.id !== currentChapterId.value) {
+  if (targetChapter.id !== readerStore.currentChapter?.id) {
     await handleSelectChapter(targetChapter.id);
     await nextTick();
   }
@@ -370,7 +358,7 @@ const navigateToBookmark = async (bookmark: Bookmark) => {
 
     if (!target) {
       pagination.goToPage(0);
-      activeModal.value = null;
+      closeModal();
       return;
     }
 
@@ -385,7 +373,7 @@ const navigateToBookmark = async (bookmark: Bookmark) => {
         const pageEnd = textAccum + pageText.length;
         if (charOffset >= textAccum && charOffset < pageEnd) {
           pagination.goToPage(page.index);
-          activeModal.value = null;
+          closeModal();
           return;
         }
         textAccum += pageText.length;
@@ -393,12 +381,12 @@ const navigateToBookmark = async (bookmark: Bookmark) => {
     }
 
     pagination.goToPage(0);
-    activeModal.value = null;
+    closeModal();
   } else {
     if (!articleEl.value) return;
     const success = navigateToCfi(bookmark.cfi, articleEl.value);
     if (success) {
-      activeModal.value = null;
+      closeModal();
     }
   }
 };
@@ -435,25 +423,24 @@ function buildPathFromSteps(steps: CfiStep[]): string {
   return steps.length > 0 ? `/${steps.map((s) => s.index).join("/")}` : "";
 }
 
-const closeModal = () => {
-  uiStore.closeModal();
-};
-
 const updateCSSVariables = () => {
   const el = articleEl.value;
   if (el) {
-    el.style.setProperty("--paragraph-spacing", String(settings.value.paragraphSpacing || 1.2));
+    el.style.setProperty(
+      "--paragraph-spacing",
+      String(settingsStore.settings.paragraphSpacing || 1.2),
+    );
   }
 };
 
 const updateThemeClass = () => {
   document.documentElement.classList.remove("theme-light", "theme-dark", "theme-sepia");
-  document.documentElement.classList.add(`theme-${settings.value.theme}`);
+  document.documentElement.classList.add(`theme-${settingsStore.settings.theme}`);
 };
 
 // Load stats when stats modal opens
 watch(
-  () => activeModal.value,
+  () => uiStore.activeModal,
   async (newVal) => {
     if (newVal === "stats") {
       stats.value = await readerStore.getReadingStats(props.book.id);
@@ -463,9 +450,9 @@ watch(
 
 // Watch for scroll mode changes
 watch(
-  () => settings.value.scrollMode,
+  () => settingsStore.settings.scrollMode,
   async (newMode) => {
-    if (newMode === "vertical" && chapters.value.length > 0) {
+    if (newMode === "vertical" && readerStore.chapters.length > 0) {
       await chapterLoader.loadCurrentAndAdjacent(2);
     } else if (newMode === "pagination" && readerStore.currentChapter) {
       const html = (await readerStore.getCurrentChapterContent()) || "";
@@ -476,7 +463,7 @@ watch(
 
 // Watch for theme changes
 watch(
-  () => settings.value.theme,
+  () => settingsStore.settings.theme,
   () => {
     updateThemeClass();
   },
@@ -484,16 +471,20 @@ watch(
 
 const reRenderContent = async () => {
   if (!isPaginationMode.value) return;
-  if (currentChapterId.value) {
+  if (readerStore.currentChapter) {
     const html = (await readerStore.getCurrentChapterContent()) || "";
     pagination.clearCache();
-    await pagination.paginate(currentChapterId.value, html);
+    await pagination.paginate(readerStore.currentChapter.id, html);
   }
 };
 
 // Watch for settings changes that affect pagination
 watch(
-  () => [settings.value.margin, settings.value.fontSize, settings.value.lineHeight],
+  () => [
+    settingsStore.settings.margin,
+    settingsStore.settings.fontSize,
+    settingsStore.settings.lineHeight,
+  ],
   reRenderContent,
 );
 
@@ -507,7 +498,7 @@ onMounted(async () => {
   updateThemeClass();
   updateCSSVariables();
 
-  uiStore.setControls(true);
+  uiStore.showControls = true;
 
   if (isPaginationMode.value && readerStore.currentChapter) {
     const html = (await readerStore.getCurrentChapterContent()) || "";
@@ -538,8 +529,8 @@ onUnmounted(() => {
     <!-- Header -->
     <ReaderHeader
       :book-title="book.title"
-      :chapter-title="currentChapterTitle"
-      :show-controls="showControls"
+      :chapter-title="readerStore.currentChapter?.title"
+      :show-controls="uiStore.showControls"
       @close="emit('close')"
       @open-settings="openModal('settings')"
     />
@@ -551,7 +542,7 @@ onUnmounted(() => {
     <ReaderContent
       ref="readerContentRef"
       :content="displayContent"
-      :settings="settings"
+      :settings="settingsStore.settings"
       :is-pagination-mode="isPaginationMode"
       :current-page="pagination.currentPage.value"
       :loaded-chapters="chapterLoader.allLoadedContent.value"
@@ -562,7 +553,7 @@ onUnmounted(() => {
 
     <!-- Footer -->
     <ReaderFooter
-      :show-controls="showControls"
+      :show-controls="uiStore.showControls"
       :has-highlights="search.hasHighlights.value"
       :search-results="search.searchResults.value"
       :current-result-index="search.currentResultIndex.value"
@@ -571,13 +562,13 @@ onUnmounted(() => {
       :pages-count="pagination.totalPages.value"
       :reading-progress="readingProgress"
       :book-progress="totalBookProgress"
-      :current-chapter-title="currentChapterTitle"
+      :current-chapter-title="readerStore.currentChapter?.title || ''"
       :can-prev="currentChapterIndex > 0"
-      :can-next="currentChapterIndex < chapters.length - 1"
+      :can-next="currentChapterIndex < readerStore.chapters.length - 1"
       @prev-page="prevPage"
       @next-page="nextPage"
-      @prev-chapter="handleSelectChapter(chapters[currentChapterIndex - 1]?.id)"
-      @next-chapter="handleSelectChapter(chapters[currentChapterIndex + 1]?.id)"
+      @prev-chapter="handleSelectChapter(readerStore.chapters[currentChapterIndex - 1]?.id)"
+      @next-chapter="handleSelectChapter(readerStore.chapters[currentChapterIndex + 1]?.id)"
       @open-modal="openModal"
       @go-to-next-match="goToNextMatch"
       @go-to-previous-match="goToPreviousMatch"
@@ -588,21 +579,21 @@ onUnmounted(() => {
     <PageIndicator
       :current-page="pagination.currentPage.value"
       :total-pages="pagination.totalPages.value"
-      :show="showControls && isPaginationMode"
+      :show="uiStore.showControls && isPaginationMode"
     />
 
     <!-- Modal Wrapper -->
     <ModalWrapper
-      :modal-type="activeModal"
-      :chapters="chapters"
-      :current-chapter-id="currentChapterId"
-      :bookmarks="bookmarks"
+      :modal-type="uiStore.activeModal"
+      :chapters="readerStore.chapters"
+      :current-chapter-id="readerStore.currentChapter?.id ?? null"
+      :bookmarks="bookmarksStore.bookmarks"
       :search-results="search.searchResults.value"
       :search-query="search.searchQuery.value"
-      :settings="settings"
+      :settings="settingsStore.settings"
       :has-highlights="search.hasHighlights.value"
       :stats="stats"
-      :total-chapters="chapters.length"
+      :total-chapters="readerStore.chapters.length"
       @close="closeModal"
       @select-chapter="handleSelectChapter"
       @navigate-bookmark="navigateToBookmark"

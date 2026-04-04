@@ -40,10 +40,6 @@ export const useBookshelfStore = defineStore("bookshelf", {
           (book.author && book.author.toLowerCase().includes(query)),
       );
     },
-
-    booksCount: (state) => {
-      return state.books.length;
-    },
   },
 
   actions: {

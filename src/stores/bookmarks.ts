@@ -16,10 +16,7 @@ export const useBookmarksStore = defineStore("bookmarks", {
     bookmarks: [],
   }),
 
-  getters: {
-    hasBookmarks: (state) => state.bookmarks.length > 0,
-    bookmarkCount: (state) => state.bookmarks.length,
-  },
+  getters: {},
 
   actions: {
     async loadBookmarks(bookId: string): Promise<Bookmark[]> {

@@ -19,7 +19,7 @@ export interface Chapter {
 export function usePagination(
   containerRef: Ref<HTMLElement | null>,
   bookId: string,
-  _chapters: Chapter[],
+  chapters: Chapter[],
 ) {
   const currentPage = ref(0);
   const totalPages = ref(1);
@@ -189,7 +189,7 @@ export function usePagination(
       html = htmlOrTargetPage;
       targetPage = maybeTargetPage;
     } else if (typeof htmlOrTargetPage === "number") {
-      const chapter = _chapters.find((c) => c.id === chapterId);
+      const chapter = chapters.find((c) => c.id === chapterId);
       if (!chapter || !("html" in chapter)) {
         isPaginating.value = false;
         isReady.value = true;
@@ -198,7 +198,7 @@ export function usePagination(
       html = (chapter as any).html;
       targetPage = htmlOrTargetPage;
     } else {
-      const chapter = _chapters.find((c) => c.id === chapterId);
+      const chapter = chapters.find((c) => c.id === chapterId);
       if (!chapter || !("html" in chapter)) {
         isPaginating.value = false;
         isReady.value = true;

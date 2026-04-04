@@ -15,19 +15,6 @@ const emit = defineEmits<{
 const bookshelfStore = useBookshelfStore();
 const uiStore = useUIStore();
 
-// Store state
-const books = computed(() => bookshelfStore.books);
-const isLoading = computed(() => bookshelfStore.isLoading);
-const isUploading = computed(() => bookshelfStore.isUploading);
-const showToast = computed(() => uiStore.triggerToast);
-const toastMessage = computed(() => uiStore.toastMessage);
-const showConfirm = computed(() => uiStore.showConfirm);
-const searchQuery = computed({
-  get: () => bookshelfStore.searchQuery,
-  set: (val) => bookshelfStore.setSearchQuery(val),
-});
-const summaryStats = computed(() => bookshelfStore.summaryStats);
-
 // Local state
 const searchFocused = ref(false);
 
@@ -63,7 +50,7 @@ function confirmDelete(bookId: string, e: Event) {
 }
 
 async function deleteBook(bookId: string) {
-  const book = books.value.find((b) => b.id === bookId);
+  const book = bookshelfStore.books.find((b) => b.id === bookId);
   await bookshelfStore.deleteBook(bookId);
   emit("book:delete", bookId);
   if (book) {
@@ -75,13 +62,10 @@ function selectBook(book: Book) {
   emit("book:select", book);
 }
 
-// Filter books by search query (using store's computed)
-const filteredBooks = computed(() => bookshelfStore.filteredBooks);
-
 // Cached computations for book cover rendering
 const bookGradients = computed(() => {
   const map = new Map<string, string>();
-  for (const book of books.value) {
+  for (const book of bookshelfStore.books) {
     map.set(book.id, getBookGradient(book.title));
   }
   return map;
@@ -89,7 +73,7 @@ const bookGradients = computed(() => {
 
 const bookInitials = computed(() => {
   const map = new Map<string, string>();
-  for (const book of books.value) {
+  for (const book of bookshelfStore.books) {
     map.set(book.id, getInitial(book.title));
   }
   return map;
@@ -107,22 +91,30 @@ onMounted(() => {
       <div class="header-content">
         <h1 class="bookshelf-title">Library</h1>
         <p class="bookshelf-subtitle">
-          {{ books.length }} {{ books.length === 1 ? "volume" : "volumes" }}
+          {{ bookshelfStore.books.length }}
+          {{ bookshelfStore.books.length === 1 ? "volume" : "volumes" }}
         </p>
         <!-- Summary Stats -->
-        <div v-if="summaryStats && summaryStats.totalBooks > 0" class="summary-stats">
+        <div
+          v-if="bookshelfStore.summaryStats && bookshelfStore.summaryStats.totalBooks > 0"
+          class="summary-stats"
+        >
           <div class="stat-item">
-            <span class="stat-value">{{ formatDuration(summaryStats.totalReadingTime) }}</span>
+            <span class="stat-value">{{
+              formatDuration(bookshelfStore.summaryStats.totalReadingTime)
+            }}</span>
             <span class="stat-label">Total Reading</span>
           </div>
           <div class="stat-divider"></div>
           <div class="stat-item">
-            <span class="stat-value">{{ summaryStats.booksInProgress }}</span>
+            <span class="stat-value">{{ bookshelfStore.summaryStats.booksInProgress }}</span>
             <span class="stat-label">In Progress</span>
           </div>
           <div class="stat-divider"></div>
           <div class="stat-item">
-            <span class="stat-value">{{ formatDuration(summaryStats.thisWeekReadingTime) }}</span>
+            <span class="stat-value">{{
+              formatDuration(bookshelfStore.summaryStats.thisWeekReadingTime)
+            }}</span>
             <span class="stat-label">This Week</span>
           </div>
         </div>
@@ -166,7 +158,7 @@ onMounted(() => {
             </svg>
           </button>
         </div>
-        <label class="add-btn" :class="{ uploading: isUploading }">
+        <label class="add-btn" :class="{ uploading: bookshelfStore.isUploading }">
           <svg
             width="18"
             height="18"
@@ -177,20 +169,20 @@ onMounted(() => {
           >
             <path d="M12 5v14M5 12h14" />
           </svg>
-          <span class="add-text">{{ isUploading ? "Adding..." : "Add Book" }}</span>
+          <span class="add-text">{{ bookshelfStore.isUploading ? "Adding..." : "Add Book" }}</span>
           <input
             type="file"
             accept=".txt,.epub"
             @change="handleFileUpload"
             hidden
-            :disabled="isUploading"
+            :disabled="bookshelfStore.isUploading"
           />
         </label>
       </div>
     </header>
 
     <!-- Loading State -->
-    <div v-if="isLoading" class="loading-grid">
+    <div v-if="bookshelfStore.isLoading" class="loading-grid">
       <div v-for="i in 6" :key="i" class="book-card-skeleton">
         <div class="cover-skeleton skeleton"></div>
         <div class="info-skeleton">
@@ -201,13 +193,13 @@ onMounted(() => {
     </div>
 
     <!-- Upload Loading -->
-    <div v-else-if="isUploading" class="uploading-state">
+    <div v-else-if="bookshelfStore.isUploading" class="uploading-state">
       <div class="upload-spinner"></div>
       <p>Adding volume to library...</p>
     </div>
 
     <!-- Empty State -->
-    <div v-else-if="books.length === 0" class="empty-state">
+    <div v-else-if="bookshelfStore.books.length === 0" class="empty-state">
       <div class="empty-illustration">
         <div class="empty-book-icon">
           <svg
@@ -248,9 +240,9 @@ onMounted(() => {
     </div>
 
     <!-- Book Grid -->
-    <div v-else-if="filteredBooks.length > 0" class="book-grid">
+    <div v-else-if="bookshelfStore.filteredBooks.length > 0" class="book-grid">
       <div
-        v-for="(book, idx) in filteredBooks"
+        v-for="(book, idx) in bookshelfStore.filteredBooks"
         :key="book.id"
         class="book-card"
         :style="{ '--cover-gradient': bookGradients.get(book.id) }"
@@ -299,7 +291,11 @@ onMounted(() => {
 
     <!-- No search results -->
     <div
-      v-if="books.length > 0 && filteredBooks.length === 0 && bookshelfStore.searchQuery"
+      v-if="
+        bookshelfStore.books.length > 0 &&
+        bookshelfStore.filteredBooks.length === 0 &&
+        bookshelfStore.searchQuery
+      "
       class="no-results"
     >
       <p>No volumes found matching "{{ bookshelfStore.searchQuery }}"</p>
@@ -308,20 +304,24 @@ onMounted(() => {
     <!-- Toast Notification -->
     <transition name="toast">
       <div
-        v-if="showToast"
+        v-if="uiStore.showToast"
         class="toast"
-        :class="{ 'toast-error': toastMessage.includes('Failed') }"
+        :class="{ 'toast-error': uiStore.toastMessage.includes('Failed') }"
       >
         <span class="toast-icon" aria-hidden="true">
-          {{ toastMessage.includes("Failed") ? "!" : "✓" }}
+          {{ uiStore.toastMessage.includes("Failed") ? "!" : "✓" }}
         </span>
-        <span class="toast-message">{{ toastMessage }}</span>
+        <span class="toast-message">{{ uiStore.toastMessage }}</span>
       </div>
     </transition>
 
     <!-- Confirm Dialog -->
     <transition name="fade">
-      <div v-if="showConfirm" class="confirm-dialog" @click.self="uiStore.cancelConfirmation()">
+      <div
+        v-if="uiStore.showConfirm"
+        class="confirm-dialog"
+        @click.self="uiStore.cancelConfirmation()"
+      >
         <div class="confirm-content">
           <h3 class="confirm-title">{{ uiStore.confirmTitle }}</h3>
           <p class="confirm-message">{{ uiStore.confirmMessage }}</p>
