@@ -102,9 +102,61 @@ body {
   --bg-elevated: #ebe5d5;
 }
 
-img,
-image {
-  width: 100%;
+/* ===== Responsive media element styles ===== */
+
+/* Images - responsive with aspect ratio preservation */
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  object-fit: contain;
+  margin: 0.5em auto;
+}
+
+/* SVG elements - responsive with aspect ratio preservation */
+svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0.5em auto;
+}
+
+/* SVG internal image elements */
+svg image {
+  max-width: 100%;
+  height: auto;
+  display: inline; /* SVG image elements should stay inline */
+  margin: 0;
+}
+
+/* Figure container - center and limit width */
+figure {
+  max-width: 100%;
+  margin: 1em auto;
+  text-align: center;
+}
+
+/* Figure caption styling */
+figcaption {
+  font-size: 0.9em;
+  color: var(--text-secondary);
+  margin-top: 0.5em;
+  text-align: center;
+}
+
+/* Video elements - responsive */
+video {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0.5em auto;
+}
+
+/* Audio elements - responsive */
+audio {
+  max-width: 100%;
+  display: block;
+  margin: 0.5em auto;
 }
 
 /* ===== Native-like experience ===== */

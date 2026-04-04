@@ -47,6 +47,7 @@ export function extractTextFromHtml(html: string): string {
  * Clean HTML content for reading
  * - Removes scripts, styles
  * - Normalizes whitespace
+ * - Removes fixed width/height from media elements for responsive display
  */
 export function cleanHtml(html: string): string {
   const temp = document.createElement("div");
@@ -55,6 +56,54 @@ export function cleanHtml(html: string): string {
   // Remove script and style elements
   const scripts = temp.querySelectorAll("script, style, noscript");
   scripts.forEach((el) => el.remove());
+
+  // Remove fixed width/height attributes from media elements
+  const mediaElements = temp.querySelectorAll("img, svg, image, video, figure");
+  mediaElements.forEach((el) => {
+    // For SVG elements, preserve viewBox or create from width/height before removal
+    if (el.tagName.toLowerCase() === "svg") {
+      if (!el.getAttribute("viewBox")) {
+        const width = el.getAttribute("width");
+        const height = el.getAttribute("height");
+        if (width && height) {
+          // Parse numeric values (remove units like 'px')
+          const widthNum = parseFloat(width);
+          const heightNum = parseFloat(height);
+          if (!isNaN(widthNum) && !isNaN(heightNum)) {
+            el.setAttribute("viewBox", `0 0 ${widthNum} ${heightNum}`);
+          }
+        }
+      }
+    }
+
+    // Remove width and height attributes
+    el.removeAttribute("width");
+    el.removeAttribute("height");
+
+    // Remove inline style width/height if present
+    const style = el.getAttribute("style");
+    if (style) {
+      const cleanedStyle = style
+        .split(";")
+        .filter((prop) => {
+          const trimmed = prop.trim().toLowerCase();
+          return (
+            !trimmed.startsWith("width:") &&
+            !trimmed.startsWith("height:") &&
+            !trimmed.startsWith("max-width:") &&
+            !trimmed.startsWith("max-height:")
+          );
+        })
+        .join(";")
+        .trim();
+
+      if (cleanedStyle) {
+        el.setAttribute("style", cleanedStyle);
+      } else {
+        el.removeAttribute("style");
+      }
+    }
+  });
 
   // Normalize whitespace in text nodes
   const walker = document.createTreeWalker(temp, NodeFilter.SHOW_TEXT, null);

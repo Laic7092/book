@@ -138,6 +138,69 @@ defineExpose({ articleRef });
   break-inside: avoid;
 }
 
+/* ===== Responsive media elements - override inline styles ===== */
+
+/* Images - force responsive with !important to override inline styles */
+.reader-content :deep(img) {
+  max-width: 100% !important;
+  height: auto !important;
+  width: auto !important;
+  object-fit: contain;
+  display: block;
+  margin: 0.5em auto;
+  -webkit-user-drag: none;
+  user-drag: none;
+}
+
+/* SVG elements - force responsive */
+.reader-content :deep(svg) {
+  max-width: 100% !important;
+  height: auto !important;
+  width: auto !important;
+  display: block;
+  margin: 0.5em auto;
+}
+
+/* SVG internal image elements */
+.reader-content :deep(svg image) {
+  max-width: 100% !important;
+  height: auto !important;
+  width: auto !important;
+  display: inline;
+  margin: 0;
+}
+
+/* Figure container */
+.reader-content :deep(figure) {
+  max-width: 100% !important;
+  margin: 1em auto;
+  text-align: center;
+}
+
+/* Figure caption */
+.reader-content :deep(figcaption) {
+  font-size: 0.9em;
+  color: var(--text-secondary);
+  margin-top: 0.5em;
+  text-align: center;
+}
+
+/* Video elements */
+.reader-content :deep(video) {
+  max-width: 100% !important;
+  height: auto !important;
+  width: auto !important;
+  display: block;
+  margin: 0.5em auto;
+}
+
+/* Audio elements */
+.reader-content :deep(audio) {
+  max-width: 100% !important;
+  display: block;
+  margin: 0.5em auto;
+}
+
 .reader-view::-webkit-scrollbar {
   width: 7px;
 }
