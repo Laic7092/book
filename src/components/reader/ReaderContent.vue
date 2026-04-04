@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, computed, nextTick } from "vue";
+import { ref, onMounted, onUnmounted, watch, nextTick, computed } from "vue";
 import type { ReaderSettings } from "../../core/types";
+import { useIframeRenderer } from "../../composables/useIframeRenderer";
 
 const props = defineProps<{
   content: string;
@@ -8,22 +9,74 @@ const props = defineProps<{
   isPaginationMode: boolean;
   currentPage?: number;
   loadedChapters?: Array<{ chapterId: string; title: string; content: string }>;
+  epubResources?: HTMLElement[];
 }>();
 
 const emit = defineEmits<{
   (e: "resize"): void;
+  (e: "gesture-tap", x: number, y: number): void;
+  (e: "gesture-swipe-left"): void;
+  (e: "gesture-swipe-right"): void;
 }>();
 
 const containerRef = ref<HTMLElement | null>(null);
-const articleRef = ref<HTMLElement | null>(null);
+const iframeRef = ref<HTMLIFrameElement | null>(null);
+
+// Iframe 渲染器（集成手势处理）
+const rendererOptions = computed(() => ({
+  settings: props.settings,
+  isPaginationMode: props.isPaginationMode,
+}));
+
+// 手势处理回调
+const gestureHandlers = {
+  onTap: (x: number, y: number) => {
+    emit("gesture-tap", x, y);
+  },
+  onSwipeLeft: () => {
+    emit("gesture-swipe-left");
+  },
+  onSwipeRight: () => {
+    emit("gesture-swipe-right");
+  },
+};
+
+const {
+  isReady,
+  initIframe,
+  updateContent,
+  updateStyles,
+  updateEpubResources,
+  clearEpubResources,
+  getArticle,
+  cleanup,
+} = useIframeRenderer(iframeRef, rendererOptions, gestureHandlers);
+
 let resizeObserver: ResizeObserver | null = null;
 
 function emitResize() {
   emit("resize");
 }
 
+// 初始化 iframe
 onMounted(() => {
   nextTick(() => {
+    if (iframeRef.value) {
+      initIframe();
+      // 加载内容
+      if (props.isPaginationMode) {
+        updateContent(props.content);
+      } else if (props.loadedChapters) {
+        const combinedContent = props.loadedChapters
+          .map(
+            (ch) =>
+              `<div data-chapter-id="${ch.chapterId}" class="chapter-container">${ch.content}</div>`,
+          )
+          .join("");
+        updateContent(combinedContent);
+      }
+    }
+
     if (containerRef.value) {
       resizeObserver = new ResizeObserver(emitResize);
       resizeObserver.observe(containerRef.value);
@@ -31,57 +84,95 @@ onMounted(() => {
   });
 });
 
+// 监听内容变化
+watch(
+  () => props.content,
+  (newContent) => {
+    if (props.isPaginationMode && isReady.value) {
+      updateContent(newContent);
+    }
+  },
+);
+
+// 监听章节变化
+watch(
+  () => props.loadedChapters,
+  (newChapters) => {
+    if (!props.isPaginationMode && newChapters && isReady.value) {
+      const combinedContent = newChapters
+        .map(
+          (ch) =>
+            `<div data-chapter-id="${ch.chapterId}" class="chapter-container">${ch.content}</div>`,
+        )
+        .join("");
+      updateContent(combinedContent);
+    }
+  },
+  { deep: true },
+);
+
+// 监听排版设置变化
+watch(
+  () => [
+    props.settings.fontSize,
+    props.settings.fontFamily,
+    props.settings.lineHeight,
+    props.settings.letterSpacing,
+    props.settings.textAlign,
+    props.settings.paragraphSpacing,
+    props.settings.customTypography,
+  ],
+  () => {
+    if (isReady.value) {
+      updateStyles();
+    }
+  },
+);
+
+// 监听主题变化
+watch(
+  () => [props.settings.theme, props.settings.contrast],
+  () => {
+    if (isReady.value) {
+      updateStyles();
+    }
+  },
+);
+
+// 监听 EPUB 资源变化
+watch(
+  () => props.epubResources,
+  (newResources) => {
+    if (isReady.value && newResources) {
+      updateEpubResources(newResources);
+    }
+  },
+  { deep: true },
+);
+
 onUnmounted(() => {
   if (resizeObserver) {
     resizeObserver.disconnect();
     resizeObserver = null;
   }
+  clearEpubResources();
+  cleanup();
 });
 
-const contentStyle = computed(() => {
-  const useCustom = props.settings.customTypography ?? false;
-  return {
-    fontSize: `${props.settings.fontSize}px`,
-    ...(useCustom ? { fontFamily: props.settings.fontFamily } : {}),
-    ...(useCustom ? { lineHeight: String(props.settings.lineHeight) } : {}),
-    ...(useCustom ? { letterSpacing: `${props.settings.letterSpacing || 0}em` } : {}),
-    ...(useCustom ? { textAlign: props.settings.textAlign || "left" } : {}),
-    height: props.isPaginationMode ? "100%" : "auto",
-  };
-});
-
-defineExpose({ articleRef });
+defineExpose({ iframeRef, getArticle });
 </script>
 
 <template>
-  <main
-    class="reader-view"
-    :class="{ 'pagination-mode': isPaginationMode }"
-    ref="containerRef"
-    :style="{
-      padding: `${(settings.customTypography ?? false) ? props.settings.margin : 24}px`,
-    }"
-  >
-    <!-- Pagination Mode: Pre-calculated single page -->
-    <article
-      v-if="isPaginationMode"
-      ref="articleRef"
-      class="reader-content"
-      :style="contentStyle"
-      v-html="content"
-    ></article>
-
-    <!-- Vertical Scroll Mode -->
-    <article v-else class="reader-content vertical-content" :style="contentStyle">
-      <div
-        v-for="chapter in loadedChapters"
-        :key="chapter.chapterId"
-        :data-chapter-id="chapter.chapterId"
-        class="chapter-container"
-      >
-        <div v-html="chapter.content"></div>
-      </div>
-    </article>
+  <main class="reader-view" :class="{ 'pagination-mode': isPaginationMode }" ref="containerRef">
+    <!-- Iframe 渲染容器 -->
+    <iframe
+      ref="iframeRef"
+      class="reader-iframe"
+      :class="{ 'pagination-mode': isPaginationMode }"
+      sandbox="allow-same-origin allow-scripts"
+      frameborder="0"
+      scrolling="no"
+    ></iframe>
   </main>
 </template>
 
@@ -103,124 +194,9 @@ defineExpose({ articleRef });
   overflow: hidden;
 }
 
-.reader-content {
-  min-height: 100%;
-  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  opacity: 1;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-  hyphens: auto;
-  -webkit-hyphens: auto;
-}
-
-.vertical-content {
-  padding-bottom: 40vh;
-}
-
-:deep(.reader-content) .chapter-heading {
-  margin-bottom: 1em;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.reader-content.transitioning {
-  opacity: 0;
-  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.reader-content :deep(p) {
-  margin-bottom: calc(var(--paragraph-spacing, 1.2) * 1em);
-  text-rendering: optimizeLegibility;
-}
-
-.reader-content :deep(h1),
-.reader-content :deep(h2),
-.reader-content :deep(h3),
-.reader-content :deep(h4),
-.reader-content :deep(h5),
-.reader-content :deep(h6) {
-  break-inside: avoid;
-}
-
-/* ===== Responsive media elements - override inline styles ===== */
-
-/* Images - force responsive with !important to override inline styles */
-.reader-content :deep(img) {
-  max-width: 100% !important;
-  height: auto !important;
-  width: auto !important;
-  object-fit: contain;
-  display: block;
-  -webkit-user-drag: none;
-  user-drag: none;
-}
-
-/* SVG elements - force responsive */
-.reader-content :deep(svg) {
-  max-width: 100% !important;
-  height: auto !important;
-  width: auto !important;
-  display: block;
-}
-
-/* SVG internal image elements */
-.reader-content :deep(svg image) {
-  max-width: 100% !important;
-  height: auto !important;
-  width: auto !important;
-  display: inline;
-  margin: 0;
-}
-
-/* Figure container */
-.reader-content :deep(figure) {
-  max-width: 100% !important;
-  margin: 1em auto;
-  text-align: center;
-}
-
-/* Figure caption */
-.reader-content :deep(figcaption) {
-  font-size: 0.9em;
-  color: var(--text-secondary);
-  margin-top: 0.5em;
-  text-align: center;
-}
-
-/* Video elements */
-.reader-content :deep(video) {
-  max-width: 100% !important;
-  height: auto !important;
-  width: auto !important;
-  display: block;
-}
-
-/* Audio elements */
-.reader-content :deep(audio) {
-  max-width: 100% !important;
-  display: block;
-}
-
-.reader-view::-webkit-scrollbar {
-  width: 7px;
-}
-
-.reader-view::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.reader-view::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 4px;
-}
-
-.reader-view::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--border) 70%, var(--reader-text));
-}
-</style>
-
-<style>
-.reader-content p {
-  margin-bottom: calc(var(--paragraph-spacing, 1.2) * 1em);
-  text-rendering: optimizeLegibility;
+.reader-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
 }
 </style>

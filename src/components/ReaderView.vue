@@ -54,11 +54,17 @@ const settingsStore = useSettingsStore();
 
 // Template refs
 const readerContentRef = ref<ComponentInstance<typeof ReaderContent> | null>(null);
-const articleEl = computed(() => readerContentRef.value?.articleRef ?? null);
+// 从 iframe 获取容器引用（用于分页测量的容器）
+const articleEl = computed(() => {
+  // 对于 iframe 模式，我们使用容器 ref（main 元素）
+  // usePagination 会自己创建隐藏的测量 iframe
+  return readerContentRef.value?.$el ?? null;
+});
 
 // Local state
 const stats = ref<BookReadingStats | null>(null);
 const isTransitioning = ref(false);
+const currentChapterResources = ref<HTMLElement[]>([]);
 
 const openModal = (modal: string) => {
   uiStore.openModal(modal as any);
@@ -108,7 +114,12 @@ const totalBookProgress = computed(() => {
 });
 
 // Initialize composables
-const pagination = usePagination(articleEl, props.book.id, readerStore.$state.chapters);
+const pagination = usePagination(
+  articleEl,
+  props.book.id,
+  readerStore.$state.chapters,
+  computed(() => settingsStore.settings),
+);
 
 // Display content for pagination mode
 const displayContent = computed(() => {
@@ -158,7 +169,7 @@ const gestures = useReaderGestures({
     onTapLeft: prevPage,
     onTapRight: nextPage,
     onTapCenter: toggleControls,
-    onTap: toggleControls,
+    onTap: () => toggleControls(),
   },
 });
 
@@ -171,8 +182,12 @@ const handleSelectChapter = async (chapterId: string, targetPage: number = 0) =>
     closeModal();
 
     if (isPaginationMode.value) {
-      const html = (await readerStore.getCurrentChapterContent()) || "";
+      const content = await readerStore.getCurrentChapterContent();
+      const html = content?.html || "";
+      const resources = content?.resources || [];
       await pagination.paginate(chapterId, html, targetPage);
+      // 将资源传递给 ReaderContent
+      currentChapterResources.value = resources;
     } else {
       await chapterLoader.loadCurrentAndAdjacent(2);
       scrollManager.scrollToChapter(chapterId);
@@ -423,24 +438,6 @@ function buildPathFromSteps(steps: CfiStep[]): string {
   return steps.length > 0 ? `/${steps.map((s) => s.index).join("/")}` : "";
 }
 
-const updateCSSVariables = () => {
-  const el = articleEl.value;
-  if (!el) return;
-
-  const useCustom = settingsStore.settings.customTypography ?? false;
-
-  // Only apply paragraph spacing if custom typography is enabled
-  if (useCustom) {
-    el.style.setProperty(
-      "--paragraph-spacing",
-      String(settingsStore.settings.paragraphSpacing || 1.2),
-    );
-  } else {
-    // Reset to default when custom typography is disabled
-    el.style.removeProperty("--paragraph-spacing");
-  }
-};
-
 const updateThemeClass = () => {
   const container = document.querySelector(".reader-view-container");
   if (!container) return;
@@ -465,7 +462,9 @@ watch(
     if (newMode === "vertical" && readerStore.chapters.length > 0) {
       await chapterLoader.loadCurrentAndAdjacent(2);
     } else if (newMode === "pagination" && readerStore.currentChapter) {
-      const html = (await readerStore.getCurrentChapterContent()) || "";
+      const content = await readerStore.getCurrentChapterContent();
+      const html = content?.html || "";
+      currentChapterResources.value = content?.resources || [];
       await pagination.paginate(readerStore.currentChapter.id, html);
     }
   },
@@ -482,7 +481,9 @@ watch(
 const reRenderContent = async () => {
   if (!isPaginationMode.value) return;
   if (readerStore.currentChapter) {
-    const html = (await readerStore.getCurrentChapterContent()) || "";
+    const content = await readerStore.getCurrentChapterContent();
+    const html = content?.html || "";
+    currentChapterResources.value = content?.resources || [];
     pagination.clearCache();
     await pagination.paginate(readerStore.currentChapter.id, html);
   }
@@ -494,33 +495,22 @@ watch(
     settingsStore.settings.margin,
     settingsStore.settings.fontSize,
     settingsStore.settings.lineHeight,
-    settingsStore.settings.customTypography,
   ],
   reRenderContent,
 );
 
-// Watch for customTypography changes to update CSS variables
-watch(
-  () => settingsStore.settings.customTypography,
-  () => {
-    updateCSSVariables();
-  },
-);
-
 // Lifecycle
 onMounted(async () => {
-  document.addEventListener("touchstart", gestures.handleTouchStart, { passive: true });
-  document.addEventListener("touchend", gestures.handleTouchEnd, { passive: true });
-
   await readerStore.openBook(props.book.id);
   await bookmarksStore.loadBookmarks(props.book.id);
   updateThemeClass();
-  updateCSSVariables();
 
   uiStore.showControls = true;
 
   if (isPaginationMode.value && readerStore.currentChapter) {
-    const html = (await readerStore.getCurrentChapterContent()) || "";
+    const content = await readerStore.getCurrentChapterContent();
+    const html = content?.html || "";
+    currentChapterResources.value = content?.resources || [];
     await pagination.paginate(readerStore.currentChapter.id, html);
   } else {
     await chapterLoader.loadCurrentAndAdjacent(2);
@@ -536,15 +526,13 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-  document.removeEventListener("touchstart", gestures.handleTouchStart);
-  document.removeEventListener("touchend", gestures.handleTouchEnd);
   // scrollManager.cleanup();
   pagination.cleanup();
 });
 </script>
 
 <template>
-  <div class="reader-view-container" @click="gestures.handleTap">
+  <div class="reader-view-container">
     <!-- Header -->
     <ReaderHeader
       :book-title="book.title"
@@ -565,9 +553,23 @@ onUnmounted(() => {
       :is-pagination-mode="isPaginationMode"
       :current-page="pagination.currentPage.value"
       :loaded-chapters="chapterLoader.allLoadedContent.value"
+      :epub-resources="currentChapterResources"
       :transitioning="isTransitioning"
       @scroll="scrollManager.handleScroll()"
       @resize="handleResize"
+      @gesture-tap="gestures.handleIframeTap"
+      @gesture-swipe-left="
+        () => {
+          gestures.setPageChangeCooldown();
+          gestures.handleIframeSwipe('left');
+        }
+      "
+      @gesture-swipe-right="
+        () => {
+          gestures.setPageChangeCooldown();
+          gestures.handleIframeSwipe('right');
+        }
+      "
     />
 
     <!-- Footer -->

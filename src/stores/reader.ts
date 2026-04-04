@@ -94,17 +94,20 @@ export const useReaderStore = defineStore("reader", {
     },
 
     /**
-     * 加载资源到 head 中，避免重复
+     * 加载资源到目标 document 中，避免重复
+     * @param targetDoc - 目标 document（如 iframe.contentDocument），默认为主 document
      */
-    loadResourceToHead(resource: HTMLElement, resourceId: string) {
+    loadResourceToHead(resource: HTMLElement, resourceId: string, targetDoc?: Document) {
       // 如果已经加载过，跳过
       if (this.loadedResources.has(resourceId)) {
         return;
       }
 
+      const doc = targetDoc || document;
+
       // 添加标记以便后续清理
       resource.setAttribute("data-reader-resource", resourceId);
-      document.head.appendChild(resource);
+      doc.head.appendChild(resource);
       this.loadedResources.add(resourceId);
     },
 
@@ -330,8 +333,12 @@ export const useReaderStore = defineStore("reader", {
 
     /**
      * Get current chapter content with resource URLs rewritten
+     * 返回 HTML 内容和解析后的资源元素列表
      */
-    async getCurrentChapterContent(): Promise<string | null> {
+    async getCurrentChapterContent(): Promise<{
+      html: string;
+      resources: HTMLElement[];
+    } | null> {
       if (!this.currentBook || !this.currentChapter) {
         return null;
       }
@@ -352,41 +359,25 @@ export const useReaderStore = defineStore("reader", {
         const { rewriteResourcePaths } = await import("../utils/resource-urls");
         const doc = rewriteResourcePaths(content, this.resourceUrls);
 
-        // 加载新的 head 资源，避免重复
+        // 收集资源元素
+        const resources: HTMLElement[] = [];
         const headElements = Array.from(doc.head.children);
         for (const element of headElements) {
-          // 为每个资源生成唯一标识
-          let resourceId = element.tagName;
-
-          if (element instanceof HTMLLinkElement && element.href) {
-            resourceId = `link-${element.href}`;
-          } else if (element instanceof HTMLStyleElement) {
-            // 为 style 元素生成基于内容的哈希
-            resourceId = `style-${this.hashCode(element.textContent || "")}`;
-          } else if (element instanceof HTMLScriptElement && element.src) {
-            resourceId = `script-${element.src}`;
-          } else if (element instanceof HTMLScriptElement && element.textContent) {
-            resourceId = `script-${this.hashCode(element.textContent)}`;
-          } else if (element instanceof HTMLLinkElement && element.rel === "stylesheet") {
-            resourceId = `stylesheet-${element.href}`;
-          } else if (element instanceof HTMLMetaElement) {
-            resourceId = `meta-${element.name || ""}`;
-          } else if (element instanceof HTMLTitleElement) {
-            resourceId = `title-${element.textContent || ""}`;
-          } else {
-            // 对于其他类型的元素，使用内容哈希
-            resourceId = `${element.tagName}-${this.hashCode(element.outerHTML)}`;
-          }
-
-          // 克隆元素避免引用问题
+          // 克隆元素
           const clonedElement = element.cloneNode(true) as HTMLElement;
-          this.loadResourceToHead(clonedElement, resourceId);
+          resources.push(clonedElement);
         }
 
-        return doc.body.innerHTML;
+        return {
+          html: doc.body.innerHTML,
+          resources,
+        };
       }
 
-      return content;
+      return {
+        html: content,
+        resources: [],
+      };
     },
 
     /**

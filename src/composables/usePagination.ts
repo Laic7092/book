@@ -1,4 +1,10 @@
-import { ref, shallowRef, type Ref } from "vue";
+import { ref, type Ref } from "vue";
+import type { ReaderSettings } from "../core/types";
+import {
+  generateThemeCSS,
+  generateBaseCSS,
+  generateCustomTypographyCSS,
+} from "../utils/reader-styles";
 
 export interface Page {
   index: number;
@@ -20,16 +26,21 @@ export function usePagination(
   containerRef: Ref<HTMLElement | null>,
   bookId: string,
   chapters: Chapter[],
+  settings: Ref<ReaderSettings>,
 ) {
   const currentPage = ref(0);
   const totalPages = ref(1);
   const isPaginating = ref(false);
-  const pages = shallowRef<Page[]>([]);
+  const pages = ref<Page[]>([]);
   const currentHtml = ref("");
   const isReady = ref(false);
   const computedCount = ref(0); // 已计算的页数
 
+  // 隐藏的测量 iframe
+  let measureIframe: HTMLIFrameElement | null = null;
+  let measureDoc: Document | null = null;
   let measureEl: HTMLElement | null = null;
+
   const rawHtml = ref("");
 
   // 当前章节的 pages - 非响应式存储，用于内部快速访问
@@ -39,59 +50,84 @@ export function usePagination(
   let backgroundCalcActive = true;
   let backgroundCalcId = 0; // 每次计算递增 ID
 
+  /**
+   * 初始化测量 iframe
+   */
+  function initMeasureIframe() {
+    // 如果已存在，先清理
+    if (measureIframe) {
+      measureIframe.remove();
+    }
+
+    measureIframe = document.createElement("iframe");
+    measureIframe.style.position = "absolute";
+    measureIframe.style.left = "-9999px";
+    measureIframe.style.top = "-9999px";
+    measureIframe.style.visibility = "hidden";
+    measureIframe.style.width = `${getContainerWidth()}px`;
+    measureIframe.style.height = `${getPageHeight()}px`;
+    measureIframe.style.border = "none";
+    measureIframe.sandbox = "allow-same-origin";
+    document.body.appendChild(measureIframe);
+
+    measureDoc = measureIframe.contentDocument || measureIframe.contentWindow?.document || null;
+    if (!measureDoc) return;
+
+    const themeCSS = generateThemeCSS(settings.value.theme, settings.value.contrast);
+    const baseCSS = generateBaseCSS();
+    const typographyCSS = generateCustomTypographyCSS(settings.value);
+
+    measureDoc.open();
+
+    measureDoc.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>${themeCSS}</style>
+        <style>${baseCSS}</style>
+        <style>${typographyCSS}</style>
+        <style id="epub-style"></style>
+      </head>
+      <body>
+        <article class="reader-content"></article>
+      </body>
+      </html>
+    `);
+    measureDoc.close();
+
+    measureEl = measureDoc.querySelector("article");
+  }
+
+  /**
+   * 更新测量 iframe 的样式（当设置变化时）
+   */
+  function updateMeasureIframeStyles() {
+    if (!measureDoc) return;
+
+    const styles = measureDoc.querySelectorAll("style");
+    if (styles.length >= 3) {
+      styles[0].textContent = generateThemeCSS(settings.value.theme, settings.value.contrast);
+      styles[1].textContent = generateBaseCSS();
+      styles[2].textContent = generateCustomTypographyCSS(settings.value);
+    }
+  }
+
   function getPageHeight(): number {
     const el = containerRef.value;
     if (!el) return window.innerHeight - 120;
     return el.clientHeight;
   }
 
-  function cloneStyles(source: HTMLElement, target: HTMLElement) {
-    const cs = getComputedStyle(source);
-    const props = [
-      "width",
-      "padding",
-      "paddingTop",
-      "paddingRight",
-      "paddingBottom",
-      "paddingLeft",
-      "fontSize",
-      "fontFamily",
-      "lineHeight",
-      "letterSpacing",
-      "textAlign",
-      "wordSpacing",
-      "textIndent",
-      "whiteSpace",
-      "wordBreak",
-      "overflowWrap",
-      "hyphens",
-      "tabSize",
-      "color",
-      "columnGap",
-    ];
-    for (const prop of props) {
-      const cssProp = prop.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
-      target.style.setProperty(cssProp, cs.getPropertyValue(cssProp));
-    }
-    target.style.boxSizing = "border-box";
-    target.style.position = "absolute";
-    target.style.visibility = "hidden";
-    target.style.left = "0";
-    target.style.top = "0";
-    target.style.overflow = "hidden";
-    target.style.height = "auto";
-    target.style.wordWrap = "break-word";
-    target.style.overflowWrap = "break-word";
-    target.style.hyphens = "auto";
-  }
-
-  function createMeasureEl(source: HTMLElement): HTMLElement {
-    const el = document.createElement("article");
-    el.className = "reader-content";
-    cloneStyles(source, el);
-    el.style.width = `${source.clientWidth || source.offsetWidth || 700}px`;
-    document.body.appendChild(el);
-    return el;
+  function getContainerWidth(): number {
+    const el = containerRef.value;
+    if (!el) return 700;
+    // 减去 padding
+    const style = getComputedStyle(el);
+    const paddingLeft = parseFloat(style.paddingLeft) || 0;
+    const paddingRight = parseFloat(style.paddingRight) || 0;
+    return el.clientWidth - paddingLeft - paddingRight;
   }
 
   function splitIntoBlocks(html: string): string[] {
@@ -219,6 +255,22 @@ export function usePagination(
       return;
     }
 
+    // 初始化测量 iframe（如果尚未初始化）
+    if (!measureIframe) {
+      initMeasureIframe();
+    } else {
+      // 更新样式以匹配当前设置
+      updateMeasureIframeStyles();
+      // 更新宽度
+      if (measureIframe) {
+        measureIframe.style.width = `${getContainerWidth()}px`;
+      }
+    }
+
+    // 取消正在运行的后台计算
+    backgroundCalcActive = false;
+    backgroundCalcId++;
+
     // 检查缓存
     const cacheKey = `${bookId}:${chapterId}`;
     if (PagesMap.has(cacheKey)) {
@@ -236,16 +288,6 @@ export function usePagination(
       isReady.value = true;
       return;
     }
-
-    // 取消正在运行的后台计算
-    backgroundCalcActive = false;
-    backgroundCalcId++;
-
-    // 初始化测量元素
-    if (measureEl) {
-      measureEl.remove();
-    }
-    measureEl = createMeasureEl(article);
 
     const maxHeight = getPageHeight();
     const blocks = splitIntoBlocks(rawHtml.value);
@@ -387,8 +429,10 @@ export function usePagination(
   }
 
   function cleanup(): void {
-    if (measureEl) {
-      measureEl.remove();
+    if (measureIframe) {
+      measureIframe.remove();
+      measureIframe = null;
+      measureDoc = null;
       measureEl = null;
     }
     rawHtml.value = "";

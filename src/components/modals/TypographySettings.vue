@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch, nextTick, onMounted, onUnmounted } from "vue";
 import type { ReaderSettings } from "../../core/types";
 import {
   FONT_OPTIONS,
@@ -8,6 +8,7 @@ import {
   TEXT_ALIGN_OPTIONS,
   CONTRAST_OPTIONS,
 } from "../../utils/settings";
+import { useIframeRenderer } from "../../composables/useIframeRenderer";
 
 const props = defineProps<{
   settings: ReaderSettings;
@@ -18,14 +19,57 @@ const emit = defineEmits<{
   (e: "close"): void;
 }>();
 
-const previewStyle = computed(() => {
-  const useCustom = props.settings.customTypography ?? false;
-  return {
-    fontSize: `${props.settings.fontSize}px`,
-    ...(useCustom ? { fontFamily: props.settings.fontFamily } : {}),
-    ...(useCustom ? { lineHeight: String(props.settings.lineHeight) } : {}),
-    ...(useCustom ? { letterSpacing: `${props.settings.letterSpacing || 0}em` } : {}),
-  };
+const previewIframeRef = ref<HTMLIFrameElement | null>(null);
+
+// 预览 iframe 的渲染器
+const rendererOptions = computed(() => ({
+  settings: props.settings,
+  isPaginationMode: false,
+}));
+
+const { isReady, initIframe, updateContent, updateStyles, cleanup } = useIframeRenderer(
+  previewIframeRef,
+  rendererOptions,
+);
+
+// 预览内容
+const previewContent = `
+  <h2 class="chapter-heading">预览</h2>
+  <p>这是预览效果，将根据您的设置进行调整。阅读体验包括段落间距、行距、字体选择等参数的实时展示。</p>
+  <p>第一段文字展示了阅读器的核心显示效果。您可以在这里看到不同设置下的视觉呈现。通过调整各项参数，找到最适合您的阅读体验。</p>
+`;
+
+onMounted(() => {
+  nextTick(() => {
+    if (previewIframeRef.value) {
+      initIframe();
+      updateContent(previewContent);
+    }
+  });
+});
+
+// 监听设置变化，更新预览样式
+watch(
+  () => [
+    props.settings.fontSize,
+    props.settings.fontFamily,
+    props.settings.lineHeight,
+    props.settings.letterSpacing,
+    props.settings.textAlign,
+    props.settings.paragraphSpacing,
+    props.settings.customTypography,
+    props.settings.theme,
+    props.settings.contrast,
+  ],
+  () => {
+    if (isReady.value) {
+      updateStyles();
+    }
+  },
+);
+
+onUnmounted(() => {
+  cleanup();
 });
 
 function resetSettings() {
@@ -104,11 +148,14 @@ function resetSettings() {
       <!-- 预览 -->
       <div class="setting-section">
         <label class="setting-label">预览</label>
-        <div class="preview-card" :style="previewStyle">
-          <p>
-            这是预览效果，将根据您的设置进行调整。阅读体验包括段落间距、行距、字体选择等参数的实时展示。
-          </p>
-          <p>第一段文字展示了阅读器的核心显示效果。您可以在这里看到不同设置下的视觉呈现。</p>
+        <div class="preview-card">
+          <iframe
+            ref="previewIframeRef"
+            class="preview-iframe"
+            sandbox="allow-same-origin"
+            frameborder="0"
+            scrolling="no"
+          ></iframe>
         </div>
       </div>
 
@@ -430,20 +477,19 @@ function resetSettings() {
 
 /* Preview card */
 .preview-card {
-  padding: 16px;
+  padding: 0;
   background: var(--bg-elevated, var(--modal-bg));
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
+  overflow: hidden;
+  height: 180px;
 }
 
-.preview-card p {
-  margin: 0 0 12px;
-  color: var(--modal-text);
-  line-height: inherit;
-}
-
-.preview-card p:last-child {
-  margin-bottom: 0;
+.preview-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
 }
 
 /* Typography settings group */
