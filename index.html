@@ -7,9 +7,6 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="theme-color" content="#fdfcfb" />
-    <meta name="mobile-web-app-capable" content="yes" />
     <title>book</title>
     <style>
       /* 禁止长按菜单 */
@@ -18,33 +15,24 @@
         -webkit-user-select: none;
         user-select: none;
       }
+
       /* 允许文本选择（阅读器需要） */
       .reader-content,
       .reader-content * {
         -webkit-user-select: text;
         user-select: text;
       }
+
       /* 禁止高亮 */
       * {
         -webkit-tap-highlight-color: transparent;
-      }
-      /* 平滑滚动 */
-      html {
-        -webkit-overflow-scrolling: touch;
-        scroll-behavior: smooth;
-      }
-      /* 安全区域适配 */
-      #app {
-        padding-top: env(safe-area-inset-top);
-        padding-bottom: env(safe-area-inset-bottom);
-        padding-left: env(safe-area-inset-left);
-        padding-right: env(safe-area-inset-right);
       }
     </style>
     <script type="module" crossorigin src="/book/assets/index-z0Ccd-9d.js"></script>
     <link rel="modulepreload" crossorigin href="/book/assets/db-DT4h2hKt.js">
     <link rel="stylesheet" crossorigin href="/book/assets/index-BnRgTa6n.css">
   <link rel="manifest" href="/book/manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="/book/registerSW.js"></script></head>
+
   <body>
     <div id="app"></div>
   </body>
