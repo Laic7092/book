@@ -147,7 +147,6 @@ defineExpose({ articleRef });
   width: auto !important;
   object-fit: contain;
   display: block;
-  margin: 0.5em auto;
   -webkit-user-drag: none;
   user-drag: none;
 }
@@ -158,7 +157,6 @@ defineExpose({ articleRef });
   height: auto !important;
   width: auto !important;
   display: block;
-  margin: 0.5em auto;
 }
 
 /* SVG internal image elements */
@@ -191,14 +189,12 @@ defineExpose({ articleRef });
   height: auto !important;
   width: auto !important;
   display: block;
-  margin: 0.5em auto;
 }
 
 /* Audio elements */
 .reader-content :deep(audio) {
   max-width: 100% !important;
   display: block;
-  margin: 0.5em auto;
 }
 
 .reader-view::-webkit-scrollbar {

@@ -110,7 +110,6 @@ img {
   height: auto;
   display: block;
   object-fit: contain;
-  margin: 0.5em auto;
 }
 
 /* SVG elements - responsive with aspect ratio preservation */
@@ -118,7 +117,6 @@ svg {
   max-width: 100%;
   height: auto;
   display: block;
-  margin: 0.5em auto;
 }
 
 /* SVG internal image elements */
@@ -149,14 +147,12 @@ video {
   max-width: 100%;
   height: auto;
   display: block;
-  margin: 0.5em auto;
 }
 
 /* Audio elements - responsive */
 audio {
   max-width: 100%;
   display: block;
-  margin: 0.5em auto;
 }
 
 /* ===== Native-like experience ===== */
