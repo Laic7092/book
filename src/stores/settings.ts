@@ -20,6 +20,7 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
   contrast: "normal",
   scrollMode: "pagination",
   paginationAnimation: "slide",
+  customTypography: false,
 };
 
 export interface SettingsState {

@@ -50,6 +50,8 @@ export interface ReaderSettings {
   contrast?: "soft" | "normal" | "high";
   scrollMode?: "vertical" | "pagination";
   paginationAnimation?: "slide" | "flip" | "fade";
+  /** Whether to apply custom typography settings (fontFamily, lineHeight, etc.). When false, EPUB original styling is preserved. */
+  customTypography?: boolean;
 }
 
 export interface SearchResult {

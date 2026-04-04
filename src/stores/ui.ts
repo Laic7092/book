@@ -3,7 +3,14 @@
 import { defineStore } from "pinia";
 import { TOAST_DURATION } from "../utils/constants";
 
-export type ModalType = "toc" | "search" | "bookmarks" | "settings" | "stats" | null;
+export type ModalType =
+  | "toc"
+  | "search"
+  | "bookmarks"
+  | "settings"
+  | "typographySettings"
+  | "stats"
+  | null;
 
 export interface UIState {
   showControls: boolean;

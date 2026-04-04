@@ -10,6 +10,7 @@ import TableOfContents from "./TableOfContents.vue";
 import SearchPanel from "./SearchPanel.vue";
 import BookmarksPanel from "./BookmarksPanel.vue";
 import ReaderSettings from "./ReaderSettings.vue";
+import TypographySettings from "./TypographySettings.vue";
 import StatsPanel from "./StatsPanel.vue";
 import { computed } from "vue";
 import { useSettingsStore } from "../../stores/settings";
@@ -19,7 +20,7 @@ const settingsStore = useSettingsStore();
 const themeClass = computed(() => `theme-${settingsStore.settings.theme}`);
 
 defineProps<{
-  modalType: "toc" | "search" | "bookmarks" | "settings" | "stats" | null;
+  modalType: "toc" | "search" | "bookmarks" | "settings" | "typographySettings" | "stats" | null;
   chapters: Chapter[];
   currentChapterId: string | null;
   bookmarks: Bookmark[];
@@ -35,13 +36,14 @@ const emit = defineEmits<{
   (e: "close"): void;
   (e: "select-chapter", chapterId: string): void;
   (e: "navigate-bookmark", bookmark: Bookmark): void;
-  (e: "update-settings", settings: Partial<ReaderSettings>): void;
+  (e: "update-settings", settings: Partial<ReaderSettingsType>): void;
   (e: "update:searchQuery", value: string): void;
   (e: "search"): void;
   (e: "go-to-search-result", result: SearchResult): void;
   (e: "clear-highlights"): void;
   (e: "add-bookmark"): void;
   (e: "delete-bookmark", bookmarkId: string, event: MouseEvent): void;
+  (e: "open-typography-settings"): void;
 }>();
 
 function handleClose() {
@@ -88,6 +90,15 @@ function handleClose() {
         <!-- Reader Settings -->
         <ReaderSettings
           v-else-if="modalType === 'settings'"
+          :settings="settings"
+          @update-settings="emit('update-settings', $event)"
+          @close="handleClose"
+          @open-typography-settings="emit('open-typography-settings')"
+        />
+
+        <!-- Typography Settings -->
+        <TypographySettings
+          v-else-if="modalType === 'typographySettings'"
           :settings="settings"
           @update-settings="emit('update-settings', $event)"
           @close="handleClose"
@@ -154,7 +165,8 @@ function handleClose() {
 .modal-bookmarks,
 .modal-search,
 .modal-stats,
-.modal-settings {
+.modal-settings,
+.modal-typographySettings {
   height: 85vh;
   max-height: 600px;
   display: flex;

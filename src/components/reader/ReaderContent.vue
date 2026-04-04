@@ -38,14 +38,17 @@ onUnmounted(() => {
   }
 });
 
-const contentStyle = computed(() => ({
-  fontSize: `${props.settings.fontSize}px`,
-  fontFamily: props.settings.fontFamily,
-  lineHeight: String(props.settings.lineHeight),
-  letterSpacing: `${props.settings.letterSpacing || 0}em`,
-  textAlign: props.settings.textAlign || "left",
-  height: props.isPaginationMode ? "100%" : "auto",
-}));
+const contentStyle = computed(() => {
+  const useCustom = props.settings.customTypography ?? false;
+  return {
+    fontSize: `${props.settings.fontSize}px`,
+    ...(useCustom ? { fontFamily: props.settings.fontFamily } : {}),
+    ...(useCustom ? { lineHeight: String(props.settings.lineHeight) } : {}),
+    ...(useCustom ? { letterSpacing: `${props.settings.letterSpacing || 0}em` } : {}),
+    ...(useCustom ? { textAlign: props.settings.textAlign || "left" } : {}),
+    height: props.isPaginationMode ? "100%" : "auto",
+  };
+});
 
 defineExpose({ articleRef });
 </script>
@@ -56,7 +59,7 @@ defineExpose({ articleRef });
     :class="{ 'pagination-mode': isPaginationMode }"
     ref="containerRef"
     :style="{
-      padding: `${props.settings.margin}px`,
+      padding: `${(settings.customTypography ?? false) ? props.settings.margin : 24}px`,
     }"
   >
     <!-- Pagination Mode: Pre-calculated single page -->

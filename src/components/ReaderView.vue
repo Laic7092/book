@@ -425,11 +425,19 @@ function buildPathFromSteps(steps: CfiStep[]): string {
 
 const updateCSSVariables = () => {
   const el = articleEl.value;
-  if (el) {
+  if (!el) return;
+
+  const useCustom = settingsStore.settings.customTypography ?? false;
+
+  // Only apply paragraph spacing if custom typography is enabled
+  if (useCustom) {
     el.style.setProperty(
       "--paragraph-spacing",
       String(settingsStore.settings.paragraphSpacing || 1.2),
     );
+  } else {
+    // Reset to default when custom typography is disabled
+    el.style.removeProperty("--paragraph-spacing");
   }
 };
 
@@ -486,8 +494,17 @@ watch(
     settingsStore.settings.margin,
     settingsStore.settings.fontSize,
     settingsStore.settings.lineHeight,
+    settingsStore.settings.customTypography,
   ],
   reRenderContent,
+);
+
+// Watch for customTypography changes to update CSS variables
+watch(
+  () => settingsStore.settings.customTypography,
+  () => {
+    updateCSSVariables();
+  },
 );
 
 // Lifecycle
@@ -610,6 +627,7 @@ onUnmounted(() => {
       @add-bookmark="addBookmark"
       @delete-bookmark="deleteBookmark"
       @update-settings="settingsStore.updateSettings"
+      @open-typography-settings="openModal('typographySettings')"
     />
   </div>
 </template>
