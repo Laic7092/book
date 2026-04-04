@@ -4,6 +4,7 @@ import { useBookshelfStore } from "../stores/bookshelf";
 import { useUIStore } from "../stores/ui";
 import { getBookGradient, getInitial } from "../utils/colors";
 import { formatDuration } from "../utils/time";
+import { formatBookToast } from "../utils/toast";
 import { validateBookFile } from "../utils/validation";
 import type { Book } from "../core/types";
 
@@ -31,7 +32,8 @@ async function handleFileUpload(e: Event) {
 
   try {
     const result = await bookshelfStore.addBookFromFile(file);
-    uiStore.triggerToast(`"${result.book.title}" added to library`);
+    const toast = formatBookToast(result.book.title, "added to library");
+    uiStore.triggerToastWithTitle(toast.title, toast.message);
     emit("book:select", result.book);
   } catch (err) {
     console.error("Failed to add book:", err);
@@ -54,7 +56,8 @@ async function deleteBook(bookId: string) {
   await bookshelfStore.deleteBook(bookId);
   emit("book:delete", bookId);
   if (book) {
-    uiStore.triggerToast(`"${book.title}" removed from library`);
+    const toast = formatBookToast(book.title, "removed from library");
+    uiStore.triggerToastWithTitle(toast.title, toast.message);
   }
 }
 
@@ -234,7 +237,7 @@ onMounted(() => {
           accept=".txt,.epub"
           @change="handleFileUpload"
           hidden
-          :disabled="isUploading"
+          :disabled="bookshelfStore.isUploading"
         />
       </label>
     </div>
@@ -306,12 +309,41 @@ onMounted(() => {
       <div
         v-if="uiStore.showToast"
         class="toast"
-        :class="{ 'toast-error': uiStore.toastMessage.includes('Failed') }"
+        :class="{ 'toast--error': uiStore.toastError }"
+        :key="uiStore.toastMessage + Date.now()"
+        role="status"
+        aria-live="polite"
       >
-        <span class="toast-icon" aria-hidden="true">
-          {{ uiStore.toastMessage.includes("Failed") ? "!" : "✓" }}
-        </span>
-        <span class="toast-message">{{ uiStore.toastMessage }}</span>
+        <svg
+          v-if="!uiStore.toastError"
+          class="toast__icon toast__icon--success"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <svg
+          v-else
+          class="toast__icon toast__icon--error"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+        <div class="toast__content">
+          <span class="toast__title">{{ uiStore.toastTitle }}</span>
+          <span class="toast__desc">{{ uiStore.toastMessage }}</span>
+        </div>
       </div>
     </transition>
 
@@ -588,24 +620,31 @@ onMounted(() => {
 .book-card:nth-child(1) {
   animation-delay: 0.04s;
 }
+
 .book-card:nth-child(2) {
   animation-delay: 0.08s;
 }
+
 .book-card:nth-child(3) {
   animation-delay: 0.12s;
 }
+
 .book-card:nth-child(4) {
   animation-delay: 0.16s;
 }
+
 .book-card:nth-child(5) {
   animation-delay: 0.2s;
 }
+
 .book-card:nth-child(6) {
   animation-delay: 0.24s;
 }
+
 .book-card:nth-child(7) {
   animation-delay: 0.28s;
 }
+
 .book-card:nth-child(8) {
   animation-delay: 0.32s;
 }
@@ -779,48 +818,100 @@ onMounted(() => {
   outline-offset: 2px;
 }
 
-/* Toast */
+/* ===== Toast ===== */
+
 .toast {
   position: fixed;
-  bottom: 32px;
+  top: max(16px, env(safe-area-inset-top, 16px));
   left: 50%;
-  transform: translateX(-50%) translateY(100px);
-  display: flex;
+  transform: translateX(-50%);
+  display: inline-flex;
   align-items: center;
   gap: 12px;
-  padding: 14px 22px;
-  background: var(--text-primary);
-  color: var(--bg-primary);
-  border-radius: 10px;
-  box-shadow: var(--shadow-xl);
-  font-size: 14px;
-  font-weight: 500;
-  z-index: 1000;
-  backdrop-filter: blur(8px);
+  padding: 14px 18px;
+  background: rgba(31, 26, 23, 0.88);
+  color: #f7f5f2;
+  border-radius: 14px;
+  box-shadow:
+    0 4px 6px rgba(0, 0, 0, 0.04),
+    0 12px 40px rgba(0, 0, 0, 0.12);
+  font-family: var(--font-ui, system-ui, -apple-system, sans-serif);
+  z-index: 3000;
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  max-width: min(360px, calc(100vw - 32px));
+  pointer-events: none;
+  will-change: transform, opacity;
 }
 
-.toast.toast-error {
-  background: #dc2626;
-  color: white;
+.toast--error {
+  background: rgba(180, 30, 30, 0.9);
+  color: #fff;
+  box-shadow:
+    0 4px 6px rgba(180, 30, 30, 0.08),
+    0 12px 40px rgba(180, 30, 30, 0.18);
 }
 
-.toast-enter-active,
+/* Animations */
+.toast-enter-active {
+  transition: all 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 .toast-leave-active {
-  transition: all var(--transition-slow);
+  transition: all 0.25s cubic-bezier(0.4, 0, 1, 1);
 }
 
-.toast-enter-from,
+.toast-enter-from {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-16px) scale(0.96);
+}
+
 .toast-leave-to {
   opacity: 0;
-  transform: translateX(-50%) translateY(100px) scale(0.95);
+  transform: translateX(-50%) translateY(-8px) scale(0.98);
 }
 
-.toast-icon {
-  font-size: 16px;
-  font-weight: 600;
+/* Icon */
+.toast__icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+}
+
+.toast__icon--success {
+  color: #4ade80;
+}
+
+.toast__icon--error {
+  color: #fca5a5;
+}
+
+/* Content */
+.toast__content {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.toast__title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toast__desc {
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.3;
+  color: rgba(247, 245, 242, 0.7);
+}
+
+.toast--error .toast__desc {
+  color: rgba(255, 255, 255, 0.75);
 }
 
 /* Fade transition */

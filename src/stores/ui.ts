@@ -9,6 +9,7 @@ export interface UIState {
   showControls: boolean;
   activeModal: ModalType;
   showToast: boolean;
+  toastTitle: string;
   toastMessage: string;
   toastError: boolean;
   showConfirm: boolean;
@@ -23,6 +24,7 @@ export const useUIStore = defineStore("ui", {
     showControls: false,
     activeModal: null,
     showToast: false,
+    toastTitle: "",
     toastMessage: "",
     toastError: false,
     showConfirm: false,
@@ -67,12 +69,36 @@ export const useUIStore = defineStore("ui", {
      * Show toast notification
      */
     triggerToast(message: string, isError = false) {
+      // Reset first to ensure re-trigger animation
+      this.showToast = false;
+      this.toastTitle = "";
       this.toastMessage = message;
       this.toastError = isError;
-      this.showToast = true;
-      setTimeout(() => {
-        this.showToast = false;
-      }, TOAST_DURATION);
+
+      // Use requestAnimationFrame to ensure DOM update
+      requestAnimationFrame(() => {
+        this.showToast = true;
+        setTimeout(() => {
+          this.showToast = false;
+        }, TOAST_DURATION);
+      });
+    },
+
+    /**
+     * Show toast notification with title and message
+     */
+    triggerToastWithTitle(title: string, message: string, isError = false) {
+      this.showToast = false;
+      this.toastTitle = title;
+      this.toastMessage = message;
+      this.toastError = isError;
+
+      requestAnimationFrame(() => {
+        this.showToast = true;
+        setTimeout(() => {
+          this.showToast = false;
+        }, TOAST_DURATION);
+      });
     },
 
     /**

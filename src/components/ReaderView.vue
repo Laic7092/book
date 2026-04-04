@@ -434,8 +434,10 @@ const updateCSSVariables = () => {
 };
 
 const updateThemeClass = () => {
-  document.documentElement.classList.remove("theme-light", "theme-dark", "theme-sepia");
-  document.documentElement.classList.add(`theme-${settingsStore.settings.theme}`);
+  const container = document.querySelector(".reader-view-container");
+  if (!container) return;
+  container.classList.remove("theme-light", "theme-dark", "theme-sepia");
+  container.classList.add(`theme-${settingsStore.settings.theme}`);
 };
 
 // Load stats when stats modal opens

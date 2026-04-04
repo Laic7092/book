@@ -11,6 +11,12 @@ import SearchPanel from "./SearchPanel.vue";
 import BookmarksPanel from "./BookmarksPanel.vue";
 import ReaderSettings from "./ReaderSettings.vue";
 import StatsPanel from "./StatsPanel.vue";
+import { computed } from "vue";
+import { useSettingsStore } from "../../stores/settings";
+
+const settingsStore = useSettingsStore();
+
+const themeClass = computed(() => `theme-${settingsStore.settings.theme}`);
 
 defineProps<{
   modalType: "toc" | "search" | "bookmarks" | "settings" | "stats" | null;
@@ -46,7 +52,7 @@ function handleClose() {
 <template>
   <Teleport to="body">
     <div v-if="modalType" class="modal-overlay" @click.stop="handleClose">
-      <div class="modal-content" :class="[`modal-${modalType}`]" @click.stop>
+      <div class="modal-content" :class="[`modal-${modalType}`, themeClass]" @click.stop>
         <!-- Table of Contents -->
         <TableOfContents
           v-if="modalType === 'toc'"

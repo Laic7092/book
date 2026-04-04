@@ -1,6 +1,6 @@
-/* Global theme variables - applied to html element for global access (including Teleport modals) */
+/* Theme variables - scoped to .reader-view-container to avoid affecting the rest of the app */
 
-html.theme-light {
+.reader-view-container.theme-light {
   --reader-bg: #fdfcfb;
   --reader-text: #1f1a17;
   --text-secondary: #6e6659;
@@ -20,7 +20,7 @@ html.theme-light {
   --transition-base: 300ms ease;
 }
 
-html.theme-dark {
+.reader-view-container.theme-dark {
   --reader-bg: #1a1816;
   --reader-text: #e8e4de;
   --text-secondary: #a8a094;
@@ -40,7 +40,7 @@ html.theme-dark {
   --transition-base: 300ms ease;
 }
 
-html.theme-sepia {
+.reader-view-container.theme-sepia {
   --reader-bg: #f5f0e6;
   --reader-text: #3d352a;
   --text-secondary: #7a6f5a;
@@ -68,7 +68,90 @@ body {
   --transition-base: 300ms ease;
 }
 
+/* Modal theme styles - for Teleport modals that can't inherit from reader container */
+.modal-content.theme-light {
+  --modal-bg: #fdfcfb;
+  --modal-text: #1f1a17;
+  --border: #e6e2d8;
+  --border-subtle: rgba(90, 82, 72, 0.08);
+  --hover-bg: #f5f3ef;
+  --accent: #8b2e3a;
+  --accent-soft: rgba(139, 46, 58, 0.08);
+  --bg-elevated: #ffffff;
+}
+
+.modal-content.theme-dark {
+  --modal-bg: #221f1c;
+  --modal-text: #e8e4de;
+  --border: #3d3630;
+  --border-subtle: rgba(232, 228, 222, 0.06);
+  --hover-bg: #2a2622;
+  --accent: #c45d6a;
+  --accent-soft: rgba(196, 93, 106, 0.12);
+  --bg-elevated: #2a2622;
+}
+
+.modal-content.theme-sepia {
+  --modal-bg: #f5f0e6;
+  --modal-text: #3d352a;
+  --border: #c9bfa8;
+  --border-subtle: rgba(61, 53, 42, 0.08);
+  --hover-bg: #ebe5d5;
+  --accent: #8b5a3a;
+  --accent-soft: rgba(139, 90, 58, 0.1);
+  --bg-elevated: #ebe5d5;
+}
+
 img,
 image {
   width: 100%;
+}
+
+/* ===== Native-like experience ===== */
+
+/* 禁止拖拽图片 */
+img {
+  -webkit-user-drag: none;
+  user-drag: none;
+}
+
+/* 触摸反馈 - 原生感 */
+button,
+a,
+[role="button"] {
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform var(--transition-fast),
+    opacity var(--transition-fast);
+}
+
+button:active,
+a:active,
+[role="button"]:active {
+  transform: scale(0.97);
+  opacity: 0.85;
+}
+
+/* 平滑滚动 - iOS 风格 */
+* {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 禁止弹性滚动边界效果（可选） */
+/* html, body {
+  overscroll-behavior: none;
+} */
+
+/* 表单元素原生样式优化 */
+input,
+textarea,
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  font: inherit;
+}
+
+/* 禁止双击缩放 */
+* {
+  touch-action: manipulation;
 }
