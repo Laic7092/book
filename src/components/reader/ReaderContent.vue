@@ -64,18 +64,12 @@ defineExpose({ articleRef });
       v-if="isPaginationMode"
       ref="articleRef"
       class="reader-content"
-      :class="{ transitioning }"
       :style="contentStyle"
       v-html="content"
     ></article>
 
     <!-- Vertical Scroll Mode -->
-    <article
-      v-else
-      class="reader-content vertical-content"
-      :class="{ transitioning }"
-      :style="contentStyle"
-    >
+    <article v-else class="reader-content vertical-content" :style="contentStyle">
       <div
         v-for="chapter in loadedChapters"
         :key="chapter.chapterId"
