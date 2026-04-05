@@ -6,7 +6,7 @@
  */
 
 import type { Ref } from "vue";
-import { PAGE_CHANGE_COOLDOWN_MS, TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../utils/constants";
+import { TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../utils/constants";
 
 interface GestureHandlers {
   onSwipeLeft?: () => void;
@@ -76,20 +76,8 @@ export function useReaderGestures(options: UseReaderGesturesOptions) {
     }
   }
 
-  /**
-   * 设置翻页冷却
-   */
-  function setPageChangeCooldown() {
-    if (pageChangeCooldown) return;
-    pageChangeCooldown = true;
-    setTimeout(() => {
-      pageChangeCooldown = false;
-    }, PAGE_CHANGE_COOLDOWN_MS);
-  }
-
   return {
     handleIframeTap,
     handleIframeSwipe,
-    setPageChangeCooldown,
   };
 }

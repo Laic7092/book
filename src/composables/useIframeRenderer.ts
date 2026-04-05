@@ -1,9 +1,9 @@
 import { ref, type Ref } from "vue";
 import type { ReaderSettings } from "../core/types";
 import {
+  generateIframeStyles,
   generateThemeCSS,
-  generateBaseCSS,
-  generateCustomTypographyCSS,
+  generateTypographyCSS,
 } from "../utils/reader-styles";
 import { useIframeGestures, type IframeGestureHandlers } from "./useIframeGestures";
 
@@ -17,10 +17,10 @@ export interface IframeRendererOptions {
  * 使用 DOM 操作更新内容，避免 document.write 导致的事件监听器丢失
  *
  * iframe 内部样式结构:
- * - <style id="theme-style"> 主题样式 (ReaderSettings: 主题、对比度)
- * - <style id="base-style"> 基础重置样式 (始终注入)
- * - <style id="typography-style"> 自定义排版 (TypographySettings 开关控制)
- * - <style id="epub-style"> EPUB 资源样式 (动态注入/移除)
+ * - <style id="theme-style"> 主题颜色变量（背景、文字、边框）
+ * - <style id="base-style"> 基础重置（换行、图片响应式、断行）
+ * - <style id="typography-style"> 排版设置（字号、字体、行距、间距）
+ * - <style id="epub-style"> EPUB 资源样式（动态注入/移除）
  */
 export function useIframeRenderer(
   iframeRef: Ref<HTMLIFrameElement | null>,
@@ -29,7 +29,6 @@ export function useIframeRenderer(
 ) {
   const isReady = ref(false);
   let iframeDoc: Document | null = null;
-  let articleEl: HTMLElement | null = null;
   let isInitialized = false;
   let gestures: ReturnType<typeof useIframeGestures> | null = null;
 
@@ -53,12 +52,7 @@ export function useIframeRenderer(
     if (!iframeDoc) return;
 
     // 一次性写入基础结构
-    const themeCSS = generateThemeCSS(
-      options.value.settings.theme,
-      options.value.settings.contrast,
-    );
-    const baseCSS = generateBaseCSS();
-    const typographyCSS = generateCustomTypographyCSS(options.value.settings);
+    const styles = generateIframeStyles(options.value.settings);
 
     iframeDoc.open();
     iframeDoc.write(`
@@ -67,19 +61,16 @@ export function useIframeRenderer(
       <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-        <style id="theme-style">${themeCSS}</style>
-        <style id="base-style">${baseCSS}</style>
-        <style id="typography-style">${typographyCSS}</style>
+        <style id="theme-style">${styles.theme}</style>
+        <style id="base-style">${styles.base}</style>
+        <style id="typography-style">${styles.typography}</style>
         <style id="epub-style"></style>
       </head>
-      <body>
-        <article class="reader-content${!options.value.isPaginationMode ? " vertical-content" : ""}"></article>
-      </body>
+      <body class="reader-content${!options.value.isPaginationMode ? " vertical-content" : ""}"></body>
       </html>
     `);
     iframeDoc.close();
 
-    articleEl = iframeDoc.querySelector(".reader-content");
     isInitialized = true;
     isReady.value = true;
 
@@ -96,9 +87,9 @@ export function useIframeRenderer(
    * 更新 iframe 内容（使用 DOM 操作）
    */
   function updateContent(html: string) {
-    if (!articleEl) return;
+    if (!iframeDoc?.body) return;
 
-    articleEl.innerHTML = html;
+    iframeDoc.body.innerHTML = html;
   }
 
   /**
@@ -118,7 +109,7 @@ export function useIframeRenderer(
     }
 
     if (typographyStyle) {
-      typographyStyle.textContent = generateCustomTypographyCSS(options.value.settings);
+      typographyStyle.textContent = generateTypographyCSS(options.value.settings);
     }
   }
 
@@ -337,10 +328,10 @@ export function useIframeRenderer(
   }
 
   /**
-   * 获取 iframe 的 article 元素
+   * 获取 iframe 的 body 元素（兼容旧接口）
    */
   function getArticle(): HTMLElement | null {
-    return articleEl;
+    return iframeDoc?.body || null;
   }
 
   /**
@@ -363,7 +354,6 @@ export function useIframeRenderer(
     }
 
     iframeDoc = null;
-    articleEl = null;
     isInitialized = false;
     isReady.value = false;
   }

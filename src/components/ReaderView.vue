@@ -559,13 +559,11 @@ onUnmounted(() => {
       @gesture-tap="gestures.handleIframeTap"
       @gesture-swipe-left="
         () => {
-          gestures.setPageChangeCooldown();
           gestures.handleIframeSwipe('left');
         }
       "
       @gesture-swipe-right="
         () => {
-          gestures.setPageChangeCooldown();
           gestures.handleIframeSwipe('right');
         }
       "

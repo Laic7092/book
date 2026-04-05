@@ -149,13 +149,7 @@ function resetSettings() {
       <div class="setting-section">
         <label class="setting-label">预览</label>
         <div class="preview-card">
-          <iframe
-            ref="previewIframeRef"
-            class="preview-iframe"
-            sandbox="allow-same-origin"
-            frameborder="0"
-            scrolling="no"
-          ></iframe>
+          <iframe ref="previewIframeRef" class="preview-iframe" frameborder="0"></iframe>
         </div>
       </div>
 

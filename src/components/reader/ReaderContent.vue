@@ -78,7 +78,14 @@ onMounted(() => {
     }
 
     if (containerRef.value) {
-      resizeObserver = new ResizeObserver(emitResize);
+      let isFirst = true;
+      resizeObserver = new ResizeObserver(() => {
+        if (isFirst) {
+          isFirst = false;
+          return;
+        }
+        emitResize();
+      });
       resizeObserver.observe(containerRef.value);
     }
   });
@@ -169,7 +176,6 @@ defineExpose({ iframeRef, getArticle });
       ref="iframeRef"
       class="reader-iframe"
       :class="{ 'pagination-mode': isPaginationMode }"
-      sandbox="allow-same-origin allow-scripts"
       frameborder="0"
       scrolling="no"
     ></iframe>

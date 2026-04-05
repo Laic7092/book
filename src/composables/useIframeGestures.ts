@@ -62,29 +62,29 @@ export function useIframeGestures(
   }
 
   /**
-   * touchstart 处理
+   * pointerdown 处理（统一支持触摸和鼠标）
    */
-  function handleTouchStart(e: TouchEvent) {
+  function handlePointerDown(e: PointerEvent) {
     if (!isListening || !enableTap) return;
 
     // 如果点击的是交互元素，不处理
     if (shouldIgnoreTarget(e.target)) return;
 
-    startX = e.touches[0].clientX;
-    startY = e.touches[0].clientY;
+    startX = e.clientX;
+    startY = e.clientY;
     startTime = Date.now();
 
     handlers.onTouchStart?.(startX, startY);
   }
 
   /**
-   * touchend 处理 - 核心手势识别逻辑
+   * pointerup 处理 - 核心手势识别逻辑
    */
-  function handleTouchEnd(e: TouchEvent) {
+  function handlePointerUp(e: PointerEvent) {
     if (!isListening) return;
 
-    const endX = e.changedTouches[0].clientX;
-    const endY = e.changedTouches[0].clientY;
+    const endX = e.clientX;
+    const endY = e.clientY;
     const deltaX = endX - startX;
     const deltaY = endY - startY;
     const deltaTime = Date.now() - startTime;
@@ -119,17 +119,17 @@ export function useIframeGestures(
    * 绑定事件监听器
    */
   function bind() {
-    // 完全 passive，不阻塞主线程
-    iframeDoc.addEventListener("touchstart", handleTouchStart, { passive: true });
-    iframeDoc.addEventListener("touchend", handleTouchEnd, { passive: true });
+    // 使用 Pointer Events 统一处理触摸和鼠标
+    iframeDoc.addEventListener("pointerdown", handlePointerDown, { passive: true });
+    iframeDoc.addEventListener("pointerup", handlePointerUp, { passive: true });
   }
 
   /**
    * 解绑事件监听器
    */
   function unbind() {
-    iframeDoc.removeEventListener("touchstart", handleTouchStart);
-    iframeDoc.removeEventListener("touchend", handleTouchEnd);
+    iframeDoc.removeEventListener("pointerdown", handlePointerDown);
+    iframeDoc.removeEventListener("pointerup", handlePointerUp);
   }
 
   /**

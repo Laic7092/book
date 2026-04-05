@@ -1,14 +1,23 @@
 /**
  * 统一的阅读器样式管理
  * 所有 iframe 的 CSS 都从这里生成，确保一致性
+ *
+ * 样式分层结构:
+ * 1. theme-style    → 主题颜色变量（背景、文字、边框）
+ * 2. base-style     → 基础重置（换行、图片响应式、断行）
+ * 3. typography-style → 排版设置（字号、字体、行距、间距）
+ * 4. epub-style     → EPUB 资源样式（动态注入）
  */
 
 import type { ReaderSettings } from "../core/types";
 import { THEME_COLORS } from "../core/types";
 
+// ============================================================
+// 独立样式生成函数（按需调用）
+// ============================================================
+
 /**
- * 生成主题 CSS 变量
- * 来自 ReaderSettings: 主题、对比度
+ * 生成主题 CSS 变量（仅颜色相关）
  */
 export function generateThemeCSS(theme: string, contrast?: string): string {
   const colors = THEME_COLORS[theme as keyof typeof THEME_COLORS] || THEME_COLORS.light;
@@ -35,61 +44,58 @@ export function generateThemeCSS(theme: string, contrast?: string): string {
     body {
       background-color: var(--reader-bg);
       color: var(--reader-text);
-      margin: 0;
-      padding: 0;
-    }
-    html,body {
-      width: 100%;
-      height: 100%;
     }
     * {
-      box-sizeing: border-box;
+      box-sizing: border-box;
     }
   `;
 }
 
 /**
- * 生成基础重置样式（始终注入，不依赖 customTypography 开关）
- * 包含：文字换行、图片响应式、标题断行、默认页边距等基础功能
+ * 生成基础重置样式（始终注入）
  */
 export function generateBaseCSS(): string {
   return `
-    .reader-content {
+    html, body {
+      margin: 0;
+      padding: 0;
+    }
+
+    body.reader-content {
       word-wrap: break-word;
       overflow-wrap: break-word;
       hyphens: auto;
       -webkit-hyphens: auto;
       padding: 24px;
-      overflow-x: hidden;
-      scrollbar-width: none;
+      touch-action: pan-y;
     }
 
-    .reader-content h1,
-    .reader-content h2,
-    .reader-content h3,
-    .reader-content h4,
-    .reader-content h5,
-    .reader-content h6 {
+    body.reader-content h1,
+    body.reader-content h2,
+    body.reader-content h3,
+    body.reader-content h4,
+    body.reader-content h5,
+    body.reader-content h6 {
       break-inside: avoid;
     }
 
-    .reader-content img,
-    .reader-content svg,
-    .reader-content video,
-    .reader-content audio {
+    body.reader-content img,
+    body.reader-content svg,
+    body.reader-content video,
+    body.reader-content audio {
       max-width: 100% !important;
       height: auto !important;
       width: auto !important;
     }
 
-    .reader-content img {
+    body.reader-content img {
       object-fit: contain;
       display: block;
       -webkit-user-drag: none;
       user-drag: none;
     }
 
-    .reader-content svg image {
+    body.reader-content svg image {
       max-width: 100% !important;
       height: auto !important;
       width: auto !important;
@@ -97,38 +103,47 @@ export function generateBaseCSS(): string {
       margin: 0;
     }
 
-    .reader-content figure {
+    body.reader-content figure {
       max-width: 100% !important;
       margin: 1em auto;
       text-align: center;
     }
 
-    .reader-content figcaption {
+    body.reader-content figcaption {
       font-size: 0.9em;
       color: var(--text-secondary);
       margin-top: 0.5em;
       text-align: center;
     }
 
-    .vertical-content {
+    /* 垂直滚动模式：底部留白供进度条 */
+    body.reader-content.vertical-content {
       padding-bottom: 40vh;
     }
   `;
 }
 
 /**
- * 生成自定义排版 CSS
- * 来自 TypographySettings: 字体、行距、字间距、对齐、段落间距
- * 仅当 customTypography=true 时注入，否则返回空字符串
+ * 生成排版 CSS（字号、字体、行距、间距等）
+ * 当 customTypography=false 时，只注入字号（核心设置）
+ * 当 customTypography=true 时，注入全部排版设置
  */
-export function generateCustomTypographyCSS(settings: ReaderSettings): string {
+export function generateTypographyCSS(settings: ReaderSettings): string {
   const useCustom = settings.customTypography ?? false;
+
   if (!useCustom) {
-    return "";
+    // 只注入字号
+    return `
+      body.reader-content {
+        font-size: ${settings.fontSize}px;
+      }
+    `;
   }
 
+  // 全部排版设置
   return `
-    .reader-content {
+    body.reader-content {
+      font-size: ${settings.fontSize}px;
       font-family: ${settings.fontFamily};
       line-height: ${settings.lineHeight};
       letter-spacing: ${settings.letterSpacing || 0}em;
@@ -136,25 +151,47 @@ export function generateCustomTypographyCSS(settings: ReaderSettings): string {
       padding: ${settings.margin || 24}px;
     }
 
-    .reader-content p {
+    body.reader-content p {
       margin-bottom: calc(var(--paragraph-spacing, ${settings.paragraphSpacing || 1.2}) * 1em);
       text-rendering: optimizeLegibility;
     }
 
-    .reader-content .chapter-heading {
+    body.reader-content .chapter-heading {
       margin-bottom: 1em;
       border-bottom: 1px solid var(--border-subtle);
     }
   `;
 }
 
+// ============================================================
+// 组合函数（一次性生成完整样式）
+// ============================================================
+
 /**
- * 生成完整的样式表（主题 + 基础 + 自定义排版）
+ * @deprecated 使用 generateTypographyCSS 替代
+ */
+export function generateCustomTypographyCSS(settings: ReaderSettings): string {
+  return generateTypographyCSS(settings);
+}
+
+/**
+ * 生成完整的样式表（主题 + 基础 + 排版）
  */
 export function generateFullCSS(settings: ReaderSettings): string {
   return (
     generateThemeCSS(settings.theme, settings.contrast) +
     generateBaseCSS() +
-    generateCustomTypographyCSS(settings)
+    generateTypographyCSS(settings)
   );
+}
+
+/**
+ * 生成 iframe 分层样式对象
+ */
+export function generateIframeStyles(settings: ReaderSettings) {
+  return {
+    theme: generateThemeCSS(settings.theme, settings.contrast),
+    base: generateBaseCSS(),
+    typography: generateTypographyCSS(settings),
+  };
 }

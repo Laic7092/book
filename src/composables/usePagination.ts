@@ -1,10 +1,6 @@
 import { ref, type Ref } from "vue";
 import type { ReaderSettings } from "../core/types";
-import {
-  generateThemeCSS,
-  generateBaseCSS,
-  generateCustomTypographyCSS,
-} from "../utils/reader-styles";
+import { generateIframeStyles } from "../utils/reader-styles";
 
 export interface Page {
   index: number;
@@ -67,15 +63,12 @@ export function usePagination(
     measureIframe.style.width = `${getContainerWidth()}px`;
     measureIframe.style.height = `${getPageHeight()}px`;
     measureIframe.style.border = "none";
-    measureIframe.sandbox = "allow-same-origin";
     document.body.appendChild(measureIframe);
 
     measureDoc = measureIframe.contentDocument || measureIframe.contentWindow?.document || null;
     if (!measureDoc) return;
 
-    const themeCSS = generateThemeCSS(settings.value.theme, settings.value.contrast);
-    const baseCSS = generateBaseCSS();
-    const typographyCSS = generateCustomTypographyCSS(settings.value);
+    const styles = generateIframeStyles(settings.value);
 
     measureDoc.open();
 
@@ -85,19 +78,21 @@ export function usePagination(
       <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>${themeCSS}</style>
-        <style>${baseCSS}</style>
-        <style>${typographyCSS}</style>
+        <style>${styles.theme}</style>
+        <style>${styles.base}</style>
+        <style>${styles.typography}</style>
         <style id="epub-style"></style>
+        <style>
+          /* 测量模式：body 高度随内容自然撑开 */
+          html, body { height: auto; }
+        </style>
       </head>
-      <body>
-        <article class="reader-content"></article>
-      </body>
+      <body class="reader-content"></body>
       </html>
     `);
     measureDoc.close();
 
-    measureEl = measureDoc.querySelector("article");
+    measureEl = measureDoc.body;
   }
 
   /**
@@ -107,10 +102,12 @@ export function usePagination(
     if (!measureDoc) return;
 
     const styles = measureDoc.querySelectorAll("style");
-    if (styles.length >= 3) {
-      styles[0].textContent = generateThemeCSS(settings.value.theme, settings.value.contrast);
-      styles[1].textContent = generateBaseCSS();
-      styles[2].textContent = generateCustomTypographyCSS(settings.value);
+    if (styles.length >= 4) {
+      const newStyles = generateIframeStyles(settings.value);
+      styles[0].textContent = newStyles.theme;
+      styles[1].textContent = newStyles.base;
+      styles[2].textContent = newStyles.typography;
+      // styles[3] 是测量专用的 height: auto 覆盖，不需要更新
     }
   }
 
