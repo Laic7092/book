@@ -46,14 +46,31 @@ export async function getResourceUrls(bookId: string): Promise<Map<string, strin
   const urlMap = new Map<string, string>();
 
   for (const resource of resources) {
-    const blob = new Blob([resource.data], { type: resource.mimeType });
+    let data = resource.data;
+
+    // Strip @font-face rules that reference unsupported protocols (res://, file://, etc.)
+    if (resource.mimeType === "text/css") {
+      data = sanitizeCssFonts(data);
+    }
+
+    const blob = new Blob([data], { type: resource.mimeType });
     const blobUrl = URL.createObjectURL(blob);
-    // We need to map the original path to the blob URL
-    // The resourceId stores the original relative path
     urlMap.set(resource.resourceId, blobUrl);
   }
 
   return urlMap;
+}
+
+function sanitizeCssFonts(data: ArrayBuffer): ArrayBuffer {
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  const css = decoder.decode(data);
+  // Replace any url() referencing unsupported protocols with empty url
+  const cleaned = css.replace(
+    /url\(\s*['"]?(?:res|file|app|content):\/\/[^'")\s]*['"]?\s*\)/gi,
+    "url(data:,)",
+  );
+  return encoder.encode(cleaned).buffer;
 }
 
 /**

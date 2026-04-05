@@ -147,7 +147,6 @@ function findResourceUrl(path: string, resourceUrls: Map<string, string>): strin
  * Rewrite CSS url() references to use blob URLs
  */
 function rewriteCssUrls(cssContent: string, resourceUrls: Map<string, string>): string {
-  // Match url() patterns in CSS
   const urlPattern = /url\(['"]?([^'")\s]+)['"]?\)/gi;
 
   return cssContent.replace(urlPattern, (match, url) => {

@@ -7,8 +7,7 @@ import { ErrorCode, createReaderError } from "../core/errors";
  * Generate a unique ID
  */
 export function generateId(prefix = ""): string {
-  const id =
-    Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  const id = crypto.randomUUID().replace(/-/g, "");
   return prefix ? `${prefix}_${id}` : id;
 }
 
@@ -44,29 +43,54 @@ export function extractTextFromHtml(html: string): string {
 }
 
 /**
- * Clean HTML content for reading
- * - Removes scripts, styles
- * - Normalizes whitespace
- * - Removes fixed width/height from media elements for responsive display
+ * Sanitize resource-loading attributes to prevent browser from fetching
+ * external resources during HTML parsing. Prefixes attribute names with
+ * an underscore (e.g. src → _src, href → _href).
  */
-export function cleanHtml(html: string): string {
-  const temp = document.createElement("div");
-  temp.innerHTML = html;
+function sanitizeResourceAttrs(html: string): string {
+  return html
+    .replace(
+      /(<(?:img|image|video|audio|source|embed|iframe|script)\s[^>]*?)\b(src|srcset|poster)\s*=/gi,
+      "$1_$2=",
+    )
+    .replace(/(<link\s[^>]*?)\b(href)\s*=/gi, "$1_$2=")
+    .replace(/(<object\s[^>]*?)\b(data)\s*=/gi, "$1_$2=")
+    .replace(/(<svg:image\s[^>]*?)\b(xlink:href|href)\s*=/gi, "$1_$2=")
+    .replace(/(<style[^>]*>[\s\S]*?)@import\b/gi, "$1/* @import */");
+}
 
-  // Remove script and style elements
-  const scripts = temp.querySelectorAll("script, style, noscript");
-  scripts.forEach((el) => el.remove());
+/**
+ * Restore resource-loading attributes that were previously sanitized.
+ */
+function restoreResourceAttrs(html: string): string {
+  return html
+    .replace(
+      /(<(?:img|image|video|audio|source|embed|iframe|script)\s[^>]*?)\b_(src|srcset|poster)\s*=/gi,
+      "$1$2=",
+    )
+    .replace(/(<link\s[^>]*?)\b_(href)\s*=/gi, "$1$2=")
+    .replace(/(<object\s[^>]*?)\b_(data)\s*=/gi, "$1$2=")
+    .replace(/(<svg:image\s[^>]*?)\b_(xlink:href|href)\s*=/gi, "$1$2=")
+    .replace(/(<style[^>]*>[\s\S]*?)\/\* @import \*\//gi, "$1@import");
+}
+
+/**
+ * Apply shared DOM-based cleaning on a parsed document.
+ * Works on both XML and HTML documents.
+ */
+function applyDomCleanup(doc: Document | HTMLElement): void {
+  // Remove script, style, and noscript elements
+  const removable = doc.querySelectorAll("script, style, noscript");
+  removable.forEach((el) => el.remove());
 
   // Remove fixed width/height attributes from media elements
-  const mediaElements = temp.querySelectorAll("img, svg, image, video, figure");
+  const mediaElements = doc.querySelectorAll("img, svg, image, video, figure");
   mediaElements.forEach((el) => {
-    // For SVG elements, preserve viewBox or create from width/height before removal
     if (el.tagName.toLowerCase() === "svg") {
       if (!el.getAttribute("viewBox")) {
         const width = el.getAttribute("width");
         const height = el.getAttribute("height");
         if (width && height) {
-          // Parse numeric values (remove units like 'px')
           const widthNum = parseFloat(width);
           const heightNum = parseFloat(height);
           if (!isNaN(widthNum) && !isNaN(heightNum)) {
@@ -76,11 +100,9 @@ export function cleanHtml(html: string): string {
       }
     }
 
-    // Remove width and height attributes
     el.removeAttribute("width");
     el.removeAttribute("height");
 
-    // Remove inline style width/height if present
     const style = el.getAttribute("style");
     if (style) {
       const cleanedStyle = style
@@ -104,10 +126,48 @@ export function cleanHtml(html: string): string {
       }
     }
   });
+}
+
+/**
+ * Clean HTML content for reading
+ * - Removes scripts, styles
+ * - Normalizes whitespace
+ * - Removes fixed width/height from media elements for responsive display
+ *
+ * Uses XML parsing first to avoid triggering external resource loading.
+ * Falls back to HTML parsing with sanitized attributes if XML fails.
+ */
+export function cleanHtml(html: string): string {
+  // Try XML parsing first — XML parser does NOT fetch external resources
+  const xmlDoc = new DOMParser().parseFromString(html, "application/xhtml+xml");
+  const hasXmlError = xmlDoc.querySelector("parsererror");
+
+  if (!hasXmlError) {
+    applyDomCleanup(xmlDoc);
+
+    // Normalize whitespace in text nodes
+    const walker = document.createTreeWalker(xmlDoc, NodeFilter.SHOW_TEXT, null);
+    const nodes: Text[] = [];
+    let node: Node | null;
+    while ((node = walker.nextNode())) {
+      if (node.nodeValue && node.nodeValue.trim()) {
+        nodes.push(node as Text);
+      }
+    }
+
+    return xmlDoc.documentElement.innerHTML;
+  }
+
+  // XML parse failed — fallback to HTML mode with sanitized resource attributes
+  const safeHtml = sanitizeResourceAttrs(html);
+
+  const temp = document.createElement("div");
+  temp.innerHTML = safeHtml;
+
+  applyDomCleanup(temp);
 
   // Normalize whitespace in text nodes
   const walker = document.createTreeWalker(temp, NodeFilter.SHOW_TEXT, null);
-
   const nodes: Text[] = [];
   let node: Node | null;
   while ((node = walker.nextNode())) {
@@ -116,7 +176,8 @@ export function cleanHtml(html: string): string {
     }
   }
 
-  return temp.innerHTML;
+  const result = temp.innerHTML;
+  return restoreResourceAttrs(result);
 }
 
 /**

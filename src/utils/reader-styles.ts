@@ -45,9 +45,6 @@ export function generateThemeCSS(theme: string, contrast?: string): string {
       background-color: var(--reader-bg);
       color: var(--reader-text);
     }
-    * {
-      box-sizing: border-box;
-    }
   `;
 }
 
@@ -66,7 +63,7 @@ export function generateBaseCSS(): string {
       overflow-wrap: break-word;
       hyphens: auto;
       -webkit-hyphens: auto;
-      padding: 24px;
+      margin: 24px;
       touch-action: pan-y;
     }
 
@@ -148,7 +145,7 @@ export function generateTypographyCSS(settings: ReaderSettings): string {
       line-height: ${settings.lineHeight};
       letter-spacing: ${settings.letterSpacing || 0}em;
       text-align: ${settings.textAlign || "left"};
-      padding: ${settings.margin || 24}px;
+      margin: ${settings.margin || 24}px;
     }
 
     body.reader-content p {

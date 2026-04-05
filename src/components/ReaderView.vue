@@ -185,7 +185,7 @@ const handleSelectChapter = async (chapterId: string, targetPage: number = 0) =>
       const content = await readerStore.getCurrentChapterContent();
       const html = content?.html || "";
       const resources = content?.resources || [];
-      await pagination.paginate(chapterId, html, targetPage);
+      await pagination.paginate(chapterId, { html, targetPage });
       // 将资源传递给 ReaderContent
       currentChapterResources.value = resources;
     } else {
@@ -465,7 +465,7 @@ watch(
       const content = await readerStore.getCurrentChapterContent();
       const html = content?.html || "";
       currentChapterResources.value = content?.resources || [];
-      await pagination.paginate(readerStore.currentChapter.id, html);
+      await pagination.paginate(readerStore.currentChapter.id, { html });
     }
   },
 );
@@ -485,7 +485,7 @@ const reRenderContent = async () => {
     const html = content?.html || "";
     currentChapterResources.value = content?.resources || [];
     pagination.clearCache();
-    await pagination.paginate(readerStore.currentChapter.id, html);
+    await pagination.paginate(readerStore.currentChapter.id, { html });
   }
 };
 
@@ -510,7 +510,7 @@ onMounted(async () => {
     const content = await readerStore.getCurrentChapterContent();
     const html = content?.html || "";
     currentChapterResources.value = content?.resources || [];
-    await pagination.paginate(readerStore.currentChapter.id, html);
+    await pagination.paginate(readerStore.currentChapter.id, { html });
   } else {
     await chapterLoader.loadCurrentAndAdjacent(2);
     // Restore scroll position
