@@ -1,6 +1,7 @@
 import { ref, onUnmounted, type Ref } from "vue";
 import type { ReaderSettings } from "../core/types";
 import { generateIframeStyles } from "../utils/reader-styles";
+import { type ResourceInfo, injectResources, clearResources } from "../utils/iframe-resources";
 
 /**
  * 分页结果中的单页数据结构
@@ -16,79 +17,6 @@ export interface Page {
   blockEnd: number;
 }
 
-/** 原子级元素：不可分割，必须完整放入一页 */
-const ATOMIC_TAGS = new Set([
-  "img",
-  "svg",
-  "video",
-  "audio",
-  "canvas",
-  "hr",
-  "pre",
-  "table",
-  "figure",
-  "br",
-  "iframe",
-  "object",
-]);
-
-/** 文本块级元素：可作为独立分页单元 */
-const TEXT_BLOCK_TAGS = new Set([
-  "p",
-  "h1",
-  "h2",
-  "h3",
-  "h4",
-  "h5",
-  "h6",
-  "li",
-  "figcaption",
-  "summary",
-  "dd",
-  "dt",
-]);
-
-/** 容器级元素：可包含子节点并递归拆分 */
-const CONTAINER_TAGS = new Set([
-  "div",
-  "section",
-  "article",
-  "header",
-  "footer",
-  "nav",
-  "aside",
-  "blockquote",
-  "details",
-  "ul",
-  "ol",
-]);
-
-/** 内联元素：保留完整 HTML，作为独立 block 处理 */
-const INLINE_TAGS = new Set([
-  "span",
-  "a",
-  "em",
-  "strong",
-  "i",
-  "b",
-  "u",
-  "code",
-  "mark",
-  "sub",
-  "sup",
-  "small",
-  "abbr",
-  "cite",
-  "q",
-  "dfn",
-  "kbd",
-  "samp",
-  "var",
-  "time",
-  "del",
-  "ins",
-]);
-
 export interface PaginationChapter {
   id: string;
   html?: string;
@@ -99,22 +27,12 @@ export interface PaginateOptions {
   html?: string;
   /** 目标页码（用于快速跳转到指定页） */
   targetPage?: number;
+  /** EPUB 资源元素（<link> 和 <style> 元素） */
+  resources?: HTMLElement[];
 }
 
 /** LRU 缓存容量 */
 const CACHE_CAPACITY = 10;
-
-/** 拆分时剩余部分的最小字符数，避免生成极小页面 */
-const MIN_REMAINING_LENGTH = 20;
-
-/** 拆分时第一部分的最小字符数，避免拆分出无意义的小段 */
-const MIN_FIRST_PART_LENGTH = 10;
-
-/** 尝试拆分的最小剩余空间（px） */
-const MIN_SPLIT_SPACE_PX = 24;
-
-/** 尝试拆分的最小剩余空间比例（页面高度的 5%） */
-const MIN_SPLIT_SPACE_RATIO = 0.05;
 
 /**
  * 阅读器分页 Composable
@@ -171,6 +89,11 @@ export function usePagination(
   /** 当前正在计算的 HTML 内容 */
   let currentHtmlForPaginate: string | null = null;
 
+  // ==================== 资源管理 ====================
+
+  /** 资源追踪：记录已注入的资源详细信息 */
+  const injectedResources = new Map<string, ResourceInfo>();
+
   // ==================== 工具函数 ====================
 
   /**
@@ -188,7 +111,7 @@ export function usePagination(
   function getPageHeight(): number {
     const el = containerRef.value;
     if (!el) return window.innerHeight - 120;
-    return el.getBoundingClientRect().height - 2 * settings.value.margin - settings.value.fontSize;
+    return el.getBoundingClientRect().height - settings.value.margin;
   }
 
   /**
@@ -227,6 +150,7 @@ export function usePagination(
     measureIframe.style.left = "0";
     measureIframe.style.top = "0";
     measureIframe.style.pointerEvents = "none";
+    measureIframe.style.visibility = "hidden";
     measureIframe.style.width = `${getContainerWidth()}px`;
     measureIframe.style.height = `${getPageHeight()}px`;
     measureIframe.style.border = "none";
@@ -314,6 +238,7 @@ export function usePagination(
      * @param ancestors 祖先标签列表
      */
     function wrapWithAncestors(innerHtml: string, ancestors: { tag: string }[]): string {
+      return innerHtml;
       let result = innerHtml;
       for (let i = ancestors.length - 1; i >= 0; i--) {
         result = `<${ancestors[i].tag}>${result}</${ancestors[i].tag}>`;
@@ -327,49 +252,20 @@ export function usePagination(
      * @param ancestors 祖先标签路径
      */
     function processNode(node: Node, ancestors: { tag: string }[]) {
-      // 文本节点：包裹为 <p> 标签
-      if (node.nodeType === Node.TEXT_NODE) {
-        const text = node.textContent?.trim();
-        if (text) {
-          blocks.push(wrapWithAncestors(`<p>${text}</p>`, ancestors));
-        }
-        return;
-      }
-
       if (node.nodeType !== Node.ELEMENT_NODE) return;
       const el = node as Element;
       const tagName = el.tagName.toLowerCase();
 
-      // 原子元素：不可分割
-      if (ATOMIC_TAGS.has(tagName)) {
-        blocks.push(wrapWithAncestors(el.outerHTML, ancestors));
-        return;
-      }
-
-      // 文本块元素：独立分页
-      if (TEXT_BLOCK_TAGS.has(tagName)) {
-        blocks.push(wrapWithAncestors(el.outerHTML, ancestors));
-        return;
-      }
-
-      // 内联元素：保留完整 HTML
-      if (INLINE_TAGS.has(tagName)) {
-        blocks.push(wrapWithAncestors(el.outerHTML, ancestors));
-        return;
-      }
-
       // 容器元素：递归处理子节点
-      if (CONTAINER_TAGS.has(tagName)) {
+      if (el.childElementCount > 10) {
         const newAncestors = [...ancestors, { tag: tagName }];
         for (const child of Array.from(el.childNodes)) {
           processNode(child, newAncestors);
         }
         return;
-      }
-
-      // 未知标签：递归处理子节点，避免语义丢失
-      for (const child of Array.from(el.childNodes)) {
-        processNode(child, ancestors);
+      } else {
+        blocks.push(wrapWithAncestors(el.outerHTML, ancestors));
+        return;
       }
     }
 
@@ -398,18 +294,6 @@ export function usePagination(
     maxHeight: number,
   ): { splitHtml: string; remainingHtml: string } {
     if (!measureEl || !measureDoc) {
-      return { splitHtml: blockHtml, remainingHtml: "" };
-    }
-
-    // 提取最外层标签名
-    const ancestorMatch = blockHtml.match(/^<(\w+)>/);
-    if (!ancestorMatch) {
-      return { splitHtml: blockHtml, remainingHtml: "" };
-    }
-
-    const tagName = ancestorMatch[1];
-    // 只有文本块标签才能拆分
-    if (!TEXT_BLOCK_TAGS.has(tagName)) {
       return { splitHtml: blockHtml, remainingHtml: "" };
     }
 
@@ -475,16 +359,6 @@ export function usePagination(
     // 在最佳位置拆分
     const firstPart = fullText.slice(0, bestSplit).trim();
     const secondPart = fullText.slice(bestSplit).trim();
-
-    // 如果剩余部分太小，不如直接全部放入当前页
-    if (secondPart.length > 0 && secondPart.length < MIN_REMAINING_LENGTH) {
-      return { splitHtml: blockHtml, remainingHtml: "" };
-    }
-
-    // 如果第一部分也太小，说明拆分点不合适
-    if (firstPart.length < MIN_FIRST_PART_LENGTH) {
-      return { splitHtml: "", remainingHtml: blockHtml };
-    }
 
     return {
       splitHtml: rebuildHtml(firstPart),
@@ -556,8 +430,8 @@ export function usePagination(
         const remainingSpace = maxHeight - currentH;
 
         // 检查剩余空间是否足够拆分
-        const minRemainingRatio = Math.max(MIN_SPLIT_SPACE_PX, maxHeight * MIN_SPLIT_SPACE_RATIO);
-        if (remainingSpace >= minRemainingRatio) {
+        const minRemainingRatio = settings.value.fontSize * settings.value.lineHeight;
+        if (remainingSpace > minRemainingRatio) {
           const { splitHtml, remainingHtml } = trySplitBlock(blocks[endIdx], currentH, maxHeight);
 
           if (splitHtml) {
@@ -690,6 +564,19 @@ export function usePagination(
     } else {
       updateMeasureIframeStyles();
       updateMeasureIframeSize();
+    }
+
+    // 注入资源（EPUB 的 <link> 和 <style> 元素）
+    if (options?.resources && options.resources.length > 0) {
+      injectResources(
+        measureDoc!,
+        options.resources,
+        injectedResources,
+        "epub-style",
+        "data-measure-dynamic",
+      );
+    } else {
+      clearResources(measureDoc!, injectedResources, "epub-style");
     }
 
     // 取消正在运行的后台计算
@@ -944,6 +831,11 @@ export function usePagination(
     if (resizeTimer) {
       clearTimeout(resizeTimer);
       resizeTimer = null;
+    }
+
+    // 清理注入的资源
+    if (measureDoc) {
+      clearResources(measureDoc, injectedResources, "epub-style");
     }
 
     if (measureIframe) {

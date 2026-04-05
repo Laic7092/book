@@ -185,7 +185,7 @@ const handleSelectChapter = async (chapterId: string, targetPage: number = 0) =>
       const content = await readerStore.getCurrentChapterContent();
       const html = content?.html || "";
       const resources = content?.resources || [];
-      await pagination.paginate(chapterId, { html, targetPage });
+      await pagination.paginate(chapterId, { html, targetPage, resources });
       // 将资源传递给 ReaderContent
       currentChapterResources.value = resources;
     } else {
@@ -464,8 +464,9 @@ watch(
     } else if (newMode === "pagination" && readerStore.currentChapter) {
       const content = await readerStore.getCurrentChapterContent();
       const html = content?.html || "";
-      currentChapterResources.value = content?.resources || [];
-      await pagination.paginate(readerStore.currentChapter.id, { html });
+      const resources = content?.resources || [];
+      currentChapterResources.value = resources;
+      await pagination.paginate(readerStore.currentChapter.id, { html, resources });
     }
   },
 );
@@ -483,9 +484,10 @@ const reRenderContent = async () => {
   if (readerStore.currentChapter) {
     const content = await readerStore.getCurrentChapterContent();
     const html = content?.html || "";
-    currentChapterResources.value = content?.resources || [];
+    const resources = content?.resources || [];
+    currentChapterResources.value = resources;
     pagination.clearCache();
-    await pagination.paginate(readerStore.currentChapter.id, { html });
+    await pagination.paginate(readerStore.currentChapter.id, { html, resources });
   }
 };
 
@@ -509,8 +511,9 @@ onMounted(async () => {
   if (isPaginationMode.value && readerStore.currentChapter) {
     const content = await readerStore.getCurrentChapterContent();
     const html = content?.html || "";
-    currentChapterResources.value = content?.resources || [];
-    await pagination.paginate(readerStore.currentChapter.id, { html });
+    const resources = content?.resources || [];
+    currentChapterResources.value = resources;
+    await pagination.paginate(readerStore.currentChapter.id, { html, resources });
   } else {
     await chapterLoader.loadCurrentAndAdjacent(2);
     // Restore scroll position

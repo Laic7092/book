@@ -58,6 +58,14 @@ export function generateBaseCSS(): string {
       padding: 0;
     }
 
+    body {
+      display: flow-root;
+    }
+
+    p,h1,h2,h3,h4,h5,h6 {
+      margin-top: 0;
+    }
+
     body.reader-content {
       word-wrap: break-word;
       overflow-wrap: break-word;
