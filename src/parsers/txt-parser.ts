@@ -429,9 +429,6 @@ export class TxtParser extends BaseBookParser implements BookParser {
 
     const body = paragraphs.join("");
 
-    if (title) {
-      return `<h2 class="chapter-heading">${title}</h2>${body}`;
-    }
-    return body;
+    return `<html><body><h2 class="chapter-heading">${title || "Chapter"}</h2>${body}<body/></html>`;
   }
 }

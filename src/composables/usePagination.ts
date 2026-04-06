@@ -213,69 +213,6 @@ export function usePagination(
     measureIframe.style.height = `${getPageHeight()}px`;
   }
 
-  // ==================== HTML 拆分 ====================
-
-  /**
-   * 将 HTML 拆分为可分页的 block 单元
-   *
-   * 保留原始嵌套结构：每个 block 都携带完整的祖先包裹标签
-   * 例如 <blockquote><p>A</p><p>B</p></blockquote>
-   *   → ['<blockquote><p>A</p></blockquote>', '<blockquote><p>B</p></blockquote>']
-   *
-   * @param html 原始 HTML 内容
-   * @returns block HTML 数组
-   */
-  function splitIntoBlocks(html: string): string[] {
-    if (!html) return [];
-    const container = document.createElement("div");
-    container.innerHTML = html;
-
-    const blocks: string[] = [];
-
-    /**
-     * 用祖先标签包裹内部 HTML
-     * @param innerHtml 内部 HTML
-     * @param ancestors 祖先标签列表
-     */
-    function wrapWithAncestors(innerHtml: string, ancestors: { tag: string }[]): string {
-      return innerHtml;
-      let result = innerHtml;
-      for (let i = ancestors.length - 1; i >= 0; i--) {
-        result = `<${ancestors[i].tag}>${result}</${ancestors[i].tag}>`;
-      }
-      return result;
-    }
-
-    /**
-     * 递归处理 DOM 节点
-     * @param node 当前节点
-     * @param ancestors 祖先标签路径
-     */
-    function processNode(node: Node, ancestors: { tag: string }[]) {
-      if (node.nodeType !== Node.ELEMENT_NODE) return;
-      const el = node as Element;
-      const tagName = el.tagName.toLowerCase();
-
-      // 容器元素：递归处理子节点
-      if (el.childElementCount > 10) {
-        const newAncestors = [...ancestors, { tag: tagName }];
-        for (const child of Array.from(el.childNodes)) {
-          processNode(child, newAncestors);
-        }
-        return;
-      } else {
-        blocks.push(wrapWithAncestors(el.outerHTML, ancestors));
-        return;
-      }
-    }
-
-    for (const child of Array.from(container.childNodes)) {
-      processNode(child, []);
-    }
-
-    return blocks;
-  }
-
   // ==================== 智能拆分 ====================
 
   /**
@@ -325,12 +262,6 @@ export function usePagination(
 
       // 尝试在单词边界拆分
       let splitPoint = mid;
-      const textUpToMid = fullText.slice(0, mid);
-      const lastSpace = textUpToMid.lastIndexOf(" ");
-      // 如果空格位置合理（不在开头），优先在空格处断开
-      if (lastSpace > mid * 0.6) {
-        splitPoint = lastSpace;
-      }
 
       const testText = fullText.slice(0, splitPoint).trim();
       if (!testText) {
@@ -362,7 +293,11 @@ export function usePagination(
 
     return {
       splitHtml: rebuildHtml(firstPart),
-      remainingHtml: secondPart ? rebuildHtml(secondPart) : "",
+      remainingHtml: secondPart
+        ? rebuildHtml(secondPart)
+            .replace(/^<\w+>/, "")
+            .replace(/<\/\w+>$/, "")
+        : "",
     };
   }
 
@@ -603,7 +538,17 @@ export function usePagination(
 
     // 拆分 HTML 为 blocks
     const maxHeight = getPageHeight();
-    const blocks = splitIntoBlocks(rawHtml.value);
+    const parser = new DOMParser();
+    const { body } = parser.parseFromString(rawHtml.value, "text/html");
+
+    let b: any;
+    if (body.children.length === 1 && body.firstElementChild?.children) {
+      b = body.firstElementChild?.children;
+    } else if (body.children.length > 1) {
+      b = body.children;
+    }
+
+    const blocks = Array.from(b).map((ele: any) => ele.outerHTML);
 
     // 空内容处理
     if (blocks.length === 0) {
