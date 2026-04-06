@@ -25,11 +25,9 @@ import{a as e,c as t,i as n,l as r,n as i,r as a,t as o}from"./db-DT4h2hKt.js";v
       padding: 0;
     }
 
-    body {
-      display: flow-root;
-    }
-
     body.reader-content {
+      display: flow-root;
+      padding: env(safe-area-inset-top, 20px) env(safe-area-inset-right, 20px) env(safe-area-inset-bottom, 20px) env(safe-area-inset-left, 20px);
       word-wrap: break-word;
       overflow-wrap: break-word;
       hyphens: auto;
@@ -117,7 +115,7 @@ import{a as e,c as t,i as n,l as r,n as i,r as a,t as o}from"./db-DT4h2hKt.js";v
       <html>
       <head>
         <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
         <style>${e.theme}</style>
         <style>${e.base}</style>
         <style>${e.typography}</style>
@@ -137,7 +135,7 @@ import{a as e,c as t,i as n,l as r,n as i,r as a,t as o}from"./db-DT4h2hKt.js";v
       <html>
       <head>
         <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
         <style id="theme-style">${c.theme}</style>
         <style id="base-style">${c.base}</style>
         <style id="typography-style">${c.typography}</style>
