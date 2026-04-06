@@ -58,11 +58,9 @@ export function generateBaseCSS(): string {
       padding: 0;
     }
 
-    body {
-      display: flow-root;
-    }
-
     body.reader-content {
+      display: flow-root;
+      padding: env(safe-area-inset-top, 20px) env(safe-area-inset-right, 20px) env(safe-area-inset-bottom, 20px) env(safe-area-inset-left, 20px);
       word-wrap: break-word;
       overflow-wrap: break-word;
       hyphens: auto;
