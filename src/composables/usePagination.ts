@@ -111,17 +111,13 @@ export function usePagination(
   function getPageHeight(): number {
     const el = containerRef.value;
     if (!el) return window.innerHeight - 120;
-    return el.getBoundingClientRect().height - settings.value.margin;
+    return el.clientHeight;
   }
 
-  /**
-   * 获取容器内容宽度（减去 padding）
-   */
   function getContainerWidth(): number {
     const el = containerRef.value;
     if (!el) return 700;
-    const rect = el.getBoundingClientRect();
-    return rect.width;
+    return el.clientWidth;
   }
 
   /**
@@ -130,8 +126,8 @@ export function usePagination(
    */
   function getContentHeight(): number {
     if (!measureEl) return 0;
-    const rect = measureEl.getBoundingClientRect();
-    return rect.height;
+    const html = measureDoc?.documentElement;
+    return html?.offsetHeight || 100;
   }
 
   // ==================== 测量 iframe 管理 ====================
@@ -173,13 +169,6 @@ export function usePagination(
         <style>${styles.base}</style>
         <style>${styles.typography}</style>
         <style id="epub-style"></style>
-        <style>
-          html, body { height: auto; }
-          body {
-            overflow-x: hidden;
-            scrollbar-width: none;
-          }
-        </style>
       </head>
       <body class="reader-content"></body>
       </html>
@@ -272,7 +261,7 @@ export function usePagination(
       // 测量高度
       const testHtml = rebuildHtml(testText);
       measureEl.innerHTML = testHtml;
-      const h = getContentHeight();
+      const h = getContentHeight() - settings.value.margin;
 
       if (h <= maxHeight - currentHeight) {
         bestSplit = splitPoint;

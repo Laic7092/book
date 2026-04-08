@@ -56,11 +56,10 @@ export function generateBaseCSS(): string {
     html, body {
       margin: 0;
       padding: 0;
+      scrollbar-width: none;
     }
 
     body.reader-content {
-      display: flow-root;
-      padding: env(safe-area-inset-top, 20px) env(safe-area-inset-right, 20px) env(safe-area-inset-bottom, 20px) env(safe-area-inset-left, 20px);
       word-wrap: break-word;
       overflow-wrap: break-word;
       hyphens: auto;
