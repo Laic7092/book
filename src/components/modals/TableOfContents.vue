@@ -18,6 +18,13 @@ const activeItemRefs = ref<Record<string, HTMLElement>>({});
 const hasScrolledToCurrent = ref(false);
 const isMounted = ref(false);
 
+// Filter chapters: show only those in NCX/Nav TOC (with fallback for books without TOC)
+const visibleChapters = computed(() => {
+  const tocChapters = props.chapters.filter((c) => c.inToc === true);
+  // If no chapters have inToc=true (old data or books without NCX), show all chapters
+  return tocChapters.length > 0 ? tocChapters : props.chapters;
+});
+
 function handleTocClick(chapterId: string) {
   emit("select-chapter", chapterId);
   emit("close");
@@ -25,7 +32,7 @@ function handleTocClick(chapterId: string) {
 
 const currentChapterIndex = computed(() => {
   if (!props.currentChapterId) return -1;
-  return props.chapters.findIndex((c) => c.id === props.currentChapterId);
+  return visibleChapters.value.findIndex((c) => c.id === props.currentChapterId);
 });
 
 function scrollToCurrentChapter() {
@@ -79,7 +86,7 @@ function setRef(el: HTMLElement | null, chapterId: string) {
     <div ref="tocListRef" class="modal-body scroll-body">
       <div v-if="chapters.length === 0" class="no-chapters">No chapters available</div>
       <ul v-else class="toc-list">
-        <li v-for="(ch, index) in chapters" :key="ch.id">
+        <li v-for="(ch, index) in visibleChapters" :key="ch.id">
           <button
             :ref="(el: HTMLElement | null) => setRef(el, ch.id)"
             :class="['toc-item', { active: ch.id === currentChapterId }]"

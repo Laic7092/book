@@ -133,6 +133,7 @@ export const useReaderStore = defineStore("reader", {
           bookId,
           title: ch.title,
           order: ch.order,
+          inToc: ch.inToc,
         }));
 
         this.currentBook = book;

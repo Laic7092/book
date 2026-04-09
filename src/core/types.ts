@@ -17,6 +17,7 @@ export interface Chapter {
   title: string;
   href?: string;
   order: number;
+  inToc?: boolean; // Whether this chapter appears in NCX/Nav table of contents
 }
 
 export interface BookContent {

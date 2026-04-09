@@ -145,6 +145,7 @@ export class EpubParser extends BaseBookParser implements BookParser {
           title: tocItem.title,
           href: item.href,
           order,
+          inToc: true,
         });
       } else {
         const chapterId = generateId("ch");
@@ -154,6 +155,7 @@ export class EpubParser extends BaseBookParser implements BookParser {
           title: item.id || `Chapter ${order + 1}`,
           href: item.href,
           order,
+          inToc: false,
         });
       }
       order++;
