@@ -28,6 +28,7 @@ export async function saveBook(parsedBook: ParsedBook): Promise<void> {
         title: chapter.title,
         content,
         order: chapter.order,
+        href: chapter.href,
         inToc: chapter.inToc,
       });
     }
@@ -189,7 +190,7 @@ export async function getChapterIds(bookId: string): Promise<string[]> {
  */
 export async function getChapters(
   bookId: string,
-): Promise<Array<{ id: string; title: string; order: number; inToc?: boolean }>> {
+): Promise<Array<{ id: string; title: string; order: number; href?: string; inToc?: boolean }>> {
   const db = await import("./db");
   const chaptersStore = await db.openDB();
   const tx = chaptersStore.transaction(STORES.CHAPTERS, "readonly");
@@ -204,6 +205,7 @@ export async function getChapters(
         chapterId: string;
         title: string;
         order: number;
+        href?: string;
         inToc?: boolean;
       }>;
       // Sort by the stored order field
@@ -212,6 +214,7 @@ export async function getChapters(
         id: ch.chapterId,
         title: ch.title || `Chapter ${ch.order + 1}`,
         order: ch.order ?? 0,
+        href: ch.href,
         inToc: ch.inToc,
       }));
       resolve(mapped);

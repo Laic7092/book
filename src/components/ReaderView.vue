@@ -203,6 +203,69 @@ const handleSelectChapter = async (chapterId: string, targetPage: number = 0) =>
   }
 };
 
+// Handle internal EPUB link clicks (e.g., table of contents links)
+// This is called from the iframe via postMessage
+function handleInternalLinkClick(href: string) {
+  // Ignore external links
+  if (href.startsWith("http://") || href.startsWith("https://") || href.startsWith("mailto:")) {
+    return;
+  }
+
+  // Parse href: could be "chapter.xhtml#anchor" or "#anchor"
+  const hashIndex = href.indexOf("#");
+  const filePath = hashIndex > 0 ? href.substring(0, hashIndex) : "";
+  const anchor = hashIndex >= 0 ? href.substring(hashIndex + 1) : "";
+
+  const scrollToAnchor = () => {
+    if (!anchor) return;
+    const article = readerContentRef.value?.getArticle?.();
+    if (article) {
+      // Try multiple anchor selectors: id, name
+      const target =
+        article.querySelector(`[id="${CSS.escape(anchor)}"]`) ||
+        article.querySelector(`[name="${CSS.escape(anchor)}"]`);
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+  };
+
+  if (!filePath) {
+    // Same-chapter anchor: just scroll
+    scrollToAnchor();
+    return;
+  }
+
+  // Cross-chapter: find target chapter
+  const targetChapter = readerStore.chapters.find((c) => chapterMatchesHref(c, filePath));
+
+  if (targetChapter) {
+    handleSelectChapter(targetChapter.id).then(async () => {
+      if (anchor) {
+        // Wait for DOM to update and render, then scroll to anchor
+        await nextTick();
+        requestAnimationFrame(() => {
+          requestAnimationFrame(scrollToAnchor);
+        });
+      }
+    });
+  }
+}
+
+/**
+ * Check if a chapter's href matches the target file path from an internal link.
+ * Matches exact path, suffix, or path segment (for relative path variations).
+ */
+function chapterMatchesHref(chapter: Chapter, filePath: string): boolean {
+  if (!chapter.href) return false;
+  return (
+    chapter.href === filePath ||
+    chapter.href.endsWith(filePath) ||
+    chapter.href.endsWith("/" + filePath) ||
+    chapter.href.includes(filePath)
+  );
+}
+
 async function handleResize() {
   await reRenderContent();
 }
@@ -557,6 +620,7 @@ onUnmounted(() => {
       :loaded-chapters="chapterLoader.allLoadedContent.value"
       :epub-resources="currentChapterResources"
       :transitioning="isTransitioning"
+      :on-link-click="handleInternalLinkClick"
       @scroll="scrollManager.handleScroll()"
       @resize="handleResize"
       @gesture-tap="gestures.handleIframeTap"

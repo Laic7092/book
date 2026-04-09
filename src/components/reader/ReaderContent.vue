@@ -10,6 +10,7 @@ const props = defineProps<{
   currentPage?: number;
   loadedChapters?: Array<{ chapterId: string; title: string; content: string }>;
   epubResources?: HTMLElement[];
+  onLinkClick?: (href: string) => void;
 }>();
 
 const emit = defineEmits<{
@@ -50,7 +51,12 @@ const {
   clearEpubResources,
   getArticle,
   cleanup,
-} = useIframeRenderer(iframeRef, rendererOptions, gestureHandlers);
+} = useIframeRenderer(
+  iframeRef,
+  rendererOptions,
+  gestureHandlers,
+  props.onLinkClick ? (msg) => props.onLinkClick!(msg.href) : undefined,
+);
 
 let resizeObserver: ResizeObserver | null = null;
 

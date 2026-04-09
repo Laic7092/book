@@ -13,6 +13,13 @@ export interface IframeRendererOptions {
   isPaginationMode: boolean;
 }
 
+export interface IframeLinkClickEvent {
+  type: "link-click";
+  href: string;
+}
+
+type IframeMessageHandler = (message: IframeLinkClickEvent) => void;
+
 /**
  * Iframe 渲染器 composable
  * 使用 DOM 操作更新内容，避免 document.write 导致的事件监听器丢失
@@ -27,6 +34,7 @@ export function useIframeRenderer(
   iframeRef: Ref<HTMLIFrameElement | null>,
   options: Ref<IframeRendererOptions>,
   gestureHandlers?: IframeGestureHandlers,
+  onLinkClick?: IframeMessageHandler,
 ) {
   const isReady = ref(false);
   let iframeDoc: Document | null = null;
@@ -35,6 +43,12 @@ export function useIframeRenderer(
 
   // 资源追踪：记录已注入的资源详细信息
   const injectedResources = new Map<string, ResourceInfo>();
+
+  // Message handler for iframe link clicks
+  const messageHandler = (event: MessageEvent) => {
+    if (!onLinkClick || !event.data || event.data.type !== "link-click") return;
+    onLinkClick(event.data as IframeLinkClickEvent);
+  };
 
   /**
    * 初始化 iframe 文档结构（仅调用一次）
@@ -49,6 +63,23 @@ export function useIframeRenderer(
     // 一次性写入基础结构
     const styles = generateIframeStyles(options.value.settings);
 
+    // 注入链接点击处理脚本（通过 postMessage 传递到主文档）
+    const linkHandlerScript = onLinkClick
+      ? `<script>
+      (function() {
+        document.addEventListener('click', function(e) {
+          var link = e.target.closest('a[href]');
+          if (!link) return;
+          var href = link.getAttribute('href');
+          if (!href || href.startsWith('http://') || href.startsWith('https://') || href.startsWith('mailto:')) return;
+          e.preventDefault();
+          e.stopPropagation();
+          window.parent.postMessage({ type: 'link-click', href: href }, window.location.origin);
+        }, true);
+      })();
+    </script>`
+      : "";
+
     iframeDoc.open();
     iframeDoc.write(`
       <!DOCTYPE html>
@@ -60,6 +91,7 @@ export function useIframeRenderer(
         <style id="base-style">${styles.base}</style>
         <style id="typography-style">${styles.typography}</style>
         <style id="epub-style"></style>
+        ${linkHandlerScript}
       </head>
       <body class="reader-content${!options.value.isPaginationMode ? " vertical-content" : ""}"></body>
       </html>
@@ -68,6 +100,11 @@ export function useIframeRenderer(
 
     isInitialized = true;
     isReady.value = true;
+
+    // Register message listener for link clicks
+    if (onLinkClick) {
+      window.addEventListener("message", messageHandler);
+    }
 
     // 初始化手势识别
     if (gestureHandlers && iframeDoc) {
@@ -156,6 +193,9 @@ export function useIframeRenderer(
    */
   function cleanup() {
     clearEpubResources();
+
+    // Remove message listener
+    window.removeEventListener("message", messageHandler);
 
     // 清理手势监听
     if (gestures) {
