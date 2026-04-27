@@ -68,6 +68,11 @@ export function generateBaseCSS(): string {
       touch-action: pan-y;
     }
 
+    body.reader-content p.split{
+      text-indent: 0;
+      margin-top: 0;
+    }
+
     body.reader-content h1,
     body.reader-content h2,
     body.reader-content h3,

@@ -1,7 +1,6 @@
 import { ref, onUnmounted, type Ref } from "vue";
 import type { ReaderSettings } from "../core/types";
-import { generateIframeStyles } from "../utils/reader-styles";
-import { type ResourceInfo, injectResources, clearResources } from "../utils/iframe-resources";
+import { PageMeasurer } from "../utils/page-measurer";
 
 /**
  * 分页结果中的单页数据结构
@@ -34,24 +33,349 @@ export interface PaginateOptions {
 /** LRU 缓存容量 */
 const CACHE_CAPACITY = 10;
 
+/** 后台计算：每帧最多执行毫秒数（约一帧，60fps） */
+const BG_CHUNK_TIME_MS = 16;
+
+/** 后台计算：每 N 页更新一次响应式状态 */
+const BG_BATCH_SIZE = 5;
+
+// ==================== 纯函数：HTML 工具 ====================
+
 /**
- * 阅读器分页 Composable
- *
- * 核心流程：
- * 1. 将 HTML 拆分为独立的 block 单元
- * 2. 使用隐藏的 iframe 进行精确高度测量
- * 3. 逐页累加 block，支持智能拆分页尾 block 以充分利用空间
- * 4. 支持后台计算剩余页面，不阻塞用户交互
- * 5. LRU 缓存机制，避免重复计算
+ * 在 HTML 属性串中追加 class，保留已有 class 值
  */
+function addSplitClass(attrs: string): string {
+  const classMatch = attrs.match(/class="([^"]*)"/);
+  if (classMatch) {
+    return attrs.replace(classMatch[0], `class="${classMatch[1]} split"`);
+  }
+  return ` class="split"${attrs}`;
+}
+
+// ==================== 纯函数：Block 提取 ====================
+
+/** 可拆分的叶子标签 */
+const SPLITTABLE_TAGS = new Set([
+  "p",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "li",
+  "td",
+  "th",
+  "figcaption",
+  "dt",
+  "dd",
+  "blockquote",
+  "pre",
+]);
+
+/** 不可拆分的原子标签 */
+const ATOMIC_TAGS = new Set([
+  "img",
+  "svg",
+  "figure",
+  "table",
+  "video",
+  "audio",
+  "canvas",
+  "picture",
+  "iframe",
+  "object",
+  "embed",
+  "math",
+]);
+
+/** 列表容器：始终展开到 li 级别 */
+const LIST_TAGS = new Set(["ul", "ol"]);
+
+/**
+ * 递归展开 DOM 树为细粒度 block 列表。
+ * 有 class/id/style 属性的容器元素整体保留，纯布局容器递归展开。
+ */
+function extractBlocks(container: Element): string[] {
+  const result: string[] = [];
+
+  function walk(el: Element) {
+    const tag = el.tagName.toLowerCase();
+
+    if (ATOMIC_TAGS.has(tag)) {
+      result.push(el.outerHTML);
+      return;
+    }
+
+    if (SPLITTABLE_TAGS.has(tag)) {
+      result.push(el.outerHTML);
+      return;
+    }
+
+    const children = Array.from(el.children);
+    if (children.length === 0) {
+      result.push(el.outerHTML);
+      return;
+    }
+
+    if (LIST_TAGS.has(tag)) {
+      for (const child of children) walk(child);
+      return;
+    }
+
+    if (el.hasAttribute("class") || el.hasAttribute("id") || el.hasAttribute("style")) {
+      result.push(el.outerHTML);
+      return;
+    }
+
+    for (const child of children) walk(child);
+  }
+
+  for (const child of Array.from(container.children)) walk(child);
+  return result;
+}
+
+// ==================== 测量相关算法 ====================
+
+/**
+ * 对单个 HTML 元素做文本级二分拆分。
+ *
+ * @param elementHtml 元素的完整 outerHTML
+ * @param availHeight 可用高度
+ * @param m 测量器
+ * @param outer 可选的外部包装标签（用于在子元素拆分中保持外层容器）
+ */
+function splitTextNode(
+  elementHtml: string,
+  availHeight: number,
+  m: PageMeasurer,
+  outer?: { openTag: string; closeTag: string; openContTag: string },
+): { splitHtml: string; remainingHtml: string } {
+  const tagMatch = elementHtml.match(/^<(\w+)([^>]*)>/);
+  const tagName = tagMatch?.[1] || "span";
+  const tagAttrs = tagMatch?.[2] || "";
+  const open = `<${tagName}${tagAttrs}>`;
+  const close = `</${tagName}>`;
+  const contOpen = `<${tagName}${addSplitClass(tagAttrs)}>`;
+
+  const inner = elementHtml.replace(/^<\w+[^>]*>/, "").replace(/<\/\w+>$/, "");
+
+  const tempDiv = m.createElement("div");
+  tempDiv.innerHTML = inner;
+  const fullText = tempDiv.textContent || "";
+
+  if (!fullText.trim()) {
+    return { splitHtml: elementHtml, remainingHtml: "" };
+  }
+
+  const wrapTest = (text: string) => {
+    const innerHtml = `${open}${text}${close}`;
+    return outer ? `${outer.openTag}${innerHtml}${outer.closeTag}` : innerHtml;
+  };
+
+  let low = 1;
+  let high = fullText.length;
+  let bestSplit = 0;
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const testText = fullText.slice(0, mid).trim();
+    if (!testText) {
+      low = mid + 1;
+      continue;
+    }
+
+    m.setBodyHTML(wrapTest(testText));
+    const h = m.getContentHeight();
+
+    if (h <= availHeight) {
+      bestSplit = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  if (bestSplit === 0) {
+    return { splitHtml: "", remainingHtml: elementHtml };
+  }
+
+  const firstPart = fullText.slice(0, bestSplit).trim();
+  const secondPart = fullText.slice(bestSplit).trim();
+
+  const buildFirst = `${open}${firstPart}${close}`;
+  const buildSecond = secondPart ? `${contOpen}${secondPart}${close}` : "";
+
+  return {
+    splitHtml: outer ? `${outer.openTag}${buildFirst}${outer.closeTag}` : buildFirst,
+    remainingHtml: buildSecond
+      ? outer
+        ? `${outer.openContTag}${buildSecond}${outer.closeTag}`
+        : buildSecond
+      : "",
+  };
+}
+
+/**
+ * 尝试拆分 block，将能容纳的部分放入当前页。
+ *
+ * 两层策略：先在子元素边界拆分，失败后退化到文本级二分拆分。
+ */
+function trySplitBlock(
+  blockHtml: string,
+  currentHeight: number,
+  maxHeight: number,
+  m: PageMeasurer,
+): { splitHtml: string; remainingHtml: string } {
+  if (!m.isReady) {
+    return { splitHtml: blockHtml, remainingHtml: "" };
+  }
+
+  const tagMatch = blockHtml.match(/^<(\w+)([^>]*)>/);
+  const outerTagName = tagMatch?.[1] || "div";
+  const outerTagAttrs = tagMatch?.[2] || "";
+  const openTag = `<${outerTagName}${outerTagAttrs}>`;
+  const closeTag = `</${outerTagName}>`;
+  const contAttrs = addSplitClass(outerTagAttrs);
+  const openContTag = `<${outerTagName}${contAttrs}>`;
+  const innerContent = blockHtml.replace(/^<\w+[^>]*>/, "").replace(/<\/\w+>$/, "");
+
+  const tempDiv = m.createElement("div");
+  tempDiv.innerHTML = innerContent;
+  const childElements = Array.from(tempDiv.children);
+  const remainingSpace = maxHeight - currentHeight;
+
+  const wrap = (inner: string) => `${openTag}${inner}${closeTag}`;
+  const wrapCont = (inner: string) => `${openContTag}${inner}${closeTag}`;
+
+  // 第一层：在子元素边界拆分
+  if (childElements.length > 1) {
+    let accumulated = "";
+    let bestIdx = 0;
+
+    for (let i = 0; i < childElements.length; i++) {
+      const testHtml = accumulated + childElements[i].outerHTML;
+      m.setBodyHTML(wrap(testHtml));
+      if (m.getContentHeight() <= remainingSpace) {
+        accumulated = testHtml;
+        bestIdx = i + 1;
+      } else {
+        break;
+      }
+    }
+
+    if (bestIdx > 0) {
+      const remainingChildren = childElements
+        .slice(bestIdx)
+        .map((c) => c.outerHTML)
+        .join("");
+      return {
+        splitHtml: wrap(accumulated),
+        remainingHtml: remainingChildren ? wrapCont(remainingChildren) : "",
+      };
+    }
+
+    // 第一个子元素就超高：对它做文本级拆分
+    const firstChild = childElements[0];
+    const restChildrenHtml = childElements
+      .slice(1)
+      .map((c) => c.outerHTML)
+      .join("");
+    const childResult = splitTextNode(firstChild.outerHTML, remainingSpace, m);
+
+    if (childResult.splitHtml) {
+      return {
+        splitHtml: wrap(childResult.splitHtml),
+        remainingHtml: wrapCont(childResult.remainingHtml + restChildrenHtml),
+      };
+    }
+    return { splitHtml: "", remainingHtml: blockHtml };
+  }
+
+  // 第二层：文本级二分拆分
+  return splitTextNode(blockHtml, remainingSpace, m, { openTag, closeTag, openContTag });
+}
+
+/**
+ * 计算单页内容：从 startIdx 开始累加 block，直到超过 maxHeight。
+ * 会修改 blocks 数组（拆分后的剩余部分替换原位置）。
+ */
+function computeSinglePage(
+  blocks: string[],
+  startIdx: number,
+  maxHeight: number,
+  pageIndex: number,
+  m: PageMeasurer,
+  minSplitThreshold: number,
+): Page {
+  if (!m.isReady) {
+    return { index: pageIndex, html: "", blockStart: startIdx, blockEnd: startIdx + 1 };
+  }
+
+  let endIdx = startIdx + 1;
+  m.setBodyHTML(blocks[startIdx]);
+
+  const singleBlockHeight = m.getContentHeight();
+  if (singleBlockHeight > maxHeight) {
+    const { splitHtml, remainingHtml } = trySplitBlock(blocks[startIdx], 0, maxHeight, m);
+    m.clearBody();
+    if (splitHtml && remainingHtml) {
+      blocks[startIdx] = remainingHtml;
+      return { index: pageIndex, html: splitHtml, blockStart: startIdx, blockEnd: startIdx };
+    }
+    return {
+      index: pageIndex,
+      html: splitHtml || blocks[startIdx],
+      blockStart: startIdx,
+      blockEnd: endIdx,
+    };
+  }
+
+  while (endIdx < blocks.length) {
+    const appendedNodes = m.appendChildren(blocks[endIdx]);
+    const h = m.getContentHeight();
+
+    if (h > maxHeight) {
+      m.removeChildren(appendedNodes);
+
+      const currentHtml = m.getBodyHTML();
+      const currentH = m.getContentHeight();
+      const remainingSpace = maxHeight - currentH;
+
+      if (remainingSpace > minSplitThreshold) {
+        const { splitHtml, remainingHtml } = trySplitBlock(blocks[endIdx], currentH, maxHeight, m);
+
+        if (splitHtml) {
+          m.setBodyHTML(currentHtml + splitHtml);
+          if (remainingHtml) {
+            blocks[endIdx] = remainingHtml;
+          } else {
+            endIdx++;
+          }
+        } else {
+          m.setBodyHTML(currentHtml);
+        }
+      }
+      break;
+    }
+    endIdx++;
+  }
+
+  const pageHtml = m.getBodyHTML();
+  m.clearBody();
+
+  return { index: pageIndex, html: pageHtml, blockStart: startIdx, blockEnd: endIdx };
+}
+
+// ==================== 主 Composable ====================
+
 export function usePagination(
   containerRef: Ref<HTMLElement | null>,
   bookId: string,
   chapters: PaginationChapter[],
   settings: Ref<ReaderSettings>,
 ) {
-  // ==================== 响应式状态 ====================
-
+  // ── 响应式状态 ──
   const currentPage = ref(0);
   const totalPages = ref(1);
   const isPaginating = ref(false);
@@ -61,53 +385,28 @@ export function usePagination(
   const computedCount = ref(0);
   const rawHtml = ref("");
 
-  // ==================== 测量 iframe ====================
+  // ── 测量器 ──
+  let measurer: PageMeasurer | null = null;
 
-  let measureIframe: HTMLIFrameElement | null = null;
-  let measureDoc: Document | null = null;
-  let measureEl: HTMLElement | null = null;
-
-  // ==================== ResizeObserver ====================
-
+  // ── ResizeObserver ──
   let resizeObserver: ResizeObserver | null = null;
   let resizeTimer: ReturnType<typeof setTimeout> | null = null;
-
-  // ==================== 缓存与后台计算 ====================
-
-  /** 实例级缓存：cacheKey -> Page[] */
-  const pagesCache = new Map<string, Page[]>();
-
-  /** 用于取消后台计算的标志 */
-  let backgroundCalcActive = true;
-
-  /** 后台计算 ID，用于区分不同批次的计算 */
-  let backgroundCalcId = 0;
-
-  /** 当前正在计算的章节 ID，用于 resize 后重新计算 */
   let currentChapterId: string | null = null;
-
-  /** 当前正在计算的 HTML 内容 */
   let currentHtmlForPaginate: string | null = null;
 
-  // ==================== 资源管理 ====================
+  // ── 缓存 ──
+  const pagesCache = new Map<string, Page[]>();
 
-  /** 资源追踪：记录已注入的资源详细信息 */
-  const injectedResources = new Map<string, ResourceInfo>();
+  // ── 后台计算取消令牌 ──
+  let bgCancelToken: { cancelled: boolean } | null = null;
 
-  // ==================== 工具函数 ====================
+  // ── 工具函数 ──
 
-  /**
-   * 生成样式 hash 用于缓存 key
-   * 当样式设置变化时，分页结果需要重新计算
-   */
   function generateStyleHash(): string {
     const s = settings.value;
     return `${s.fontSize}-${s.lineHeight}-${s.fontFamily}-${s.margin || 0}`;
   }
 
-  /**
-   * 获取容器可用高度
-   */
   function getPageHeight(): number {
     const el = containerRef.value;
     if (!el) return window.innerHeight - 120;
@@ -120,323 +419,44 @@ export function usePagination(
     return el.clientWidth;
   }
 
-  /**
-   * 获取测量元素的实际高度
-   * 使用 getBoundingClientRect 避免 margin 塌陷问题
-   */
-  function getContentHeight(): number {
-    if (!measureEl) return 0;
-    const html = measureDoc?.documentElement;
-    return html?.offsetHeight || 100;
+  function getOrCreateMeasurer(): PageMeasurer {
+    if (!measurer) {
+      measurer = new PageMeasurer();
+      measurer.init(getContainerWidth(), getPageHeight(), settings.value);
+      setupResizeObserver();
+    } else {
+      measurer.updateSize(getContainerWidth(), getPageHeight());
+      measurer.updateStyles(settings.value);
+    }
+    return measurer;
   }
 
-  // ==================== 测量 iframe 管理 ====================
+  // ── 缓存管理 ──
 
-  /**
-   * 初始化隐藏的测量 iframe
-   * 使用 iframe 创建独立的渲染上下文，避免影响主文档布局
-   */
-  function initMeasureIframe() {
-    if (measureIframe) {
-      measureIframe.remove();
-    }
-
-    measureIframe = document.createElement("iframe");
-    measureIframe.style.position = "fixed";
-    measureIframe.style.left = "0";
-    measureIframe.style.top = "0";
-    measureIframe.style.pointerEvents = "none";
-    measureIframe.style.visibility = "hidden";
-    measureIframe.style.width = `${getContainerWidth()}px`;
-    measureIframe.style.height = `${getPageHeight()}px`;
-    measureIframe.style.border = "none";
-    measureIframe.style.zIndex = "-1";
-    document.body.appendChild(measureIframe);
-
-    measureDoc = measureIframe.contentDocument || measureIframe.contentWindow?.document || null;
-    if (!measureDoc) return;
-
-    const styles = generateIframeStyles(settings.value);
-
-    measureDoc.open();
-    measureDoc.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-        <style>${styles.theme}</style>
-        <style>${styles.base}</style>
-        <style>${styles.typography}</style>
-        <style id="epub-style"></style>
-      </head>
-      <body class="reader-content"></body>
-      </html>
-    `);
-    measureDoc.close();
-
-    measureEl = measureDoc.body;
-  }
-
-  /**
-   * 更新测量 iframe 中的样式（当用户修改阅读设置时调用）
-   */
-  function updateMeasureIframeStyles() {
-    if (!measureDoc) return;
-
-    const styles = measureDoc.querySelectorAll("style");
-    if (styles.length >= 4) {
-      const newStyles = generateIframeStyles(settings.value);
-      styles[0].textContent = newStyles.theme;
-      styles[1].textContent = newStyles.base;
-      styles[2].textContent = newStyles.typography;
-    }
-  }
-
-  /**
-   * 更新测量 iframe 的尺寸（当容器大小变化时调用）
-   */
-  function updateMeasureIframeSize() {
-    if (!measureIframe) return;
-    measureIframe.style.width = `${getContainerWidth()}px`;
-    measureIframe.style.height = `${getPageHeight()}px`;
-  }
-
-  // ==================== 智能拆分 ====================
-
-  /**
-   * 尝试拆分 block，将能容纳的部分放入当前页
-   *
-   * 使用二分查找找到最佳拆分点，优先在单词边界（空格）处断开
-   *
-   * @param blockHtml 待拆分的 block HTML
-   * @param currentHeight 当前页面已使用的高度
-   * @param maxHeight 页面最大高度
-   * @returns 拆分结果：{ splitHtml: 放入当前页的部分, remainingHtml: 留给下一页的部分 }
-   */
-  function trySplitBlock(
-    blockHtml: string,
-    currentHeight: number,
-    maxHeight: number,
-  ): { splitHtml: string; remainingHtml: string } {
-    if (!measureEl || !measureDoc) {
-      return { splitHtml: blockHtml, remainingHtml: "" };
-    }
-
-    // 提取内部内容（去掉最外层标签）
-    const innerContent = blockHtml.replace(/^<\w+>/, "").replace(/<\/\w+>$/, "");
-
-    // 创建临时元素解析内容
-    const tempDiv = measureDoc.createElement("div");
-    tempDiv.innerHTML = innerContent;
-
-    // 检查是否有可拆分的文本内容
-    const fullText = tempDiv.textContent || "";
-    if (!fullText.trim()) {
-      return { splitHtml: blockHtml, remainingHtml: "" };
-    }
-
-    // 重建 HTML 的辅助函数
-    function rebuildHtml(textSlice: string): string {
-      return blockHtml.replace(innerContent, textSlice);
-    }
-
-    // 二分查找能容纳的最大文本长度
-    let low = 1;
-    let high = fullText.length;
-    let bestSplit = 0;
-
-    while (low <= high) {
-      const mid = Math.floor((low + high) / 2);
-
-      // 尝试在单词边界拆分
-      let splitPoint = mid;
-
-      const testText = fullText.slice(0, splitPoint).trim();
-      if (!testText) {
-        low = mid + 1;
-        continue;
-      }
-
-      // 测量高度
-      const testHtml = rebuildHtml(testText);
-      measureEl.innerHTML = testHtml;
-      const h = getContentHeight() - settings.value.margin;
-
-      if (h <= maxHeight - currentHeight) {
-        bestSplit = splitPoint;
-        low = mid + 1;
-      } else {
-        high = mid - 1;
-      }
-    }
-
-    // 无法拆分
-    if (bestSplit === 0) {
-      return { splitHtml: "", remainingHtml: blockHtml };
-    }
-
-    // 在最佳位置拆分
-    const firstPart = fullText.slice(0, bestSplit).trim();
-    const secondPart = fullText.slice(bestSplit).trim();
-
-    return {
-      splitHtml: rebuildHtml(firstPart),
-      remainingHtml: secondPart
-        ? rebuildHtml(secondPart)
-            .replace(/^<\w+>/, "")
-            .replace(/<\/\w+>$/, "")
-        : "",
-    };
-  }
-
-  // ==================== 单页计算 ====================
-
-  /**
-   * 计算单页内容：从 startIdx 开始累加 block，直到超过 maxHeight
-   *
-   * 支持智能拆分：当页尾有剩余空间但下一个 block 放不下时，尝试拆分该 block
-   *
-   * @param blocks 所有 block 列表（会被修改：拆分后的剩余部分会替换原位置）
-   * @param startIdx 起始 block 索引
-   * @param maxHeight 页面最大高度
-   * @param pageIndex 页面索引
-   * @returns 单页分页结果
-   */
-  function computeSinglePage(
-    blocks: string[],
-    startIdx: number,
-    maxHeight: number,
-    pageIndex: number,
-  ): Page {
-    if (!measureEl) {
-      return { index: pageIndex, html: "", blockStart: startIdx, blockEnd: startIdx + 1 };
-    }
-
-    let endIdx = startIdx + 1;
-    measureEl.innerHTML = blocks[startIdx];
-
-    // 检查单个 block 是否超高
-    const singleBlockHeight = getContentHeight();
-    if (singleBlockHeight > maxHeight) {
-      // 尝试拆分超高 block
-      const { splitHtml } = trySplitBlock(blocks[startIdx], 0, maxHeight);
-      measureEl.innerHTML = "";
-      return {
-        index: pageIndex,
-        html: splitHtml || blocks[startIdx],
-        blockStart: startIdx,
-        blockEnd: endIdx,
-      };
-    }
-
-    // 逐个尝试添加后续 block
-    while (endIdx < blocks.length) {
-      const temp = measureDoc!.createElement("div");
-      temp.innerHTML = blocks[endIdx];
-      const appendedNodes: Node[] = [];
-
-      for (const child of Array.from(temp.childNodes)) {
-        measureEl.appendChild(child);
-        appendedNodes.push(child);
-      }
-
-      const h = getContentHeight();
-      if (h > maxHeight) {
-        // 放不下，回退
-        for (const node of appendedNodes) {
-          measureEl.removeChild(node);
-        }
-
-        // 尝试拆分当前 block
-        const currentHtml = measureEl.innerHTML;
-        const currentH = getContentHeight();
-        const remainingSpace = maxHeight - currentH;
-
-        // 检查剩余空间是否足够拆分
-        const minRemainingRatio = settings.value.fontSize * settings.value.lineHeight;
-        if (remainingSpace > minRemainingRatio) {
-          const { splitHtml, remainingHtml } = trySplitBlock(blocks[endIdx], currentH, maxHeight);
-
-          if (splitHtml) {
-            // 成功拆分
-            measureEl.innerHTML = currentHtml + splitHtml;
-
-            if (remainingHtml) {
-              // 有剩余：替换原 block 为剩余部分，供下一页使用
-              blocks[endIdx] = remainingHtml;
-            } else {
-              // 无剩余：整个 block 都放下了，标记为已处理
-              endIdx++;
-            }
-          } else {
-            // 拆分失败：恢复 measureEl（trySplitBlock 会修改它）
-            measureEl.innerHTML = currentHtml;
-          }
-        }
-
-        break;
-      }
-      endIdx++;
-    }
-
-    const pageHtml = measureEl.innerHTML;
-    measureEl.innerHTML = "";
-
-    return {
-      index: pageIndex,
-      html: pageHtml,
-      blockStart: startIdx,
-      blockEnd: endIdx,
-    };
-  }
-
-  // ==================== 缓存管理 ====================
-
-  /**
-   * 更新 LRU 缓存
-   */
   function updateCache(chapterId: string, computedPages: Page[]) {
     const styleHash = generateStyleHash();
     const cacheKey = `${bookId}:${chapterId}:${styleHash}`;
 
-    // 移到末尾（标记为最近使用）
-    if (pagesCache.has(cacheKey)) {
-      pagesCache.delete(cacheKey);
-    }
+    if (pagesCache.has(cacheKey)) pagesCache.delete(cacheKey);
 
-    // 淘汰最久未使用的条目
     while (pagesCache.size >= CACHE_CAPACITY) {
       const firstKey = pagesCache.keys().next().value;
-      if (firstKey !== undefined) {
-        pagesCache.delete(firstKey);
-      } else {
-        break;
-      }
+      if (firstKey !== undefined) pagesCache.delete(firstKey);
+      else break;
     }
 
     pagesCache.set(cacheKey, computedPages);
   }
 
-  /**
-   * 清理指定 bookId 的所有缓存
-   */
   function clearCacheForBook(clearBookId: string) {
     const prefix = `${clearBookId}:`;
     for (const key of pagesCache.keys()) {
-      if (key.startsWith(prefix)) {
-        pagesCache.delete(key);
-      }
+      if (key.startsWith(prefix)) pagesCache.delete(key);
     }
   }
 
-  // ==================== 分页主流程 ====================
+  // ── 分页主流程 ──
 
-  /**
-   * 限制页码在有效范围内
-   * @param target 目标页码（负数表示最后一页）
-   * @param length 总页数
-   */
   function clampPage(target: number | undefined, length: number): number {
     if (length <= 0) return 0;
     if (target === undefined) return 0;
@@ -444,20 +464,12 @@ export function usePagination(
     return Math.min(target, length - 1);
   }
 
-  /**
-   * 从 chapters 数组中安全获取章节 HTML
-   */
   function getChapterHtml(chapterId: string): string | null {
     const chapter = chapters.find((c) => c.id === chapterId);
     if (!chapter || !("html" in chapter)) return null;
     return (chapter as { html?: string }).html ?? null;
   }
 
-  /**
-   * 执行分页计算
-   * @param chapterId 章节 ID
-   * @param options 可选参数：html（直接提供内容）、targetPage（目标页码）
-   */
   async function paginate(chapterId: string, options?: PaginateOptions): Promise<void> {
     const html = options?.html ?? getChapterHtml(chapterId);
     if (html === null) {
@@ -481,31 +493,22 @@ export function usePagination(
       return;
     }
 
-    // 初始化或更新测量 iframe
-    if (!measureIframe) {
-      initMeasureIframe();
-      setupResizeObserver();
-    } else {
-      updateMeasureIframeStyles();
-      updateMeasureIframeSize();
+    const m = getOrCreateMeasurer();
+    if (!m.isReady) {
+      isPaginating.value = false;
+      isReady.value = true;
+      return;
     }
 
-    // 注入资源（EPUB 的 <link> 和 <style> 元素）
+    // 注入资源
     if (options?.resources && options.resources.length > 0) {
-      injectResources(
-        measureDoc!,
-        options.resources,
-        injectedResources,
-        "epub-style",
-        "data-measure-dynamic",
-      );
+      m.injectResources(options.resources);
     } else {
-      clearResources(measureDoc!, injectedResources, "epub-style");
+      m.clearInjectedResources();
     }
 
-    // 取消正在运行的后台计算
-    backgroundCalcActive = false;
-    backgroundCalcId++;
+    // 取消后台计算
+    if (bgCancelToken) bgCancelToken.cancelled = true;
 
     // 检查缓存
     const styleHash = generateStyleHash();
@@ -525,21 +528,21 @@ export function usePagination(
       return;
     }
 
-    // 拆分 HTML 为 blocks
-    const maxHeight = getPageHeight();
-    const parser = new DOMParser();
-    const { body } = parser.parseFromString(rawHtml.value, "text/html");
-
-    let b: any;
-    if (body.children.length === 1 && body.firstElementChild?.children) {
-      b = body.firstElementChild?.children;
-    } else if (body.children.length > 1) {
-      b = body.children;
+    // 解析 HTML → 提取 blocks
+    const doc = new DOMParser().parseFromString(rawHtml.value, "text/html");
+    if (!doc.body) {
+      isPaginating.value = false;
+      isReady.value = true;
+      return;
     }
 
-    const blocks = Array.from(b).map((ele: any) => ele.outerHTML);
+    const container: Element =
+      doc.body.children.length === 1 && doc.body.firstElementChild
+        ? doc.body.firstElementChild
+        : doc.body;
 
-    // 空内容处理
+    const blocks = extractBlocks(container);
+
     if (blocks.length === 0) {
       const emptyPage: Page = { index: 0, html: "", blockStart: 0, blockEnd: 0 };
       pages.value = [emptyPage];
@@ -553,19 +556,20 @@ export function usePagination(
       return;
     }
 
-    // 逐页计算，增量更新
+    const maxHeight = getPageHeight();
+    const threshold = settings.value.fontSize * settings.value.lineHeight;
     const computedPages: Page[] = [];
-    let startIdx = 0;
     let pageIndex = 0;
+    let startIdx = 0;
 
     while (startIdx < blocks.length) {
-      const page = computeSinglePage(blocks, startIdx, maxHeight, pageIndex);
+      const page = computeSinglePage(blocks, startIdx, maxHeight, pageIndex, m, threshold);
       computedPages.push(page);
 
       computedCount.value = computedPages.length;
       totalPages.value = computedPages.length;
 
-      // 目标页就绪，立即返回
+      // 目标页就绪，立即返回；剩余页面后台计算
       if (targetPage !== undefined && page.index === targetPage) {
         currentPage.value = targetPage;
         currentHtml.value = page.html;
@@ -574,22 +578,23 @@ export function usePagination(
         isPaginating.value = false;
         isReady.value = true;
 
-        // 后台计算剩余页面
-        const currentCalcId = backgroundCalcId;
-        backgroundCalcActive = true;
+        const token = { cancelled: false };
+        bgCancelToken = token;
         computeRemainingInBackground(
           blocks,
           page.blockEnd,
           pageIndex + 1,
           maxHeight,
           chapterId,
-          currentCalcId,
+          token,
+          m,
+          threshold,
           computedPages,
         );
         return;
       }
 
-      // 让出主线程，允许渲染
+      // 让出主线程
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       startIdx = page.blockEnd;
@@ -605,50 +610,48 @@ export function usePagination(
     }
 
     updateCache(chapterId, pages.value);
-
     isPaginating.value = false;
     isReady.value = true;
   }
 
-  // ==================== 后台计算 ====================
+  // ── 后台计算 ──
 
-  /**
-   * 后台计算剩余页面（不阻塞用户交互）
-   *
-   * 使用时间片轮转策略：每帧最多执行 CHUNK_TIME_MS 毫秒，避免阻塞主线程
-   * 每计算 BATCH_SIZE 页更新一次响应式状态，减少触发频率
-   */
   function computeRemainingInBackground(
     blocks: string[],
     startIdx: number,
     pageIndex: number,
     maxHeight: number,
     chapterId: string,
-    calcId: number,
+    cancelToken: { cancelled: boolean },
+    m: PageMeasurer,
+    minSplitThreshold: number,
     basePages: Page[],
   ): void {
     let currentIdx = startIdx;
     let currentPageIdx = pageIndex;
-    const CHUNK_TIME_MS = 16; // 约一帧的时间（60fps）
-    const BATCH_SIZE = 5; // 每 5 页更新一次响应式状态
     const remainingPages: Page[] = [];
 
     function computeChunk() {
-      // 检查是否被取消
-      if (!backgroundCalcActive || calcId !== backgroundCalcId) return;
+      if (cancelToken.cancelled) return;
 
       const startTime = performance.now();
       let pagesSinceUpdate = 0;
 
-      while (currentIdx < blocks.length && performance.now() - startTime < CHUNK_TIME_MS) {
-        const page = computeSinglePage(blocks, currentIdx, maxHeight, currentPageIdx);
+      while (currentIdx < blocks.length && performance.now() - startTime < BG_CHUNK_TIME_MS) {
+        const page = computeSinglePage(
+          blocks,
+          currentIdx,
+          maxHeight,
+          currentPageIdx,
+          m,
+          minSplitThreshold,
+        );
         remainingPages.push(page);
         currentIdx = page.blockEnd;
         currentPageIdx++;
         pagesSinceUpdate++;
 
-        // 批量更新响应式状态
-        if (pagesSinceUpdate >= BATCH_SIZE) {
+        if (pagesSinceUpdate >= BG_BATCH_SIZE) {
           const merged = [...basePages, ...remainingPages];
           computedCount.value = merged.length;
           totalPages.value = merged.length;
@@ -657,7 +660,6 @@ export function usePagination(
         }
       }
 
-      // 更新剩余页面
       if (pagesSinceUpdate > 0) {
         const merged = [...basePages, ...remainingPages];
         computedCount.value = merged.length;
@@ -666,30 +668,19 @@ export function usePagination(
       }
 
       if (currentIdx < blocks.length) {
-        // 还有剩余，下一帧继续
         setTimeout(computeChunk, 0);
-      } else {
-        // 全部完成，再次检查 calcId 防止覆盖新数据
-        if (calcId === backgroundCalcId) {
-          const merged = [...basePages, ...remainingPages];
-          updateCache(chapterId, merged);
-        }
+      } else if (!cancelToken.cancelled) {
+        updateCache(chapterId, [...basePages, ...remainingPages]);
       }
     }
 
     setTimeout(computeChunk, 0);
   }
 
-  // ==================== ResizeObserver ====================
+  // ── ResizeObserver ──
 
-  /**
-   * 设置 ResizeObserver 监听容器大小变化
-   * 容器大小变化时重新计算分页（带 150ms 防抖）
-   */
   function setupResizeObserver() {
-    if (resizeObserver) {
-      resizeObserver.disconnect();
-    }
+    if (resizeObserver) resizeObserver.disconnect();
 
     resizeObserver = new ResizeObserver(() => {
       if (!currentChapterId || !currentHtmlForPaginate) return;
@@ -697,38 +688,27 @@ export function usePagination(
 
       const chapterId = currentChapterId;
       const html = currentHtmlForPaginate;
-      const targetPage = currentPage.value;
 
       resizeTimer = setTimeout(() => {
-        // 清除当前样式哈希的缓存
         const styleHash = generateStyleHash();
         const cacheKey = `${bookId}:${chapterId}:${styleHash}`;
         pagesCache.delete(cacheKey);
-        void paginate(chapterId, { html, targetPage });
+        void paginate(chapterId, { html, targetPage: currentPage.value });
       }, 150);
     });
 
     const el = containerRef.value;
-    if (el) {
-      resizeObserver.observe(el);
-    }
+    if (el) resizeObserver.observe(el);
   }
 
-  // ==================== 页面导航 ====================
+  // ── 页面导航 ──
 
-  /**
-   * 跳转到指定页
-   */
   function goToPage(page: number): void {
     if (page < 0 || page >= pages.value.length) return;
     currentPage.value = page;
     currentHtml.value = pages.value[page].html;
   }
 
-  /**
-   * 下一页
-   * @returns 是否成功跳转
-   */
   function nextPage(): boolean {
     if (currentPage.value >= pages.value.length - 1) return false;
     currentPage.value++;
@@ -736,10 +716,6 @@ export function usePagination(
     return true;
   }
 
-  /**
-   * 上一页
-   * @returns 是否成功跳转
-   */
   function prevPage(): boolean {
     if (currentPage.value <= 0) return false;
     currentPage.value--;
@@ -747,36 +723,24 @@ export function usePagination(
     return true;
   }
 
-  /**
-   * 获取当前阅读进度百分比
-   * @returns 已完成比例（0-100），例如第一页/共5页 = 20%
-   * 注意：这是"已完成比例"而非"当前位置"，读完第1页表示完成了 1/5
-   */
   function getPageProgress(): number {
     if (totalPages.value <= 1) return 100;
     return ((currentPage.value + 1) / totalPages.value) * 100;
   }
 
-  // ==================== 清理 ====================
+  // ── 清理 ──
 
   function cleanup(): void {
-    backgroundCalcActive = false;
+    if (bgCancelToken) bgCancelToken.cancelled = true;
 
     if (resizeTimer) {
       clearTimeout(resizeTimer);
       resizeTimer = null;
     }
 
-    // 清理注入的资源
-    if (measureDoc) {
-      clearResources(measureDoc, injectedResources, "epub-style");
-    }
-
-    if (measureIframe) {
-      measureIframe.remove();
-      measureIframe = null;
-      measureDoc = null;
-      measureEl = null;
+    if (measurer) {
+      measurer.destroy();
+      measurer = null;
     }
 
     if (resizeObserver) {
@@ -788,16 +752,14 @@ export function usePagination(
     pages.value = [];
     currentChapterId = null;
     currentHtmlForPaginate = null;
+    bgCancelToken = null;
   }
 
   function clearCache(): void {
     pagesCache.clear();
   }
 
-  // 组件卸载时自动清理
-  onUnmounted(() => {
-    cleanup();
-  });
+  onUnmounted(() => cleanup());
 
   return {
     currentPage,

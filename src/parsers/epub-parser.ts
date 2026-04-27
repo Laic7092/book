@@ -244,7 +244,7 @@ export class EpubParser extends BaseBookParser implements BookParser {
     const language =
       metadataEl.querySelector("dc\\:language, language")?.textContent?.trim() || undefined;
 
-    // Try to find cover image
+    // Try to find cover image via meta[name="cover"] (EPUB 2 / 3)
     const coverMeta = metadataEl.querySelector('meta[name="cover"]');
     const coverId = coverMeta?.getAttribute("content");
 
@@ -252,6 +252,12 @@ export class EpubParser extends BaseBookParser implements BookParser {
     if (coverId) {
       const manifestItem = opfDoc.querySelector(`manifest item[id="${coverId}"]`);
       coverHref = manifestItem?.getAttribute("href") || undefined;
+    }
+
+    // Fallback: look for manifest item with properties="cover-image" (EPUB 3)
+    if (!coverHref) {
+      const coverImageItem = opfDoc.querySelector('manifest item[properties="cover-image"]');
+      coverHref = coverImageItem?.getAttribute("href") || undefined;
     }
 
     return { title, creator, language, coverHref };

@@ -1,76 +1,46 @@
-<!--VITE PLUS START-->
+# CLAUDE.md
 
-# Using Vite+, the Unified Toolchain for the Web
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-This project is using Vite+, a unified toolchain built on top of Vite, Rolldown, Vitest, tsdown, Oxlint, Oxfmt, and Vite Task. Vite+ wraps runtime management, package management, and frontend tooling in a single global CLI called `vp`. Vite+ is distinct from Vite, but it invokes Vite through `vp dev` and `vp build`.
+## Project
 
-## Vite+ Workflow
+A PWA ebook reader (Vue 3 + TypeScript + Pinia + IndexedDB) that parses TXT and EPUB files, renders them with pagination, and tracks reading statistics. Deployed at `/book/`.
 
-`vp` is a global binary that handles the full development lifecycle. Run `vp help` to print a list of commands and `vp <command> --help` for information about a specific command.
+## Commands
 
-### Start
+- **Dev server:** `vp dev`
+- **Build:** `tsc && vp build`
+- **Lint + typecheck:** `vp check`
+- **Format:** `vp fmt`
+- **Tests:** `vp test` (Vitest via Vite+)
+- **Install deps:** `vp install`
 
-- create - Create a new project from a template
-- migrate - Migrate an existing project to Vite+
-- config - Configure hooks and agent integration
-- staged - Run linters on staged files
-- install (`i`) - Install dependencies
-- env - Manage Node.js versions
+## Architecture
 
-### Develop
+Two main views: `Bookshelf` (library) and `ReaderView` (reading). `App.vue` switches between them via `<Transition>` based on `readerStore.currentBook`.
 
-- dev - Run the development server
-- check - Run format, lint, and TypeScript type checks
-- lint - Lint code
-- fmt - Format code
-- test - Run tests
+### Layers (top to bottom)
 
-### Execute
+| Layer          | Directory          | Role                                                                                                                                                                                                                                                            |
+| -------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Core types     | `src/core/`        | `Book`, `Chapter`, `ParsedBook`, `ReaderSettings`, etc. Single source of truth for data shapes                                                                                                                                                                  |
+| Parsers        | `src/parsers/`     | `BookParser` interface with `TxtParser` and `EpubParser` implementations. `BaseBookParser` provides chapter detection (Chinese + English patterns), HTML cleanup, and resource sanitization                                                                     |
+| Storage        | `src/storage/`     | IndexedDB wrapper (`db.ts`) with 6 object stores: books, chapters, bookmarks, settings, resources, stats. All DB operations go through promise-based helpers (`dbPut`, `dbGet`, `dbTransaction`, etc.)                                                          |
+| Stores (Pinia) | `src/stores/`      | State management: `reader` (book loading/navigation), `bookshelf` (library + search), `settings` (reader preferences), `bookmarks`, `ui` (modals/toasts/confirmations)                                                                                          |
+| Composables    | `src/composables/` | Reader engine: `usePagination` (hidden iframe measurement, block-level pagination, LRU cache), `useIframeRenderer` (iframe lifecycle + styles), `useIframeGestures` (tap/swipe), `useChapterLoader`, `useReaderGestures`, `useReaderSearch`, `useScrollManager` |
+| Search         | `src/search/`      | Full-text regex search with context extraction and HTML-aware highlight                                                                                                                                                                                         |
+| Components     | `src/components/`  | `Bookshelf.vue`, `ReaderView.vue`, plus `modals/` and `reader/` subdirectories                                                                                                                                                                                  |
 
-- run - Run monorepo tasks
-- exec - Execute a command from local `node_modules/.bin`
-- dlx - Execute a package binary without installing it as a dependency
-- cache - Manage the task cache
+### Key patterns
 
-### Build
+- **Parser registry:** `reader.ts:17` — parsers are instantiated in an array, matched against file MIME type (with extension fallback). Adding a new format means implementing `BookParser` and adding to this array.
+- **Pagination engine:** `usePagination` splits HTML into blocks, measures them in a hidden offscreen iframe, and computes pages. It prioritizes the target page, then continues in background via `requestAnimationFrame`-style chunking. Results are cached with an LRU (capacity 10) keyed by `bookId:chapterId:styleHash`.
+- **EPUB resources:** Images/CSS/fonts are stored as `ArrayBuffer` in IndexedDB (`resources` store) and served via `blob:` URLs. Resource path rewriting in `utils/resource-urls.ts`.
+- **Reading sessions:** `storage/stats.ts` tracks sessions (start/end time, chapters read, words read) and computes aggregate stats per book.
+- **Deployment base:** `vite.config.ts` sets `base: "/book/"` for the PWA.
 
-- build - Build for production
-- pack - Build libraries
-- preview - Preview production build
+## Vite+ Rules
 
-### Manage Dependencies
-
-Vite+ automatically detects and wraps the underlying package manager such as pnpm, npm, or Yarn through the `packageManager` field in `package.json` or package manager-specific lockfiles.
-
-- add - Add packages to dependencies
-- remove (`rm`, `un`, `uninstall`) - Remove packages from dependencies
-- update (`up`) - Update packages to latest versions
-- dedupe - Deduplicate dependencies
-- outdated - Check for outdated packages
-- list (`ls`) - List installed packages
-- why (`explain`) - Show why a package is installed
-- info (`view`, `show`) - View package information from the registry
-- link (`ln`) / unlink - Manage local package links
-- pm - Forward a command to the package manager
-
-### Maintain
-
-- upgrade - Update `vp` itself to the latest version
-
-These commands map to their corresponding tools. For example, `vp dev --port 3000` runs Vite's dev server and works the same as Vite. `vp test` runs JavaScript tests through the bundled Vitest. The version of all tools can be checked using `vp --version`. This is useful when researching documentation, features, and bugs.
-
-## Common Pitfalls
-
-- **Using the package manager directly:** Do not use pnpm, npm, or Yarn directly. Vite+ can handle all package manager operations.
-- **Always use Vite commands to run tools:** Don't attempt to run `vp vitest` or `vp oxlint`. They do not exist. Use `vp test` and `vp lint` instead.
-- **Running scripts:** Vite+ commands take precedence over `package.json` scripts. If there is a `test` script defined in `scripts` that conflicts with the built-in `vp test` command, run it using `vp run test`.
-- **Do not install Vitest, Oxlint, Oxfmt, or tsdown directly:** Vite+ wraps these tools. They must not be installed directly. You cannot upgrade these tools by installing their latest versions. Always use Vite+ commands.
-- **Use Vite+ wrappers for one-off binaries:** Use `vp dlx` instead of package-manager-specific `dlx`/`npx` commands.
-- **Import JavaScript modules from `vite-plus`:** Instead of importing from `vite` or `vitest`, all modules should be imported from the project's `vite-plus` dependency. For example, `import { defineConfig } from 'vite-plus';` or `import { expect, test, vi } from 'vite-plus/test';`. You must not install `vitest` to import test utilities.
-- **Type-Aware Linting:** There is no need to install `oxlint-tsgolint`, `vp lint --type-aware` works out of the box.
-
-## Review Checklist for Agents
-
-- [ ] Run `vp install` after pulling remote changes and before getting started.
-- [ ] Run `vp check` and `vp test` to validate changes.
-<!--VITE PLUS END-->
+- Import test utilities from `vite-plus/test`, not `vitest`: `import { expect, test, vi } from 'vite-plus/test'`
+- Use `vp` for all tooling (`vp test`, `vp lint`, `vp add`, etc.), never the underlying package manager directly
+- Run `vp install` after pulling remote changes

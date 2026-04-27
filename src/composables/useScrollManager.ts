@@ -2,16 +2,22 @@
 // Core responsibilities: track scroll position, detect current chapter
 
 import { ref, type Ref } from "vue";
-import { throttle } from "../utils/debounce";
+import { throttle, debounce } from "../utils/debounce";
+import { SCROLL_SAVE_DELAY } from "../utils/constants";
 
 interface UseScrollManagerOptions {
   isPaginationMode: Ref<boolean>;
   onProgressUpdate: (reading: number, chapter: number, chapterId?: string) => void;
   onChapterChange?: (chapterId: string) => void;
+  onAutoSave?: (data: {
+    chapterId: string;
+    chapterProgress: number;
+    readingProgress: number;
+  }) => void;
 }
 
 export function useScrollManager(options: UseScrollManagerOptions) {
-  const { isPaginationMode, onProgressUpdate, onChapterChange } = options;
+  const { isPaginationMode, onProgressUpdate, onChapterChange, onAutoSave } = options;
 
   const lastChapterId = ref<string | null>(null);
 
@@ -61,6 +67,13 @@ export function useScrollManager(options: UseScrollManagerOptions) {
     return Math.min(100, Math.max(0, (scrolled / height) * 100));
   }
 
+  // Debounced auto-save
+  const debouncedSave = onAutoSave
+    ? debounce((chapterId: string, chapterProgress: number, readingProgress: number) => {
+        onAutoSave({ chapterId, chapterProgress, readingProgress });
+      }, SCROLL_SAVE_DELAY)
+    : null;
+
   // Throttled scroll handler
   const handleScroll = throttle(() => {
     if (isPaginationMode.value) return;
@@ -77,6 +90,7 @@ export function useScrollManager(options: UseScrollManagerOptions) {
     const chapter = chapterId ? getChapterProgress(chapterId) : 0;
 
     onProgressUpdate(reading, chapter, chapterId);
+    debouncedSave?.(chapterId || "", chapter, reading);
   }, 16);
 
   // Jump to chapter instantly (no animation)

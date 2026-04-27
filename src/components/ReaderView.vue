@@ -28,6 +28,7 @@ import {
 } from "../components/reader";
 import { ModalWrapper } from "../components/modals";
 import type { Bookmark, SearchResult, Chapter, Book, BookReadingStats } from "../core/types";
+import * as statsStore from "../storage/stats";
 import {
   generateCfiFromElement,
   generateCfiFromRange,
@@ -64,6 +65,7 @@ const articleEl = computed(() => {
 // Local state
 const stats = ref<BookReadingStats | null>(null);
 const isTransitioning = ref(false);
+const isRestoring = ref(false);
 const currentChapterResources = ref<HTMLElement[]>([]);
 
 const openModal = (modal: string) => {
@@ -143,6 +145,17 @@ const search = useReaderSearch({
   chapterContents: chapterLoader.loadedContents,
 });
 
+function saveReadingProgress(chapterProgress: number, readingProgress: number, pageIndex: number) {
+  if (isRestoring.value) return;
+  const chapterId = readerStore.currentChapter?.id;
+  if (!chapterId) return;
+  bookmarksStore.saveProgress(props.book.id, chapterId, "", {
+    chapterProgress: Math.round(chapterProgress),
+    readingProgress: Math.round(readingProgress),
+    pageIndex,
+  });
+}
+
 const scrollManager = useScrollManager({
   isPaginationMode,
   onProgressUpdate: (reading, chapter) => readerStore.updateProgress(reading, chapter),
@@ -152,6 +165,9 @@ const scrollManager = useScrollManager({
       readerStore.currentChapter = chapter;
       readerStore.chapterProgress = 0;
     }
+  },
+  onAutoSave: ({ chapterProgress, readingProgress }) => {
+    saveReadingProgress(chapterProgress, readingProgress, 0);
   },
 });
 
@@ -513,7 +529,7 @@ watch(
   () => uiStore.activeModal,
   async (newVal) => {
     if (newVal === "stats") {
-      stats.value = await readerStore.getReadingStats(props.book.id);
+      stats.value = await statsStore.getStats(props.book.id);
     }
   },
 );
@@ -564,6 +580,13 @@ watch(
   reRenderContent,
 );
 
+// Watch for page changes in pagination mode to auto-save
+watch([() => pagination.currentPage.value, () => pagination.totalPages.value], ([page, total]) => {
+  if (!isPaginationMode.value) return;
+  const cp = total <= 1 ? 100 : ((page + 1) / total) * 100;
+  saveReadingProgress(cp, readingProgress.value, page);
+});
+
 // Lifecycle
 onMounted(async () => {
   await bookmarksStore.loadBookmarks(props.book.id);
@@ -571,22 +594,30 @@ onMounted(async () => {
 
   uiStore.showControls = true;
 
-  if (isPaginationMode.value && readerStore.currentChapter) {
-    const content = await readerStore.getCurrentChapterContent();
-    const html = content?.html || "";
-    const resources = content?.resources || [];
-    currentChapterResources.value = resources;
-    await pagination.paginate(readerStore.currentChapter.id, { html, resources });
-  } else {
-    await chapterLoader.loadCurrentAndAdjacent(2);
-    // Restore scroll position
-    setTimeout(() => {
-      const progress = readerStore.chapterProgress;
-      const chapterId = readerStore.currentChapter?.id;
-      if (progress > 0 && chapterId) {
-        scrollManager.restoreScrollPosition(progress, chapterId);
+  // Restore reading progress
+  isRestoring.value = true;
+  try {
+    const progress = await bookmarksStore.loadProgress(props.book.id);
+    const restoreChapterId = progress?.chapterId || readerStore.currentChapter?.id;
+    const restorePage = progress?.pageIndex || 0;
+
+    if (isPaginationMode.value && restoreChapterId) {
+      await handleSelectChapter(restoreChapterId, restorePage);
+    } else {
+      if (restoreChapterId && restoreChapterId !== readerStore.currentChapter?.id) {
+        await handleSelectChapter(restoreChapterId);
+      } else {
+        await chapterLoader.loadCurrentAndAdjacent(2);
       }
-    }, 200);
+      // Restore scroll position
+      if (progress?.chapterProgress) {
+        setTimeout(() => {
+          scrollManager.restoreScrollPosition(progress.chapterProgress, restoreChapterId);
+        }, 200);
+      }
+    }
+  } finally {
+    isRestoring.value = false;
   }
 });
 

@@ -323,44 +323,5 @@ export const useReaderStore = defineStore("reader", {
         resources: [],
       };
     },
-
-    /**
-     * Get library books
-     */
-    async getLibrary(): Promise<Book[]> {
-      return booksStore.getAllBooks();
-    },
-
-    /**
-     * Get reading stats for a book
-     */
-    async getReadingStats(bookId: string) {
-      return await statsStore.getStats(bookId);
-    },
-
-    /**
-     * Get all reading stats
-     */
-    async getAllReadingStats() {
-      return await statsStore.getAllStats();
-    },
-
-    /**
-     * Get summary reading statistics
-     */
-    async getSummaryStats() {
-      return await statsStore.getSummaryStats();
-    },
-
-    /**
-     * Delete a book
-     */
-    async deleteBook(bookId: string): Promise<void> {
-      if (this.currentBook?.id === bookId) {
-        await this.closeBook();
-      }
-      await booksStore.deleteBook(bookId);
-      await statsStore.deleteStats(bookId);
-    },
   },
 });

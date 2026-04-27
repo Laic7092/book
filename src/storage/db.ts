@@ -134,15 +134,8 @@ export async function dbTransaction<T>(
   }
 
   return new Promise((resolve, reject) => {
-    const promise = operation(stores);
-    promise.then(resolve).catch(reject);
-
-    tx.oncomplete = () => {
-      if (!promise.then) {
-        resolve(undefined as T);
-      }
-    };
     tx.onerror = () => reject(tx.error);
+    operation(stores).then(resolve).catch(reject);
   });
 }
 

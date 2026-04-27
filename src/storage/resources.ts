@@ -1,7 +1,7 @@
 // Resources storage module for EPUB assets (images, CSS, fonts)
 
 import type { Resource } from "../core/types";
-import { STORES, dbPut, dbDelete, dbGetAllFromIndex } from "./db";
+import { STORES, dbPut, dbDelete, dbGet, dbGetAllFromIndex } from "./db";
 
 /**
  * Save a resource to the database
@@ -71,6 +71,16 @@ function sanitizeCssFonts(data: ArrayBuffer): ArrayBuffer {
     "url(data:,)",
   );
   return encoder.encode(cleaned).buffer;
+}
+
+/**
+ * Get a single resource as a Blob URL
+ */
+export async function getResourceUrl(bookId: string, resourceId: string): Promise<string | null> {
+  const resource = await dbGet<Resource>(STORES.RESOURCES, [bookId, resourceId]);
+  if (!resource) return null;
+  const blob = new Blob([resource.data], { type: resource.mimeType });
+  return URL.createObjectURL(blob);
 }
 
 /**

@@ -4,6 +4,7 @@ import { defineStore } from "pinia";
 import type { Bookmark } from "../core/types";
 import { ErrorCode, createReaderError } from "../core/errors";
 import * as bookmarksStore from "../storage/bookmarks";
+import { dbPut, STORES } from "../storage/db";
 
 export interface BookmarksState {
   currentBookId: string | null;
@@ -65,7 +66,7 @@ export const useBookmarksStore = defineStore("bookmarks", {
       }
 
       const updated = { ...bookmark, ...updates };
-      await bookmarksStore.updateBookmark(updated);
+      await dbPut(STORES.BOOKMARKS, updated);
 
       const index = this.bookmarks.findIndex((b) => b.id === bookmarkId);
       if (index !== -1) {
@@ -76,6 +77,63 @@ export const useBookmarksStore = defineStore("bookmarks", {
     clearBookmarks(): void {
       this.currentBookId = null;
       this.bookmarks = [];
+    },
+
+    // Auto-save reading progress as a special bookmark (id = __progress__${bookId})
+    async saveProgress(
+      bookId: string,
+      chapterId: string,
+      cfi: string,
+      progressData: { chapterProgress: number; readingProgress: number; pageIndex: number },
+    ): Promise<void> {
+      const id = `__progress__${bookId}`;
+      const existing = await bookmarksStore.getBookmark(id);
+
+      if (existing) {
+        await dbPut(STORES.BOOKMARKS, {
+          ...existing,
+          chapterId,
+          cfi,
+          note: JSON.stringify(progressData),
+        });
+      } else {
+        const bookmark = bookmarksStore.createBookmark(
+          bookId,
+          chapterId,
+          cfi,
+          "",
+          "",
+          undefined,
+          JSON.stringify(progressData),
+        );
+        bookmark.id = id;
+        await bookmarksStore.addBookmark(bookmark);
+      }
+    },
+
+    async loadProgress(bookId: string): Promise<{
+      chapterId: string;
+      cfi: string;
+      chapterProgress: number;
+      readingProgress: number;
+      pageIndex: number;
+    } | null> {
+      const id = `__progress__${bookId}`;
+      const bookmark = await bookmarksStore.getBookmark(id);
+      if (!bookmark?.note) return null;
+
+      try {
+        const data = JSON.parse(bookmark.note);
+        return {
+          chapterId: bookmark.chapterId,
+          cfi: bookmark.cfi,
+          chapterProgress: data.chapterProgress || 0,
+          readingProgress: data.readingProgress || 0,
+          pageIndex: data.pageIndex || 0,
+        };
+      } catch {
+        return null;
+      }
     },
   },
 });

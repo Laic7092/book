@@ -65,6 +65,8 @@ function selectBook(book: Book) {
 }
 
 // Cached computations for book cover rendering
+const coverUrls = computed(() => bookshelfStore.coverUrls);
+
 const bookGradients = computed(() => {
   const map = new Map<string, string>();
   for (const book of bookshelfStore.books) {
@@ -247,16 +249,23 @@ onMounted(() => {
         v-for="(book, idx) in bookshelfStore.filteredBooks"
         :key="book.id"
         class="book-card"
-        :style="{ '--cover-gradient': bookGradients.get(book.id) }"
-        :data-index="idx"
+        :style="{ animationDelay: `${idx * 0.04}s` }"
         @click="selectBook(book)"
         tabindex="0"
         @keydown.enter="selectBook(book)"
         role="button"
         :aria-label="`Open ${book.title} by ${book.author || 'Unknown author'}`"
       >
-        <div class="book-cover">
-          <span class="cover-initial" aria-hidden="true">{{ bookInitials.get(book.id) }}</span>
+        <div class="book-cover" :style="{ background: bookGradients.get(book.id) }">
+          <img
+            v-if="coverUrls.get(book.id)"
+            :src="coverUrls.get(book.id)"
+            :alt="`Cover of ${book.title}`"
+            class="cover-image"
+          />
+          <template v-else>
+            <span class="cover-initial" aria-hidden="true">{{ bookInitials.get(book.id) }}</span>
+          </template>
           <span class="cover-format">{{ book.format.toUpperCase() }}</span>
         </div>
         <div class="book-info">
@@ -616,38 +625,6 @@ onMounted(() => {
   box-shadow: var(--shadow-xs);
 }
 
-.book-card:nth-child(1) {
-  animation-delay: 0.04s;
-}
-
-.book-card:nth-child(2) {
-  animation-delay: 0.08s;
-}
-
-.book-card:nth-child(3) {
-  animation-delay: 0.12s;
-}
-
-.book-card:nth-child(4) {
-  animation-delay: 0.16s;
-}
-
-.book-card:nth-child(5) {
-  animation-delay: 0.2s;
-}
-
-.book-card:nth-child(6) {
-  animation-delay: 0.24s;
-}
-
-.book-card:nth-child(7) {
-  animation-delay: 0.28s;
-}
-
-.book-card:nth-child(8) {
-  animation-delay: 0.32s;
-}
-
 .book-card:hover {
   transform: translateY(-6px);
   box-shadow: var(--shadow-lg);
@@ -666,7 +643,6 @@ onMounted(() => {
 .book-cover {
   position: relative;
   aspect-ratio: 3/4;
-  background: var(--cover-gradient);
   border-radius: 8px;
   display: flex;
   flex-direction: column;
@@ -675,12 +651,22 @@ onMounted(() => {
   margin-bottom: 14px;
   overflow: hidden;
   box-shadow: var(--shadow-sm);
-  transition: all var(--transition-base);
+  transition:
+    transform var(--transition-base),
+    box-shadow var(--transition-base);
 }
 
 .book-card:hover .book-cover {
   transform: scale(1.03);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
+}
+
+.cover-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .cover-initial {
@@ -718,10 +704,9 @@ onMounted(() => {
 
 .book-info {
   flex: 1;
-  min-height: 72px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .book-title {

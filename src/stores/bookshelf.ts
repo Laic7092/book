@@ -3,7 +3,9 @@
 import { defineStore } from "pinia";
 import type { Book } from "../core/types";
 import { dbGetAll, STORES } from "../storage/db";
+import * as booksStore from "../storage/books";
 import * as statsStore from "../storage/stats";
+import { getResourceUrl } from "../storage/resources";
 import { assertValidBookFile } from "../utils/validation";
 
 export interface BookshelfState {
@@ -11,6 +13,7 @@ export interface BookshelfState {
   isLoading: boolean;
   isUploading: boolean;
   searchQuery: string;
+  coverUrls: Map<string, string>;
   summaryStats: {
     totalBooks: number;
     totalReadingTime: number;
@@ -27,6 +30,7 @@ export const useBookshelfStore = defineStore("bookshelf", {
     isLoading: true,
     isUploading: false,
     searchQuery: "",
+    coverUrls: new Map(),
     summaryStats: null,
   }),
 
@@ -51,6 +55,16 @@ export const useBookshelfStore = defineStore("bookshelf", {
       try {
         this.books = await dbGetAll<Book>(STORES.BOOKS);
         this.summaryStats = await statsStore.getSummaryStats();
+
+        // Resolve cover blob URLs for EPUB books that have a cover
+        for (const book of this.books) {
+          if (book.coverUrl && !this.coverUrls.has(book.id)) {
+            const url = await getResourceUrl(book.id, book.coverUrl);
+            if (url) {
+              this.coverUrls.set(book.id, url);
+            }
+          }
+        }
       } finally {
         this.isLoading = false;
       }
@@ -79,7 +93,16 @@ export const useBookshelfStore = defineStore("bookshelf", {
     async deleteBook(bookId: string) {
       const { useReaderStore } = await import("./reader");
       const readerStore = useReaderStore();
-      await readerStore.deleteBook(bookId);
+      if (readerStore.currentBook?.id === bookId) {
+        await readerStore.closeBook();
+      }
+      await booksStore.deleteBook(bookId);
+      await statsStore.deleteStats(bookId);
+      const coverUrl = this.coverUrls.get(bookId);
+      if (coverUrl) {
+        URL.revokeObjectURL(coverUrl);
+        this.coverUrls.delete(bookId);
+      }
       this.books = this.books.filter((b) => b.id !== bookId);
       this.summaryStats = await statsStore.getSummaryStats();
     },
