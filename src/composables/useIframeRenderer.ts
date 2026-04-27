@@ -207,9 +207,33 @@ export function useIframeRenderer(
 
   // ── 滚动模式：滚动处理 ──
 
+  let scrollObserver: IntersectionObserver | null = null;
+  let currentChapterId: string | null = null;
+  let lastPercent = -1;
+  let lastChapterId: string | null = null;
+  let lastChapterProgress = -1;
+
   function setupScrollHandler() {
     if (!iframeDoc || !onScrollUpdate) return;
 
+    // IntersectionObserver 检测当前可见章节（不强制 layout）
+    scrollObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            currentChapterId = (entry.target as HTMLElement).getAttribute("data-chapter-id");
+          }
+        }
+      },
+      { root: iframeDoc.documentElement, threshold: 0 },
+    );
+
+    // 观察所有已有章节
+    iframeDoc.querySelectorAll<HTMLElement>("[data-chapter-id]").forEach((el) => {
+      scrollObserver?.observe(el);
+    });
+
+    // 滚动百分比的 rAF（只读 scrollTop/scrollHeight，不强制 layout）
     let ticking = false;
     const handler = () => {
       if (ticking) return;
@@ -227,17 +251,6 @@ export function useIframeRenderer(
 
         const percent = Math.min(100, Math.max(0, Math.round((scrollTop / scrollHeight) * 100)));
 
-        // 检测当前章节
-        const midpoint = scrollTop + win.innerHeight / 2;
-        const containers = iframeDoc.querySelectorAll<HTMLElement>("[data-chapter-id]");
-        let currentChapterId: string | null = null;
-        for (const el of containers) {
-          if (midpoint >= el.offsetTop && midpoint < el.offsetTop + el.offsetHeight) {
-            currentChapterId = el.getAttribute("data-chapter-id");
-            break;
-          }
-        }
-
         // 计算章节内进度
         let chapterProgress = 0;
         if (currentChapterId) {
@@ -253,6 +266,17 @@ export function useIframeRenderer(
           }
         }
 
+        // 只在值真正变化时回调
+        if (
+          percent === lastPercent &&
+          currentChapterId === lastChapterId &&
+          chapterProgress === lastChapterProgress
+        )
+          return;
+        lastPercent = percent;
+        lastChapterId = currentChapterId;
+        lastChapterProgress = chapterProgress;
+
         onScrollUpdate({
           type: "scroll-update",
           percent,
@@ -263,7 +287,34 @@ export function useIframeRenderer(
     };
 
     iframeDoc.addEventListener("scroll", handler, { passive: true });
-    scrollCleanup = () => iframeDoc?.removeEventListener("scroll", handler);
+    scrollCleanup = () => {
+      iframeDoc?.removeEventListener("scroll", handler);
+      scrollObserver?.disconnect();
+      scrollObserver = null;
+    };
+  }
+
+  /** 章节 DOM 变化后重新连接 IntersectionObserver */
+  function refreshScrollObserver() {
+    if (!scrollObserver || !iframeDoc) return;
+    scrollObserver.disconnect();
+    iframeDoc.querySelectorAll<HTMLElement>("[data-chapter-id]").forEach((el) => {
+      scrollObserver?.observe(el);
+    });
+
+    // Observer 断开后不会自动恢复可见状态，手动检测当前章节
+    const win = iframeDoc.defaultView;
+    if (win) {
+      const scrollTop = win.scrollY || iframeDoc.documentElement.scrollTop || 0;
+      const midpoint = scrollTop + win.innerHeight / 2;
+      const containers = iframeDoc.querySelectorAll<HTMLElement>("[data-chapter-id]");
+      for (const el of containers) {
+        if (midpoint >= el.offsetTop && midpoint < el.offsetTop + el.offsetHeight) {
+          currentChapterId = el.getAttribute("data-chapter-id");
+          break;
+        }
+      }
+    }
   }
 
   /**
@@ -343,6 +394,7 @@ export function useIframeRenderer(
     scrollToChapter,
     restoreScrollPosition,
     scrollTo,
+    refreshScrollObserver,
     cleanup,
   };
 }

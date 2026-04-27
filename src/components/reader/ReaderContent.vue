@@ -62,6 +62,7 @@ const {
   scrollToChapter,
   restoreScrollPosition,
   scrollTo,
+  refreshScrollObserver,
   cleanup,
 } = useIframeRenderer(
   iframeRef,
@@ -101,6 +102,8 @@ onMounted(() => {
           .join("");
         updateContent(combinedContent);
       }
+      // 初始内容加载后，刷新 IntersectionObserver
+      refreshScrollObserver();
     }
 
     if (containerRef.value) {
@@ -164,6 +167,9 @@ watch(
         doc.body.insertAdjacentHTML("beforeend", html);
       }
     }
+
+    // 刷新 IntersectionObserver 让新章节可被检测
+    refreshScrollObserver();
   },
   { deep: true },
 );
@@ -216,7 +222,14 @@ onUnmounted(() => {
   cleanup();
 });
 
-defineExpose({ iframeRef, getArticle, scrollToChapter, restoreScrollPosition, scrollTo });
+defineExpose({
+  iframeRef,
+  getArticle,
+  scrollToChapter,
+  restoreScrollPosition,
+  scrollTo,
+  refreshScrollObserver,
+});
 </script>
 
 <template>
