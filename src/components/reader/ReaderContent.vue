@@ -18,6 +18,14 @@ const emit = defineEmits<{
   (e: "gesture-tap", x: number, y: number): void;
   (e: "gesture-swipe-left"): void;
   (e: "gesture-swipe-right"): void;
+  (
+    e: "scroll-update",
+    data: {
+      percent: number;
+      chapterId: string | null;
+      chapterProgress: number;
+    },
+  ): void;
 }>();
 
 const containerRef = ref<HTMLElement | null>(null);
@@ -50,12 +58,24 @@ const {
   updateEpubResources,
   clearEpubResources,
   getArticle,
+  getDocument,
+  scrollToChapter,
+  restoreScrollPosition,
+  scrollTo,
   cleanup,
 } = useIframeRenderer(
   iframeRef,
   rendererOptions,
   gestureHandlers,
   props.onLinkClick ? (msg) => props.onLinkClick!(msg.href) : undefined,
+  // 滚动模式：转发滚动数据
+  (scrollData) => {
+    emit("scroll-update", {
+      percent: scrollData.percent,
+      chapterId: scrollData.chapterId,
+      chapterProgress: scrollData.chapterProgress,
+    });
+  },
 );
 
 let resizeObserver: ResizeObserver | null = null;
@@ -97,7 +117,7 @@ onMounted(() => {
   });
 });
 
-// 监听内容变化
+// 监听内容变化（分页模式）
 watch(
   () => props.content,
   (newContent) => {
@@ -107,18 +127,42 @@ watch(
   },
 );
 
-// 监听章节变化
+// 滚动模式：同步 LRU 缓存 ↔ DOM
 watch(
   () => props.loadedChapters,
   (newChapters) => {
-    if (!props.isPaginationMode && newChapters && isReady.value) {
-      const combinedContent = newChapters
-        .map(
-          (ch) =>
-            `<div data-chapter-id="${ch.chapterId}" class="chapter-container">${ch.content}</div>`,
-        )
-        .join("");
-      updateContent(combinedContent);
+    if (props.isPaginationMode || !newChapters || !isReady.value) return;
+    const doc = getDocument();
+    if (!doc) return;
+
+    const currentIds = new Map(newChapters.map((ch) => [ch.chapterId, ch]));
+
+    // Phase 1: 移除已被 LRU 驱逐的章节 DOM
+    const existing = doc.querySelectorAll("[data-chapter-id]");
+    existing.forEach((el) => {
+      const id = el.getAttribute("data-chapter-id");
+      if (id && !currentIds.has(id)) {
+        el.remove();
+      }
+    });
+
+    // Phase 2: 按顺序插入新增章节
+    for (const ch of newChapters) {
+      if (doc.querySelector(`[data-chapter-id="${ch.chapterId}"]`)) continue;
+
+      const html = `<div data-chapter-id="${ch.chapterId}" class="chapter-container">${ch.content}</div>`;
+
+      // 找到下一个已在 DOM 中的章节 → 插入其前方（保持顺序）
+      const next = newChapters
+        .filter((c) => c.order > ch.order)
+        .find((c) => doc.querySelector(`[data-chapter-id="${c.chapterId}"]`));
+
+      if (next) {
+        const ref = doc.querySelector(`[data-chapter-id="${next.chapterId}"]`);
+        ref?.insertAdjacentHTML("beforebegin", html);
+      } else {
+        doc.body.insertAdjacentHTML("beforeend", html);
+      }
     }
   },
   { deep: true },
@@ -172,18 +216,16 @@ onUnmounted(() => {
   cleanup();
 });
 
-defineExpose({ iframeRef, getArticle });
+defineExpose({ iframeRef, getArticle, scrollToChapter, restoreScrollPosition, scrollTo });
 </script>
 
 <template>
   <main class="reader-view" :class="{ 'pagination-mode': isPaginationMode }" ref="containerRef">
-    <!-- Iframe 渲染容器 -->
     <iframe
       ref="iframeRef"
       class="reader-iframe"
-      :class="{ 'pagination-mode': isPaginationMode }"
+      :scrolling="isPaginationMode ? 'no' : undefined"
       frameborder="0"
-      scrolling="no"
     ></iframe>
   </main>
 </template>
@@ -192,18 +234,13 @@ defineExpose({ iframeRef, getArticle });
 .reader-view {
   min-height: 0;
   flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   background-color: var(--reader-bg);
   position: relative;
   -webkit-overflow-scrolling: touch;
   width: 100%;
   max-width: 700px;
   margin: auto;
-}
-
-.reader-view.pagination-mode {
-  overflow: hidden;
 }
 
 .reader-iframe {

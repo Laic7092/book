@@ -18,7 +18,15 @@ export interface IframeLinkClickEvent {
   href: string;
 }
 
+export interface IframeScrollUpdate {
+  type: "scroll-update";
+  percent: number;
+  chapterId: string | null;
+  chapterProgress: number;
+}
+
 type IframeMessageHandler = (message: IframeLinkClickEvent) => void;
+type ScrollUpdateHandler = (data: IframeScrollUpdate) => void;
 
 /**
  * Iframe 渲染器 composable
@@ -35,6 +43,7 @@ export function useIframeRenderer(
   options: Ref<IframeRendererOptions>,
   gestureHandlers?: IframeGestureHandlers,
   onLinkClick?: IframeMessageHandler,
+  onScrollUpdate?: ScrollUpdateHandler,
 ) {
   const isReady = ref(false);
   let iframeDoc: Document | null = null;
@@ -43,6 +52,9 @@ export function useIframeRenderer(
 
   // 资源追踪：记录已注入的资源详细信息
   const injectedResources = new Map<string, ResourceInfo>();
+
+  // Scroll handler cleanup
+  let scrollCleanup: (() => void) | null = null;
 
   // Message handler for iframe link clicks
   const messageHandler = (event: MessageEvent) => {
@@ -112,6 +124,11 @@ export function useIframeRenderer(
         enableTap: true,
         enableSwipe: true,
       });
+    }
+
+    // 滚动模式：监听 iframe 内部滚动
+    if (!options.value.isPaginationMode && onScrollUpdate) {
+      setupScrollHandler();
     }
   }
 
@@ -188,10 +205,114 @@ export function useIframeRenderer(
     return iframeDoc;
   }
 
+  // ── 滚动模式：滚动处理 ──
+
+  function setupScrollHandler() {
+    if (!iframeDoc || !onScrollUpdate) return;
+
+    let ticking = false;
+    const handler = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        ticking = false;
+        if (!iframeDoc) return;
+        const win = iframeDoc.defaultView;
+        if (!win) return;
+
+        const scrollTop = win.scrollY || iframeDoc.documentElement.scrollTop || 0;
+        const scrollHeight =
+          iframeDoc.documentElement.scrollHeight - iframeDoc.documentElement.clientHeight;
+        if (scrollHeight <= 0) return;
+
+        const percent = Math.min(100, Math.max(0, Math.round((scrollTop / scrollHeight) * 100)));
+
+        // 检测当前章节
+        const midpoint = scrollTop + win.innerHeight / 2;
+        const containers = iframeDoc.querySelectorAll<HTMLElement>("[data-chapter-id]");
+        let currentChapterId: string | null = null;
+        for (const el of containers) {
+          if (midpoint >= el.offsetTop && midpoint < el.offsetTop + el.offsetHeight) {
+            currentChapterId = el.getAttribute("data-chapter-id");
+            break;
+          }
+        }
+
+        // 计算章节内进度
+        let chapterProgress = 0;
+        if (currentChapterId) {
+          const el = iframeDoc.querySelector<HTMLElement>(
+            `[data-chapter-id="${currentChapterId}"]`,
+          );
+          if (el && el.offsetHeight > 0) {
+            const scrolled = scrollTop - el.offsetTop;
+            chapterProgress = Math.min(
+              100,
+              Math.max(0, Math.round((scrolled / el.offsetHeight) * 100)),
+            );
+          }
+        }
+
+        onScrollUpdate({
+          type: "scroll-update",
+          percent,
+          chapterId: currentChapterId,
+          chapterProgress,
+        });
+      });
+    };
+
+    iframeDoc.addEventListener("scroll", handler, { passive: true });
+    scrollCleanup = () => iframeDoc?.removeEventListener("scroll", handler);
+  }
+
+  /**
+   * 滚动到指定章节
+   */
+  function scrollToChapter(chapterId: string): void {
+    if (!iframeDoc) return;
+    const el = iframeDoc.querySelector<HTMLElement>(`[data-chapter-id="${chapterId}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: "instant", block: "start" });
+    }
+  }
+
+  /**
+   * 恢复滚动位置（按章节内进度百分比）
+   */
+  function restoreScrollPosition(chapterId: string, progress: number): void {
+    if (!iframeDoc) return;
+    const el = iframeDoc.querySelector<HTMLElement>(`[data-chapter-id="${chapterId}"]`);
+    if (el) {
+      const targetY = el.offsetTop + (progress / 100) * el.offsetHeight;
+      const win = iframeDoc.defaultView;
+      if (win) {
+        win.scrollTo({ top: targetY, behavior: "instant" });
+      }
+    }
+  }
+
+  /**
+   * 滚动到指定 Y 位置
+   */
+  function scrollTo(y: number): void {
+    if (!iframeDoc) return;
+    const win = iframeDoc.defaultView;
+    if (win) {
+      win.scrollTo({ top: y, behavior: "instant" });
+    }
+  }
+
   /**
    * 清理
    */
   function cleanup() {
+    // 清理滚动监听
+    if (scrollCleanup) {
+      scrollCleanup();
+      scrollCleanup = null;
+    }
+
     clearEpubResources();
 
     // Remove message listener
@@ -219,6 +340,9 @@ export function useIframeRenderer(
     getBody,
     getArticle,
     getDocument,
+    scrollToChapter,
+    restoreScrollPosition,
+    scrollTo,
     cleanup,
   };
 }

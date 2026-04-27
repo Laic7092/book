@@ -41,7 +41,8 @@ function scrollToCurrentChapter() {
   const activeEl = activeItemRefs.value[props.currentChapterId];
   if (activeEl && tocListRef.value) {
     hasScrolledToCurrent.value = true;
-    activeEl.scrollIntoView({ block: "center" });
+    tocListRef.value.scrollTop =
+      activeEl.offsetTop - tocListRef.value.offsetHeight / 2 + activeEl.offsetHeight / 2;
   }
 }
 
@@ -51,11 +52,7 @@ onMounted(async () => {
   if (!props.currentChapterId) return;
 
   await nextTick();
-
-  // Wait for modal slide-up animation to complete
-  setTimeout(() => {
-    scrollToCurrentChapter();
-  }, 400);
+  scrollToCurrentChapter();
 });
 
 // Also watch for chapter changes in case modal stays open
@@ -64,9 +61,7 @@ watch(
   (newVal) => {
     if (newVal) {
       hasScrolledToCurrent.value = false;
-      setTimeout(() => {
-        scrollToCurrentChapter();
-      }, 100);
+      nextTick(() => scrollToCurrentChapter());
     }
   },
 );
@@ -131,6 +126,7 @@ function setRef(el: HTMLElement | null, chapterId: string) {
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
+  scroll-behavior: auto;
 }
 
 .no-chapters {

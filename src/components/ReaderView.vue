@@ -38,6 +38,8 @@ import {
   parseCfi,
 } from "../utils/epub-cfi";
 import type { ParsedCfi, CfiStep } from "../utils/epub-cfi";
+import { rewriteResourcePaths } from "../utils/resource-urls";
+import { debounce } from "../utils/debounce";
 
 const props = defineProps<{
   book: Book;
@@ -145,6 +147,17 @@ const search = useReaderSearch({
   chapterContents: chapterLoader.loadedContents,
 });
 
+// 滚动模式：重写资源 URL（图片等）
+const rewrittenLoadedContent = computed(() => {
+  const chapters = chapterLoader.allLoadedContent.value;
+  const resourceUrls = readerStore.resourceUrls;
+  if (!resourceUrls || resourceUrls.size === 0) return chapters;
+  return chapters.map((ch) => {
+    const doc = rewriteResourcePaths(ch.content, resourceUrls);
+    return { ...ch, content: doc.body.innerHTML };
+  });
+});
+
 function saveReadingProgress(chapterProgress: number, readingProgress: number, pageIndex: number) {
   if (isRestoring.value) return;
   const chapterId = readerStore.currentChapter?.id;
@@ -170,6 +183,40 @@ const scrollManager = useScrollManager({
     saveReadingProgress(chapterProgress, readingProgress, 0);
   },
 });
+
+// 滚动模式：来自 iframe 内部滚动数据的自动保存
+const debouncedSaveScroll = debounce(
+  (chapterId: string, chapterProgress: number, readingProgress: number) => {
+    if (isRestoring.value) return;
+    saveReadingProgress(chapterProgress, readingProgress, 0);
+  },
+  1000,
+);
+
+function handleScrollUpdate(data: {
+  percent: number;
+  chapterId: string | null;
+  chapterProgress: number;
+}) {
+  if (isRestoring.value) return;
+  const { percent, chapterId, chapterProgress } = data;
+
+  readerStore.updateProgress(percent, chapterProgress);
+
+  // 章节切换
+  if (chapterId && chapterId !== readerStore.currentChapter?.id) {
+    const chapter = readerStore.chapters.find((c) => c.id === chapterId);
+    if (chapter) {
+      readerStore.currentChapter = chapter;
+    }
+  }
+
+  // 自动保存
+  const curId = readerStore.currentChapter?.id;
+  if (curId) {
+    debouncedSaveScroll(curId, chapterProgress, percent);
+  }
+}
 
 // Toggle controls
 const toggleControls = () => {
@@ -206,7 +253,8 @@ const handleSelectChapter = async (chapterId: string, targetPage: number = 0) =>
       currentChapterResources.value = resources;
     } else {
       await chapterLoader.loadCurrentAndAdjacent(2);
-      scrollManager.scrollToChapter(chapterId);
+      await nextTick();
+      readerContentRef.value?.scrollToChapter(chapterId);
     }
 
     setTimeout(() => {
@@ -334,7 +382,8 @@ const navigateToSearchResult = async (result: SearchResult) => {
     await handleSelectChapter(result.chapterId);
   } else {
     await chapterLoader.loadChapter(result.chapterId);
-    scrollManager.scrollToChapter(result.chapterId);
+    await nextTick();
+    readerContentRef.value?.scrollToChapter(result.chapterId);
   }
 };
 
@@ -352,7 +401,9 @@ const goToPreviousMatch = async () => {
 const addBookmark = async () => {
   const chapter = readerStore.getCurrentChapter();
   if (!chapter) return;
-  const article = articleEl.value;
+  const article = isPaginationMode.value
+    ? articleEl.value
+    : (readerContentRef.value?.getArticle?.() ?? null);
   if (!article) return;
 
   let cfi: string;
@@ -477,8 +528,9 @@ const navigateToBookmark = async (bookmark: Bookmark) => {
     pagination.goToPage(0);
     closeModal();
   } else {
-    if (!articleEl.value) return;
-    const success = navigateToCfi(bookmark.cfi, articleEl.value);
+    const article = readerContentRef.value?.getArticle?.();
+    if (!article) return;
+    const success = navigateToCfi(bookmark.cfi, article);
     if (success) {
       closeModal();
     }
@@ -533,6 +585,12 @@ watch(
     }
   },
 );
+
+// 滚动模式：章节切换时自动加载周围章节
+watch(currentChapterIndex, (newIdx, oldIdx) => {
+  if (isPaginationMode.value || newIdx === oldIdx || isRestoring.value) return;
+  chapterLoader.loadCurrentAndAdjacent(2);
+});
 
 // Watch for scroll mode changes
 watch(
@@ -610,9 +668,12 @@ onMounted(async () => {
         await chapterLoader.loadCurrentAndAdjacent(2);
       }
       // Restore scroll position
-      if (progress?.chapterProgress) {
+      if (progress?.chapterProgress && restoreChapterId) {
         setTimeout(() => {
-          scrollManager.restoreScrollPosition(progress.chapterProgress, restoreChapterId);
+          readerContentRef.value?.restoreScrollPosition(
+            restoreChapterId!,
+            progress.chapterProgress,
+          );
         }, 200);
       }
     }
@@ -648,12 +709,12 @@ onUnmounted(() => {
       :settings="settingsStore.settings"
       :is-pagination-mode="isPaginationMode"
       :current-page="pagination.currentPage.value"
-      :loaded-chapters="chapterLoader.allLoadedContent.value"
+      :loaded-chapters="rewrittenLoadedContent"
       :epub-resources="currentChapterResources"
       :transitioning="isTransitioning"
       :on-link-click="handleInternalLinkClick"
-      @scroll="scrollManager.handleScroll()"
       @resize="handleResize"
+      @scroll-update="handleScrollUpdate"
       @gesture-tap="gestures.handleIframeTap"
       @gesture-swipe-left="
         () => {
