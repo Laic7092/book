@@ -1,0 +1,1 @@
+import{t as e}from"./resource-urls-oB7CBbAw.js";export{e as rewriteResourcePaths};
