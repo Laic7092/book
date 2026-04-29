@@ -616,6 +616,9 @@ watch(
   () => {
     updateThemeClass();
   },
+  {
+    immediate: true,
+  },
 );
 
 const reRenderContent = async () => {

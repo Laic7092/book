@@ -132,15 +132,15 @@ body {
 }
 
 body.theme-light {
-  --reader-bg: #fdfcfb;
+  --reader-bg: #ffffff;
 }
 
 body.theme-dark {
-  --reader-bg: #1a1816;
+  --reader-bg: #1a1a1a;
 }
 
 body.theme-sepia {
-  --reader-bg: #f5f0e6;
+  --reader-bg: #f4ecd8;
 }
 
 /* Smooth scrolling */
