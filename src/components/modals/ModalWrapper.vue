@@ -129,7 +129,6 @@ function handleClose() {
   animation: fadeIn 300ms ease;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  padding-bottom: env(safe-area-inset-bottom, 0);
   touch-action: none;
 }
 
@@ -158,6 +157,7 @@ function handleClose() {
   border-radius: 16px 16px 0 0;
   touch-action: pan-y;
   -webkit-overflow-scrolling: touch;
+  padding-bottom: env(safe-area-inset-bottom, 0);
 }
 
 /* Modal type-specific heights */

@@ -574,6 +574,8 @@ const updateThemeClass = () => {
   if (!container) return;
   container.classList.remove("theme-light", "theme-dark", "theme-sepia");
   container.classList.add(`theme-${settingsStore.settings.theme}`);
+  document.body.classList.remove("theme-light", "theme-dark", "theme-sepia");
+  document.body.classList.add(`theme-${settingsStore.settings.theme}`);
 };
 
 // Load stats when stats modal opens
@@ -796,7 +798,6 @@ onUnmounted(() => {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  background-color: var(--reader-bg);
   color: var(--reader-text);
   transition:
     background-color var(--transition-base),

@@ -15,7 +15,7 @@ defineProps<{
 <style scoped>
 .page-indicator {
   position: fixed;
-  bottom: 80px;
+  bottom: calc(80px + env(safe-area-inset-left, 0));
   left: 50%;
   transform: translateX(-50%) translateY(20px);
   background: var(--bg-elevated, var(--reader-bg));
