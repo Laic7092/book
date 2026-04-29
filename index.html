@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>book</title>
     <style>
       /* 禁止长按菜单 */
@@ -16,6 +16,16 @@
       /* 禁止高亮 */
       * {
         -webkit-tap-highlight-color: transparent;
+      }
+
+      body {
+        padding-top: env(safe-area-inset-top, 20px);
+        padding-bottom: env(safe-area-inset-bottom, 20px);
+      }
+
+      #app {
+        height: 100%;
+        overflow-y: auto;
       }
     </style>
   </head>

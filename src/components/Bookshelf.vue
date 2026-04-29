@@ -377,8 +377,6 @@ onMounted(() => {
 
 <style scoped>
 .bookshelf {
-  height: 100vh;
-  overflow: auto;
   background-color: var(--bg-primary);
   color: var(--text-primary);
   padding: 48px 56px;

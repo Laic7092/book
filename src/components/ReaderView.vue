@@ -794,8 +794,7 @@ onUnmounted(() => {
 .reader-view-container {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  height: 100dvh;
+  height: 100%;
   overflow: hidden;
   background-color: var(--reader-bg);
   color: var(--reader-text);

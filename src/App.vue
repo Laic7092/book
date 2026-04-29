@@ -35,12 +35,10 @@ async function handleCloseReader() {
 </script>
 
 <template>
-  <div class="app" :class="{ transitioning: uiStore.isTransitioning }">
-    <Transition name="page" mode="out-in">
-      <Bookshelf v-if="!readerStore.currentBook" @book:select="handleBookSelect" />
-      <ReaderView v-else :book="readerStore.currentBook" @close="handleCloseReader" />
-    </Transition>
-  </div>
+  <Transition name="page" mode="out-in">
+    <Bookshelf v-if="!readerStore.currentBook" @book:select="handleBookSelect" />
+    <ReaderView v-else :book="readerStore.currentBook" @close="handleCloseReader" />
+  </Transition>
 </template>
 
 <style>
@@ -153,11 +151,6 @@ body {
   color: var(--text-primary);
 }
 
-.app {
-  height: 100vh;
-  overflow: hidden;
-}
-
 .app.transitioning {
   pointer-events: none;
 }
@@ -185,6 +178,7 @@ body {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -195,6 +189,7 @@ body {
     opacity: 0;
     transform: translateY(12px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -206,6 +201,7 @@ body {
     opacity: 0;
     transform: translateY(-12px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -217,6 +213,7 @@ body {
     opacity: 0;
     transform: scale(0.95);
   }
+
   to {
     opacity: 1;
     transform: scale(1);
@@ -228,6 +225,7 @@ body {
     opacity: 0;
     transform: translateX(-20px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -239,6 +237,7 @@ body {
   100% {
     opacity: 1;
   }
+
   50% {
     opacity: 0.5;
   }
@@ -248,6 +247,7 @@ body {
   0% {
     background-position: -200% 0;
   }
+
   100% {
     background-position: 200% 0;
   }
