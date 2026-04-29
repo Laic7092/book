@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/book/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>book</title>
     <style>
       /* 禁止长按菜单 */
@@ -17,11 +17,21 @@
       * {
         -webkit-tap-highlight-color: transparent;
       }
+
+      body {
+        padding-top: env(safe-area-inset-top, 20px);
+        padding-bottom: env(safe-area-inset-bottom, 20px);
+      }
+
+      #app {
+        height: 100%;
+        overflow-y: auto;
+      }
     </style>
-    <script type="module" crossorigin src="/book/assets/index-DONxUz8E.js"></script>
+    <script type="module" crossorigin src="/book/assets/index-FA1xXwb8.js"></script>
     <link rel="modulepreload" crossorigin href="/book/assets/db-OXVZ4jq8.js">
     <link rel="modulepreload" crossorigin href="/book/assets/resource-urls-oB7CBbAw.js">
-    <link rel="stylesheet" crossorigin href="/book/assets/index-CJMmG6O3.css">
+    <link rel="stylesheet" crossorigin href="/book/assets/index-BSKmwl5M.css">
   <link rel="manifest" href="/book/manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="/book/registerSW.js"></script></head>
 
   <body>
