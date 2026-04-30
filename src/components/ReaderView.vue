@@ -12,13 +12,7 @@ import { useReaderStore } from "../stores/reader";
 import { useBookmarksStore } from "../stores/bookmarks";
 import { useUIStore } from "../stores/ui";
 import { useSettingsStore } from "../stores/settings";
-import {
-  useReaderGestures,
-  usePagination,
-  useScrollManager,
-  useChapterLoader,
-  useReaderSearch,
-} from "../composables";
+import { usePagination, useChapterLoader, useReaderSearch } from "../composables";
 import {
   ReaderHeader,
   ReaderFooter,
@@ -40,6 +34,7 @@ import {
 import type { ParsedCfi, CfiStep } from "../utils/epub-cfi";
 import { rewriteResourcePaths } from "../utils/resource-urls";
 import { debounce } from "../utils/debounce";
+import { SWIPE_THRESHOLD, TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../utils/constants";
 
 const props = defineProps<{
   book: Book;
@@ -49,16 +44,13 @@ const emit = defineEmits<{
   (e: "close"): void;
 }>();
 
-// Stores
 const readerStore = useReaderStore();
 const bookmarksStore = useBookmarksStore();
 const uiStore = useUIStore();
 const settingsStore = useSettingsStore();
 
-// Template refs
 const readerContentRef = ref<ComponentInstance<typeof ReaderContent> | null>(null);
 
-// Local state
 const stats = ref<BookReadingStats | null>(null);
 const isTransitioning = ref(false);
 const isRestoring = ref(false);
@@ -87,7 +79,6 @@ const isPaginationMode = computed(
   () => (settingsStore.settings.scrollMode || "vertical") === "pagination",
 );
 
-// 章节进度：分页模式自动计算，滚动模式从 store 读取
 const chapterProgress = computed(() => {
   if (isPaginationMode.value) {
     const total = pagination.totalPages.value;
@@ -97,7 +88,6 @@ const chapterProgress = computed(() => {
   return readerStore.chapterProgress;
 });
 
-// 阅读进度：自动计算
 const readingProgress = computed(() => {
   const total = readerStore.chapters.length;
   if (total <= 1) return chapterProgress.value;
@@ -107,7 +97,6 @@ const readingProgress = computed(() => {
   return Math.round(current * chapterPortion + (chapterProgress.value / 100) * chapterPortion);
 });
 
-// 全书进度：结合章节位置和章节内进度
 const totalBookProgress = computed(() => {
   const total = readerStore.chapters.length;
   if (total <= 1) return Math.max(1, Math.round(chapterProgress.value));
@@ -118,25 +107,25 @@ const totalBookProgress = computed(() => {
   return Math.round(current * chapterPortion + chapterProgressValue * chapterPortion);
 });
 
-// Initialize composables
 const pagination = usePagination(
   props.book.id,
   readerStore.$state.chapters,
   computed(() => settingsStore.settings),
 );
 
-// Display content for pagination mode
 const displayContent = computed(() => {
   if (isPaginationMode.value) {
     return pagination.currentHtml.value;
   }
   return "";
 });
+
 const chapterLoader = useChapterLoader(
   computed(() => props.book.id),
   readerStore.$state,
   currentChapterIndex,
 );
+
 const search = useReaderSearch({
   bookId: computed(() => props.book.id),
   chapters: computed(() => readerStore.chapters),
@@ -147,7 +136,6 @@ const search = useReaderSearch({
   chapterContents: chapterLoader.loadedContents,
 });
 
-// 滚动模式：重写资源 URL（图片等）
 const rewrittenLoadedContent = computed(() => {
   const chapters = chapterLoader.allLoadedContent.value;
   const resourceUrls = readerStore.resourceUrls;
@@ -169,22 +157,6 @@ function saveReadingProgress(chapterProgress: number, readingProgress: number, p
   });
 }
 
-const scrollManager = useScrollManager({
-  isPaginationMode,
-  onProgressUpdate: (reading, chapter) => readerStore.updateProgress(reading, chapter),
-  onChapterChange: async (chapterId) => {
-    const chapter = readerStore.chapters.find((c) => c.id === chapterId);
-    if (chapter && chapter.id !== readerStore.currentChapter?.id) {
-      readerStore.currentChapter = chapter;
-      readerStore.chapterProgress = 0;
-    }
-  },
-  onAutoSave: ({ chapterProgress, readingProgress }) => {
-    saveReadingProgress(chapterProgress, readingProgress, 0);
-  },
-});
-
-// 滚动模式：来自 iframe 内部滚动数据的自动保存
 const debouncedSaveScroll = debounce(
   (chapterId: string, chapterProgress: number, readingProgress: number) => {
     if (isRestoring.value) return;
@@ -193,170 +165,210 @@ const debouncedSaveScroll = debounce(
   1000,
 );
 
-function handleScrollUpdate(data: {
-  percent: number;
-  chapterId: string | null;
-  chapterProgress: number;
-}) {
-  if (isRestoring.value) return;
-  const { percent, chapterId, chapterProgress } = data;
+// ── Inline gesture handling ──
 
-  readerStore.updateProgress(percent, chapterProgress);
+let gestureStartX = 0;
+let gestureStartY = 0;
+let gestureStartTime = 0;
+let gestureCleanup: (() => void) | null = null;
 
-  // 章节切换
-  if (chapterId && chapterId !== readerStore.currentChapter?.id) {
-    const chapter = readerStore.chapters.find((c) => c.id === chapterId);
-    if (chapter) {
-      readerStore.currentChapter = chapter;
+function shouldIgnoreTarget(target: EventTarget | null): boolean {
+  if (!target || !(target instanceof Element)) return false;
+  const el = target as Element;
+  return !!(
+    el.closest("button") ||
+    el.closest("input") ||
+    el.closest("textarea") ||
+    el.closest("select") ||
+    el.closest("a[href]") ||
+    el.closest("[contenteditable]")
+  );
+}
+
+function toggleControls() {
+  uiStore.toggleControls();
+}
+
+// ── Inline scroll handling ──
+
+let scrollObserver: IntersectionObserver | null = null;
+let scrollCurrentChapterId: string | null = null;
+let scrollLastPercent = -1;
+let scrollLastChapterId: string | null = null;
+let scrollLastChapterProgress = -1;
+let scrollCleanup: (() => void) | null = null;
+
+function refreshScrollObserver() {
+  if (!scrollObserver) return;
+  const doc = readerContentRef.value?.getDocument?.();
+  if (!doc) return;
+
+  scrollObserver.disconnect();
+  doc.querySelectorAll<HTMLElement>("[data-chapter-id]").forEach((el) => {
+    scrollObserver?.observe(el);
+  });
+
+  const win = doc.defaultView;
+  if (win) {
+    const scrollTop = win.scrollY || doc.documentElement.scrollTop || 0;
+    const midpoint = scrollTop + win.innerHeight / 2;
+    const containers = doc.querySelectorAll<HTMLElement>("[data-chapter-id]");
+    for (const el of containers) {
+      if (midpoint >= el.offsetTop && midpoint < el.offsetTop + el.offsetHeight) {
+        scrollCurrentChapterId = el.getAttribute("data-chapter-id");
+        break;
+      }
     }
-  }
-
-  // 自动保存
-  const curId = readerStore.currentChapter?.id;
-  if (curId) {
-    debouncedSaveScroll(curId, chapterProgress, percent);
   }
 }
 
-// Toggle controls
-const toggleControls = () => {
-  uiStore.toggleControls();
-};
-
-const gestures = useReaderGestures({
-  isPaginationMode,
-  uiStore,
-  handlers: {
-    onSwipeLeft: nextPage,
-    onSwipeRight: prevPage,
-    onTapLeft: prevPage,
-    onTapRight: nextPage,
-    onTapCenter: toggleControls,
-    onTap: () => toggleControls(),
-  },
-});
-
-// Chapter navigation
-const handleSelectChapter = async (
-  chapterId: string,
-  targetPage: number = 0,
-  autoClearTransition = true,
-) => {
-  isTransitioning.value = true;
-  const wasShowingControls = uiStore.showControls;
-  try {
-    await readerStore.goToChapter(chapterId);
-    closeModal();
-
-    if (isPaginationMode.value) {
-      const content = await readerStore.getCurrentChapterContent();
-      const html = content?.html || "";
-      const resources = content?.resources || [];
-      await pagination.paginate(chapterId, { html, targetPage, resources });
-      currentChapterResources.value = resources;
-    } else {
-      await chapterLoader.loadCurrentAndAdjacent(2);
-      await nextTick();
-      readerContentRef.value?.scrollToChapter(chapterId);
-    }
-
-    if (isPaginationMode.value) {
-      if (autoClearTransition) {
-        const stopWatch = watch(
-          () => pagination.isReady.value,
-          (ready) => {
-            if (ready) {
-              isTransitioning.value = false;
-              uiStore.showControls = wasShowingControls;
-              stopWatch();
-            }
-          },
-        );
+function setupScrollHandler(doc: Document) {
+  scrollObserver = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          scrollCurrentChapterId = (entry.target as HTMLElement).getAttribute("data-chapter-id");
+        }
       }
-    } else {
-      setTimeout(() => {
-        isTransitioning.value = false;
-        uiStore.showControls = wasShowingControls;
-      }, 50);
-    }
-  } catch {
-    isTransitioning.value = false;
-    uiStore.showControls = wasShowingControls;
-  }
-};
+    },
+    { root: doc.documentElement, threshold: 0 },
+  );
 
-// Handle internal EPUB link clicks (e.g., table of contents links)
-// This is called from the iframe via postMessage
-function handleInternalLinkClick(href: string) {
-  // Ignore external links
-  if (href.startsWith("http://") || href.startsWith("https://") || href.startsWith("mailto:")) {
-    return;
-  }
+  doc.querySelectorAll<HTMLElement>("[data-chapter-id]").forEach((el) => {
+    scrollObserver?.observe(el);
+  });
 
-  // Parse href: could be "chapter.xhtml#anchor" or "#anchor"
-  const hashIndex = href.indexOf("#");
-  const filePath = hashIndex > 0 ? href.substring(0, hashIndex) : "";
-  const anchor = hashIndex >= 0 ? href.substring(hashIndex + 1) : "";
+  let ticking = false;
+  const handler = () => {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(() => {
+      ticking = false;
 
-  const scrollToAnchor = () => {
-    if (!anchor) return;
-    const article = readerContentRef.value?.getArticle?.();
-    if (article) {
-      // Try multiple anchor selectors: id, name
-      const target =
-        article.querySelector(`[id="${CSS.escape(anchor)}"]`) ||
-        article.querySelector(`[name="${CSS.escape(anchor)}"]`);
-      if (target) {
-        target.scrollIntoView({ behavior: "smooth", block: "start" });
+      const win = doc.defaultView;
+      if (!win) return;
+
+      const scrollTop = win.scrollY || doc.documentElement.scrollTop || 0;
+      const scrollHeight = doc.documentElement.scrollHeight - doc.documentElement.clientHeight;
+      if (scrollHeight <= 0) return;
+
+      const percent = Math.min(100, Math.max(0, Math.round((scrollTop / scrollHeight) * 100)));
+
+      let chapterProgress = 0;
+      if (scrollCurrentChapterId) {
+        const el = doc.querySelector<HTMLElement>(`[data-chapter-id="${scrollCurrentChapterId}"]`);
+        if (el && el.offsetHeight > 0) {
+          const scrolled = scrollTop - el.offsetTop;
+          chapterProgress = Math.min(
+            100,
+            Math.max(0, Math.round((scrolled / el.offsetHeight) * 100)),
+          );
+        }
+      }
+
+      if (
+        percent === scrollLastPercent &&
+        scrollCurrentChapterId === scrollLastChapterId &&
+        chapterProgress === scrollLastChapterProgress
+      )
+        return;
+      scrollLastPercent = percent;
+      scrollLastChapterId = scrollCurrentChapterId;
+      scrollLastChapterProgress = chapterProgress;
+
+      if (isRestoring.value) return;
+
+      readerStore.updateProgress(percent, chapterProgress);
+
+      if (scrollCurrentChapterId && scrollCurrentChapterId !== readerStore.currentChapter?.id) {
+        const chapter = readerStore.chapters.find((c) => c.id === scrollCurrentChapterId);
+        if (chapter) {
+          readerStore.currentChapter = chapter;
+        }
+      }
+
+      const curId = readerStore.currentChapter?.id;
+      if (curId) {
+        debouncedSaveScroll(curId, chapterProgress, percent);
+      }
+    });
+  };
+
+  doc.addEventListener("scroll", handler, { passive: true });
+
+  scrollCleanup = () => {
+    doc.removeEventListener("scroll", handler);
+    scrollObserver?.disconnect();
+    scrollObserver = null;
+  };
+}
+
+// ── Direct gesture + scroll setup ──
+
+function setupDirectHandlers(doc: Document) {
+  if (gestureCleanup) return;
+
+  const handlePointerDown = (e: PointerEvent) => {
+    if (shouldIgnoreTarget(e.target)) return;
+    gestureStartX = e.clientX;
+    gestureStartY = e.clientY;
+    gestureStartTime = Date.now();
+  };
+
+  const handlePointerUp = (e: PointerEvent) => {
+    const deltaX = e.clientX - gestureStartX;
+    const deltaY = e.clientY - gestureStartY;
+    const deltaTime = Date.now() - gestureStartTime;
+
+    const isTap = deltaTime < 300 && Math.abs(deltaX) < 10 && Math.abs(deltaY) < 10;
+
+    const isHorizontalSwipe =
+      Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > SWIPE_THRESHOLD;
+
+    if (isTap) {
+      if (uiStore.activeModal) {
+        uiStore.closeModal();
+        return;
+      }
+      if (isPaginationMode.value) {
+        const width = window.innerWidth;
+        const x = e.clientX;
+        if (x < width * TAP_ZONE_LEFT) {
+          prevPage();
+        } else if (x > width * TAP_ZONE_RIGHT) {
+          nextPage();
+        } else {
+          toggleControls();
+        }
+      } else {
+        toggleControls();
+      }
+    } else if (isHorizontalSwipe) {
+      if (uiStore.activeModal) {
+        uiStore.closeModal();
+        return;
+      }
+      if (isPaginationMode.value) {
+        if (deltaX > 0) {
+          prevPage();
+        } else {
+          nextPage();
+        }
       }
     }
   };
 
-  if (!filePath) {
-    // Same-chapter anchor: just scroll
-    scrollToAnchor();
-    return;
-  }
+  doc.addEventListener("pointerdown", handlePointerDown, { passive: true });
+  doc.addEventListener("pointerup", handlePointerUp, { passive: true });
 
-  // Cross-chapter: find target chapter
-  const targetChapter = readerStore.chapters.find((c) => chapterMatchesHref(c, filePath));
-
-  if (targetChapter) {
-    handleSelectChapter(targetChapter.id).then(async () => {
-      if (anchor) {
-        // Wait for DOM to update and render, then scroll to anchor
-        await nextTick();
-        requestAnimationFrame(() => {
-          requestAnimationFrame(scrollToAnchor);
-        });
-      }
-    });
-  }
+  gestureCleanup = () => {
+    doc.removeEventListener("pointerdown", handlePointerDown);
+    doc.removeEventListener("pointerup", handlePointerUp);
+  };
 }
 
-/**
- * Check if a chapter's href matches the target file path from an internal link.
- * Matches exact path, suffix, or path segment (for relative path variations).
- */
-function chapterMatchesHref(chapter: Chapter, filePath: string): boolean {
-  if (!chapter.href) return false;
-  return (
-    chapter.href === filePath ||
-    chapter.href.endsWith(filePath) ||
-    chapter.href.endsWith("/" + filePath) ||
-    chapter.href.includes(filePath)
-  );
-}
+// ── Chapter navigation ──
 
-async function handleResize() {
-  await reRenderContent();
-}
-
-function handleColumnLayout(data: { columnWidth: number; gap: number; scrollWidth: number }) {
-  pagination.updateColumnLayout(data.columnWidth, data.gap, data.scrollWidth);
-}
-
-// Pagination handlers
 async function nextPage() {
   if (pagination.isPaginating.value) return;
 
@@ -396,7 +408,119 @@ async function prevPage() {
   }
 }
 
-// Search navigation
+const handleSelectChapter = async (
+  chapterId: string,
+  targetPage: number = 0,
+  autoClearTransition = true,
+) => {
+  isTransitioning.value = true;
+  const wasShowingControls = uiStore.showControls;
+  try {
+    await readerStore.goToChapter(chapterId);
+    closeModal();
+
+    if (isPaginationMode.value) {
+      const content = await readerStore.getCurrentChapterContent();
+      const html = content?.html || "";
+      const resources = content?.resources || [];
+      await pagination.paginate(chapterId, { html, targetPage, resources });
+      currentChapterResources.value = resources;
+    } else {
+      await chapterLoader.loadCurrentAndAdjacent(2);
+      await nextTick();
+      readerContentRef.value?.scrollToChapter?.(chapterId);
+    }
+
+    if (isPaginationMode.value) {
+      if (autoClearTransition) {
+        const stopWatch = watch(
+          () => pagination.isReady.value,
+          (ready) => {
+            if (ready) {
+              isTransitioning.value = false;
+              uiStore.showControls = wasShowingControls;
+              stopWatch();
+            }
+          },
+        );
+      }
+    } else {
+      setTimeout(() => {
+        isTransitioning.value = false;
+        uiStore.showControls = wasShowingControls;
+      }, 50);
+    }
+  } catch {
+    isTransitioning.value = false;
+    uiStore.showControls = wasShowingControls;
+  }
+};
+
+function handleInternalLinkClick(href: string) {
+  if (href.startsWith("http://") || href.startsWith("https://") || href.startsWith("mailto:")) {
+    return;
+  }
+
+  const hashIndex = href.indexOf("#");
+  const filePath = hashIndex > 0 ? href.substring(0, hashIndex) : "";
+  const anchor = hashIndex >= 0 ? href.substring(hashIndex + 1) : "";
+
+  const scrollToAnchor = () => {
+    if (!anchor) return;
+    const article = readerContentRef.value?.getArticle?.();
+    if (article) {
+      const target =
+        article.querySelector(`[id="${CSS.escape(anchor)}"]`) ||
+        article.querySelector(`[name="${CSS.escape(anchor)}"]`);
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+  };
+
+  if (!filePath) {
+    scrollToAnchor();
+    return;
+  }
+
+  const targetChapter = readerStore.chapters.find((c) => chapterMatchesHref(c, filePath));
+
+  if (targetChapter) {
+    handleSelectChapter(targetChapter.id).then(async () => {
+      if (anchor) {
+        await nextTick();
+        requestAnimationFrame(() => {
+          requestAnimationFrame(scrollToAnchor);
+        });
+      }
+    });
+  }
+}
+
+function chapterMatchesHref(chapter: Chapter, filePath: string): boolean {
+  if (!chapter.href) return false;
+  return (
+    chapter.href === filePath ||
+    chapter.href.endsWith(filePath) ||
+    chapter.href.endsWith("/" + filePath) ||
+    chapter.href.includes(filePath)
+  );
+}
+
+async function handleResize() {
+  await reRenderContent();
+}
+
+function handleColumnLayout(data: { columnWidth: number; gap: number; scrollWidth: number }) {
+  pagination.updateColumnLayout(data.columnWidth, data.gap, data.scrollWidth);
+}
+
+function handleChaptersChanged() {
+  refreshScrollObserver();
+}
+
+// ── Search navigation ──
+
 const navigateToSearchResult = async (result: SearchResult) => {
   if (!result) return;
 
@@ -405,7 +529,7 @@ const navigateToSearchResult = async (result: SearchResult) => {
   } else {
     await chapterLoader.loadChapter(result.chapterId);
     await nextTick();
-    readerContentRef.value?.scrollToChapter(result.chapterId);
+    readerContentRef.value?.scrollToChapter?.(result.chapterId);
   }
 };
 
@@ -419,7 +543,8 @@ const goToPreviousMatch = async () => {
   if (index !== undefined) await navigateToSearchResult(index);
 };
 
-// Bookmark handlers
+// ── Bookmark handlers ──
+
 const addBookmark = async () => {
   const chapter = readerStore.getCurrentChapter();
   if (!chapter) return;
@@ -564,7 +689,6 @@ function calculateAbsoluteCharOffset(fullHtml: string, parsed: ParsedCfi): numbe
   const target = resolveCfi(`epubcfi(/6/1${buildPathFromSteps(parsed.steps)})`, tempContainer);
   if (!target) return null;
 
-  // Walk all text nodes and sum up to the target
   const walker = document.createTreeWalker(tempContainer, NodeFilter.SHOW_TEXT, null);
   let charOffset = 0;
 
@@ -608,7 +732,7 @@ watch(
   },
 );
 
-// 滚动模式：章节切换时自动加载周围章节
+// Scroll mode: load surrounding chapters on chapter change
 watch(currentChapterIndex, (newIdx, oldIdx) => {
   if (isPaginationMode.value || newIdx === oldIdx || isRestoring.value) return;
   chapterLoader.loadCurrentAndAdjacent(2);
@@ -636,9 +760,7 @@ watch(
   () => {
     updateThemeClass();
   },
-  {
-    immediate: true,
-  },
+  { immediate: true },
 );
 
 const reRenderContent = async () => {
@@ -669,6 +791,22 @@ watch([() => pagination.currentPage.value, () => pagination.totalPages.value], (
   saveReadingProgress(cp, readingProgress.value, page);
 });
 
+// Watch for iframe ready → set up direct gesture + scroll handlers
+watch(
+  () => readerContentRef.value?.isReady,
+  (ready) => {
+    if (!ready) return;
+    const doc = readerContentRef.value?.getDocument?.();
+    if (!doc) return;
+
+    setupDirectHandlers(doc);
+
+    if (!isPaginationMode.value) {
+      setupScrollHandler(doc);
+    }
+  },
+);
+
 // Lifecycle
 onMounted(async () => {
   await bookmarksStore.loadBookmarks(props.book.id);
@@ -694,7 +832,7 @@ onMounted(async () => {
       // Restore scroll position
       if (progress?.chapterProgress && restoreChapterId) {
         setTimeout(() => {
-          readerContentRef.value?.restoreScrollPosition(
+          readerContentRef.value?.restoreScrollPosition?.(
             restoreChapterId!,
             progress.chapterProgress,
           );
@@ -707,14 +845,16 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-  // scrollManager.cleanup();
+  gestureCleanup?.();
+  gestureCleanup = null;
+  scrollCleanup?.();
+  scrollCleanup = null;
   pagination.cleanup();
 });
 </script>
 
 <template>
   <div class="reader-view-container">
-    <!-- Header -->
     <ReaderHeader
       :book-title="book.title"
       :chapter-title="readerStore.currentChapter?.title"
@@ -723,10 +863,8 @@ onUnmounted(() => {
       @open-settings="openModal('settings')"
     />
 
-    <!-- Progress Bar -->
     <ProgressBar :progress="chapterProgress" />
 
-    <!-- Main Content -->
     <ReaderContent
       ref="readerContentRef"
       :content="displayContent"
@@ -737,23 +875,11 @@ onUnmounted(() => {
       :loaded-chapters="rewrittenLoadedContent"
       :epub-resources="currentChapterResources"
       :on-link-click="handleInternalLinkClick"
-      @resize="handleResize"
-      @scroll-update="handleScrollUpdate"
-      @column-layout="handleColumnLayout"
-      @gesture-tap="gestures.handleIframeTap"
-      @gesture-swipe-left="
-        () => {
-          gestures.handleIframeSwipe('left');
-        }
-      "
-      @gesture-swipe-right="
-        () => {
-          gestures.handleIframeSwipe('right');
-        }
-      "
+      :on-resize="handleResize"
+      :on-column-layout="handleColumnLayout"
+      :on-chapters-changed="handleChaptersChanged"
     />
 
-    <!-- Footer -->
     <ReaderFooter
       :show-controls="uiStore.showControls"
       :has-highlights="search.hasHighlights.value"
@@ -777,14 +903,12 @@ onUnmounted(() => {
       @clear-highlights="search.clearHighlights"
     />
 
-    <!-- Page Indicator -->
     <PageIndicator
       :current-page="pagination.currentPage.value"
       :total-pages="pagination.totalPages.value"
       :show="uiStore.showControls && isPaginationMode"
     />
 
-    <!-- Modal Wrapper -->
     <ModalWrapper
       :modal-type="uiStore.activeModal"
       :chapters="readerStore.chapters"
@@ -830,7 +954,6 @@ onUnmounted(() => {
   text-size-adjust: 100%;
 }
 
-/* Scrollbar Styling */
 .reader-view::-webkit-scrollbar {
   width: 7px;
 }
@@ -848,14 +971,12 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--border) 70%, var(--reader-text));
 }
 
-/* Responsive adjustments */
 @media (max-width: 768px) {
   .reader-view-container {
     /* Mobile optimizations handled by sub-components */
   }
 }
 
-/* Safe area insets for notched devices */
 @supports (padding: max(0px)) {
   .reader-view-container {
     padding-left: max(0px, env(safe-area-inset-left, 0));

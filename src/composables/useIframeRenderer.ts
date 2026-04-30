@@ -5,7 +5,6 @@ import {
   generateThemeCSS,
   generateTypographyCSS,
 } from "../utils/reader-styles";
-import { useIframeGestures, type IframeGestureHandlers } from "./useIframeGestures";
 import { type ResourceInfo, injectResources, clearResources } from "../utils/iframe-resources";
 
 export interface IframeRendererOptions {
@@ -18,53 +17,32 @@ export interface IframeLinkClickEvent {
   href: string;
 }
 
-export interface IframeScrollUpdate {
-  type: "scroll-update";
-  percent: number;
-  chapterId: string | null;
-  chapterProgress: number;
-}
-
-type IframeMessageHandler = (message: IframeLinkClickEvent) => void;
-type ScrollUpdateHandler = (data: IframeScrollUpdate) => void;
-
 /**
- * Iframe 渲染器 composable
- * 使用 DOM 操作更新内容，避免 document.write 导致的事件监听器丢失
+ * Iframe 渲染器 composable（纯渲染，不处理手势/滚动）
  *
  * iframe 内部样式结构:
- * - <style id="theme-style"> 主题颜色变量（背景、文字、边框）
- * - <style id="base-style"> 基础重置（换行、图片响应式、断行）
- * - <style id="typography-style"> 排版设置（字号、字体、行距、间距）
- * - <style id="epub-style"> EPUB 资源样式（动态注入/移除）
+ * - <style id="theme-style"> 主题颜色变量
+ * - <style id="base-style"> 基础重置
+ * - <style id="typography-style"> 排版设置
+ * - <style id="epub-style"> EPUB 资源样式
+ * - <style id="pagination-style"> 分页列布局
  */
 export function useIframeRenderer(
   iframeRef: Ref<HTMLIFrameElement | null>,
   options: Ref<IframeRendererOptions>,
-  gestureHandlers?: IframeGestureHandlers,
-  onLinkClick?: IframeMessageHandler,
-  onScrollUpdate?: ScrollUpdateHandler,
+  onLinkClick?: (message: IframeLinkClickEvent) => void,
 ) {
   const isReady = ref(false);
   let iframeDoc: Document | null = null;
   let isInitialized = false;
-  let gestures: ReturnType<typeof useIframeGestures> | null = null;
 
-  // 资源追踪：记录已注入的资源详细信息
   const injectedResources = new Map<string, ResourceInfo>();
 
-  // Scroll handler cleanup
-  let scrollCleanup: (() => void) | null = null;
-
-  // Message handler for iframe link clicks
   const messageHandler = (event: MessageEvent) => {
     if (!onLinkClick || !event.data || event.data.type !== "link-click") return;
     onLinkClick(event.data as IframeLinkClickEvent);
   };
 
-  /**
-   * 初始化 iframe 文档结构（仅调用一次）
-   */
   function initIframe() {
     const iframe = iframeRef.value;
     if (!iframe) return;
@@ -72,10 +50,8 @@ export function useIframeRenderer(
     iframeDoc = iframe.contentDocument || iframe.contentWindow?.document || null;
     if (!iframeDoc) return;
 
-    // 一次性写入基础结构
     const styles = generateIframeStyles(options.value.settings);
 
-    // 注入链接点击处理脚本（通过 postMessage 传递到主文档）
     const linkHandlerScript = onLinkClick
       ? `<script>
       (function() {
@@ -114,37 +90,16 @@ export function useIframeRenderer(
     isInitialized = true;
     isReady.value = true;
 
-    // Register message listener for link clicks
     if (onLinkClick) {
       window.addEventListener("message", messageHandler);
     }
-
-    // 初始化手势识别
-    if (gestureHandlers && iframeDoc) {
-      gestures = useIframeGestures(iframeDoc, gestureHandlers, {
-        enableTap: true,
-        enableSwipe: true,
-      });
-    }
-
-    // 滚动模式：监听 iframe 内部滚动
-    if (!options.value.isPaginationMode && onScrollUpdate) {
-      setupScrollHandler();
-    }
   }
 
-  /**
-   * 更新 iframe 内容（使用 DOM 操作）
-   */
   function updateContent(html: string) {
     if (!iframeDoc?.body) return;
-
     iframeDoc.body.innerHTML = html;
   }
 
-  /**
-   * 更新样式（直接修改 style 标签内容）
-   */
   function updateStyles() {
     if (!iframeDoc) return;
 
@@ -163,164 +118,28 @@ export function useIframeRenderer(
     }
   }
 
-  /**
-   * 更新 EPUB 资源样式
-   * 接收 EPUB 的 <link> 和 <style> 元素，注入到 iframe head
-   * 智能对比新旧资源，执行增量更新：
-   * - 保留未变化的资源
-   * - 更新内容变化的资源
-   * - 添加新增的资源
-   * - 移除不再需要的资源
-   */
   function updateEpubResources(elements: HTMLElement[]): void {
     if (!iframeDoc) return;
     injectResources(iframeDoc, elements, injectedResources, "epub-style", "data-epub-dynamic");
   }
 
-  /**
-   * 清空 EPUB 资源样式
-   */
   function clearEpubResources(): void {
     if (!iframeDoc) return;
     clearResources(iframeDoc, injectedResources, "epub-style");
   }
 
-  /**
-   * 获取 iframe 的 body 元素
-   */
   function getBody(): HTMLElement | null {
     return iframeDoc?.body || null;
   }
 
-  /**
-   * 获取 iframe 的 body 元素（兼容旧接口）
-   */
   function getArticle(): HTMLElement | null {
     return iframeDoc?.body || null;
   }
 
-  /**
-   * 获取 iframe document
-   */
   function getDocument(): Document | null {
     return iframeDoc;
   }
 
-  // ── 滚动模式：滚动处理 ──
-
-  let scrollObserver: IntersectionObserver | null = null;
-  let currentChapterId: string | null = null;
-  let lastPercent = -1;
-  let lastChapterId: string | null = null;
-  let lastChapterProgress = -1;
-
-  function setupScrollHandler() {
-    if (!iframeDoc || !onScrollUpdate) return;
-
-    // IntersectionObserver 检测当前可见章节（不强制 layout）
-    scrollObserver = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            currentChapterId = (entry.target as HTMLElement).getAttribute("data-chapter-id");
-          }
-        }
-      },
-      { root: iframeDoc.documentElement, threshold: 0 },
-    );
-
-    // 观察所有已有章节
-    iframeDoc.querySelectorAll<HTMLElement>("[data-chapter-id]").forEach((el) => {
-      scrollObserver?.observe(el);
-    });
-
-    // 滚动百分比的 rAF（只读 scrollTop/scrollHeight，不强制 layout）
-    let ticking = false;
-    const handler = () => {
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(() => {
-        ticking = false;
-        if (!iframeDoc) return;
-        const win = iframeDoc.defaultView;
-        if (!win) return;
-
-        const scrollTop = win.scrollY || iframeDoc.documentElement.scrollTop || 0;
-        const scrollHeight =
-          iframeDoc.documentElement.scrollHeight - iframeDoc.documentElement.clientHeight;
-        if (scrollHeight <= 0) return;
-
-        const percent = Math.min(100, Math.max(0, Math.round((scrollTop / scrollHeight) * 100)));
-
-        // 计算章节内进度
-        let chapterProgress = 0;
-        if (currentChapterId) {
-          const el = iframeDoc.querySelector<HTMLElement>(
-            `[data-chapter-id="${currentChapterId}"]`,
-          );
-          if (el && el.offsetHeight > 0) {
-            const scrolled = scrollTop - el.offsetTop;
-            chapterProgress = Math.min(
-              100,
-              Math.max(0, Math.round((scrolled / el.offsetHeight) * 100)),
-            );
-          }
-        }
-
-        // 只在值真正变化时回调
-        if (
-          percent === lastPercent &&
-          currentChapterId === lastChapterId &&
-          chapterProgress === lastChapterProgress
-        )
-          return;
-        lastPercent = percent;
-        lastChapterId = currentChapterId;
-        lastChapterProgress = chapterProgress;
-
-        onScrollUpdate({
-          type: "scroll-update",
-          percent,
-          chapterId: currentChapterId,
-          chapterProgress,
-        });
-      });
-    };
-
-    iframeDoc.addEventListener("scroll", handler, { passive: true });
-    scrollCleanup = () => {
-      iframeDoc?.removeEventListener("scroll", handler);
-      scrollObserver?.disconnect();
-      scrollObserver = null;
-    };
-  }
-
-  /** 章节 DOM 变化后重新连接 IntersectionObserver */
-  function refreshScrollObserver() {
-    if (!scrollObserver || !iframeDoc) return;
-    scrollObserver.disconnect();
-    iframeDoc.querySelectorAll<HTMLElement>("[data-chapter-id]").forEach((el) => {
-      scrollObserver?.observe(el);
-    });
-
-    // Observer 断开后不会自动恢复可见状态，手动检测当前章节
-    const win = iframeDoc.defaultView;
-    if (win) {
-      const scrollTop = win.scrollY || iframeDoc.documentElement.scrollTop || 0;
-      const midpoint = scrollTop + win.innerHeight / 2;
-      const containers = iframeDoc.querySelectorAll<HTMLElement>("[data-chapter-id]");
-      for (const el of containers) {
-        if (midpoint >= el.offsetTop && midpoint < el.offsetTop + el.offsetHeight) {
-          currentChapterId = el.getAttribute("data-chapter-id");
-          break;
-        }
-      }
-    }
-  }
-
-  /**
-   * 滚动到指定章节
-   */
   function scrollToChapter(chapterId: string): void {
     if (!iframeDoc) return;
     const el = iframeDoc.querySelector<HTMLElement>(`[data-chapter-id="${chapterId}"]`);
@@ -329,9 +148,6 @@ export function useIframeRenderer(
     }
   }
 
-  /**
-   * 恢复滚动位置（按章节内进度百分比）
-   */
   function restoreScrollPosition(chapterId: string, progress: number): void {
     if (!iframeDoc) return;
     const el = iframeDoc.querySelector<HTMLElement>(`[data-chapter-id="${chapterId}"]`);
@@ -344,9 +160,6 @@ export function useIframeRenderer(
     }
   }
 
-  /**
-   * 滚动到指定 Y 位置
-   */
   function scrollTo(y: number): void {
     if (!iframeDoc) return;
     const win = iframeDoc.defaultView;
@@ -355,27 +168,9 @@ export function useIframeRenderer(
     }
   }
 
-  /**
-   * 清理
-   */
   function cleanup() {
-    // 清理滚动监听
-    if (scrollCleanup) {
-      scrollCleanup();
-      scrollCleanup = null;
-    }
-
     clearEpubResources();
-
-    // Remove message listener
     window.removeEventListener("message", messageHandler);
-
-    // 清理手势监听
-    if (gestures) {
-      gestures.unbind();
-      gestures = null;
-    }
-
     iframeDoc = null;
     isInitialized = false;
     isReady.value = false;
@@ -395,7 +190,6 @@ export function useIframeRenderer(
     scrollToChapter,
     restoreScrollPosition,
     scrollTo,
-    refreshScrollObserver,
     cleanup,
   };
 }
