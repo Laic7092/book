@@ -23,9 +23,7 @@ function handleSearchInput(value: string) {
   emit("update:searchQuery", value);
   if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
   searchDebounceTimer = window.setTimeout(() => {
-    if (value.trim()) {
-      emit("search");
-    }
+    emit("search");
   }, 300);
 }
 

@@ -24,6 +24,7 @@ export function useReaderSearch(options: UseReaderSearchOptions) {
   const doSearch = async () => {
     if (!searchQuery.value.trim() || !bookId.value) {
       searchResults.value = [];
+      hasHighlights.value = false;
       return;
     }
 

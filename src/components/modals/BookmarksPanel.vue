@@ -1,10 +1,15 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import type { Bookmark } from "../../core/types";
 import ModalHeader from "./ModalHeader.vue";
 
-defineProps<{
+const props = defineProps<{
   bookmarks: Bookmark[];
 }>();
+
+const visibleBookmarks = computed(() =>
+  props.bookmarks.filter((b) => !b.id.startsWith("__progress__")),
+);
 
 const emit = defineEmits<{
   (e: "add-bookmark"): void;
@@ -49,7 +54,7 @@ function formatDate(timestamp: number): string {
     </div>
     <div class="modal-body scroll-body">
       <ul class="bookmarks-list">
-        <li v-for="bm in bookmarks" :key="bm.id" class="bookmark-item">
+        <li v-for="bm in visibleBookmarks" :key="bm.id" class="bookmark-item">
           <div class="bookmark-card" @click.stop="emit('navigate-bookmark', bm)">
             <div
               class="bookmark-color-indicator"
@@ -84,7 +89,7 @@ function formatDate(timestamp: number): string {
           </div>
         </li>
       </ul>
-      <div v-if="bookmarks.length === 0" class="empty-state">
+      <div v-if="visibleBookmarks.length === 0" class="empty-state">
         <svg
           width="48"
           height="48"

@@ -575,12 +575,12 @@ const navigateToSearchResult = async (result: SearchResult) => {
 
 const goToNextMatch = async () => {
   const index = search.goToNextMatch();
-  if (index !== undefined) await navigateToSearchResult(index);
+  if (index !== undefined) await navigateToSearchResult(search.searchResults.value[index]);
 };
 
 const goToPreviousMatch = async () => {
   const index = search.goToPreviousMatch();
-  if (index !== undefined) await navigateToSearchResult(index);
+  if (index !== undefined) await navigateToSearchResult(search.searchResults.value[index]);
 };
 
 // ── Bookmark handlers ──
