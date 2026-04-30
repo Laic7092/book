@@ -57,18 +57,19 @@ const settingsStore = useSettingsStore();
 
 // Template refs
 const readerContentRef = ref<ComponentInstance<typeof ReaderContent> | null>(null);
-// 从 iframe 获取容器引用（用于分页测量的容器）
-const articleEl = computed(() => {
-  // 对于 iframe 模式，我们使用容器 ref（main 元素）
-  // usePagination 会自己创建隐藏的测量 iframe
-  return readerContentRef.value?.$el ?? null;
-});
 
 // Local state
 const stats = ref<BookReadingStats | null>(null);
 const isTransitioning = ref(false);
 const isRestoring = ref(false);
 const currentChapterResources = ref<HTMLElement[]>([]);
+
+const chapterLoading = computed(() => {
+  if (isRestoring.value) return true;
+  if (isTransitioning.value) return true;
+  if (isPaginationMode.value && !pagination.isReady.value) return true;
+  return false;
+});
 
 const openModal = (modal: string) => {
   uiStore.openModal(modal as any);
@@ -119,7 +120,6 @@ const totalBookProgress = computed(() => {
 
 // Initialize composables
 const pagination = usePagination(
-  articleEl,
   props.book.id,
   readerStore.$state.chapters,
   computed(() => settingsStore.settings),
@@ -237,7 +237,11 @@ const gestures = useReaderGestures({
 });
 
 // Chapter navigation
-const handleSelectChapter = async (chapterId: string, targetPage: number = 0) => {
+const handleSelectChapter = async (
+  chapterId: string,
+  targetPage: number = 0,
+  autoClearTransition = true,
+) => {
   isTransitioning.value = true;
   const wasShowingControls = uiStore.showControls;
   try {
@@ -249,7 +253,6 @@ const handleSelectChapter = async (chapterId: string, targetPage: number = 0) =>
       const html = content?.html || "";
       const resources = content?.resources || [];
       await pagination.paginate(chapterId, { html, targetPage, resources });
-      // 将资源传递给 ReaderContent
       currentChapterResources.value = resources;
     } else {
       await chapterLoader.loadCurrentAndAdjacent(2);
@@ -257,10 +260,25 @@ const handleSelectChapter = async (chapterId: string, targetPage: number = 0) =>
       readerContentRef.value?.scrollToChapter(chapterId);
     }
 
-    setTimeout(() => {
-      isTransitioning.value = false;
-      uiStore.showControls = wasShowingControls;
-    }, 50);
+    if (isPaginationMode.value) {
+      if (autoClearTransition) {
+        const stopWatch = watch(
+          () => pagination.isReady.value,
+          (ready) => {
+            if (ready) {
+              isTransitioning.value = false;
+              uiStore.showControls = wasShowingControls;
+              stopWatch();
+            }
+          },
+        );
+      }
+    } else {
+      setTimeout(() => {
+        isTransitioning.value = false;
+        uiStore.showControls = wasShowingControls;
+      }, 50);
+    }
   } catch {
     isTransitioning.value = false;
     uiStore.showControls = wasShowingControls;
@@ -334,6 +352,10 @@ async function handleResize() {
   await reRenderContent();
 }
 
+function handleColumnLayout(data: { columnWidth: number; gap: number; scrollWidth: number }) {
+  pagination.updateColumnLayout(data.columnWidth, data.gap, data.scrollWidth);
+}
+
 // Pagination handlers
 async function nextPage() {
   if (pagination.isPaginating.value) return;
@@ -401,9 +423,7 @@ const goToPreviousMatch = async () => {
 const addBookmark = async () => {
   const chapter = readerStore.getCurrentChapter();
   if (!chapter) return;
-  const article = isPaginationMode.value
-    ? articleEl.value
-    : (readerContentRef.value?.getArticle?.() ?? null);
+  const article = readerContentRef.value?.getArticle?.() ?? null;
   if (!article) return;
 
   let cfi: string;
@@ -413,15 +433,10 @@ const addBookmark = async () => {
     const fullHtml = pagination.rawHtml.value;
     if (!fullHtml) return;
 
+    const totalPages = pagination.totalPages.value;
     const currentPage = pagination.currentPage.value;
-    const pages = pagination.pages.value;
-    let charOffset = 0;
-    for (let i = 0; i < currentPage; i++) {
-      const pageText = pages[i]?.html.replace(/<[^>]*>/g, "") || "";
-      charOffset += pageText.length;
-    }
-    // 预留给下一页
-    charOffset += 1;
+    const fullText = fullHtml.replace(/<[^>]*>/g, "");
+    const charOffset = Math.floor(((currentPage + 0.5) / totalPages) * fullText.length);
 
     cfi = generateCfiFromCharOffset(
       readerStore.currentChapter?.order ?? 0,
@@ -487,53 +502,58 @@ const navigateToBookmark = async (bookmark: Bookmark) => {
     return;
   }
 
-  if (targetChapter.id !== readerStore.currentChapter?.id) {
-    await handleSelectChapter(targetChapter.id);
-    await nextTick();
-  }
+  isTransitioning.value = true;
 
-  if (isPaginationMode.value) {
-    const fullHtml = pagination.rawHtml.value;
-    if (!fullHtml) return;
+  try {
+    if (targetChapter.id !== readerStore.currentChapter?.id) {
+      await handleSelectChapter(targetChapter.id, 0, false);
+    } else {
+      closeModal();
+    }
 
-    // Calculate absolute character offset from the CFI
-    const tempContainer = createTempContainer(fullHtml);
-    const target = resolveCfi(bookmark.cfi, tempContainer);
-    tempContainer.remove();
+    if (isPaginationMode.value) {
+      if (!pagination.isReady.value) {
+        await new Promise<void>((resolve) => {
+          const stop = watch(
+            () => pagination.isReady.value,
+            (ready) => {
+              if (ready) {
+                stop();
+                resolve();
+              }
+            },
+          );
+        });
+      }
 
-    if (!target) {
+      const fullHtml = pagination.rawHtml.value;
+      if (!fullHtml) return;
+
+      const charOffset = calculateAbsoluteCharOffset(fullHtml, parsed);
+
+      if (charOffset !== null) {
+        const fullText = fullHtml.replace(/<[^>]*>/g, "");
+        const estimatedPage = Math.min(
+          pagination.totalPages.value - 1,
+          Math.max(0, Math.floor((charOffset / fullText.length) * pagination.totalPages.value)),
+        );
+        pagination.goToPage(estimatedPage);
+        closeModal();
+        return;
+      }
+
       pagination.goToPage(0);
       closeModal();
-      return;
-    }
-
-    // Use the textOffset from the parsed CFI directly
-    // Calculate absolute char offset by walking text nodes up to the target
-    const charOffset = calculateAbsoluteCharOffset(fullHtml, parsed);
-
-    if (charOffset !== null) {
-      let textAccum = 0;
-      for (const page of pagination.pages.value) {
-        const pageText = page.html.replace(/<[^>]*>/g, "");
-        const pageEnd = textAccum + pageText.length;
-        if (charOffset >= textAccum && charOffset < pageEnd) {
-          pagination.goToPage(page.index);
-          closeModal();
-          return;
-        }
-        textAccum += pageText.length;
+    } else {
+      const article = readerContentRef.value?.getArticle?.();
+      if (!article) return;
+      const success = navigateToCfi(bookmark.cfi, article);
+      if (success) {
+        closeModal();
       }
     }
-
-    pagination.goToPage(0);
-    closeModal();
-  } else {
-    const article = readerContentRef.value?.getArticle?.();
-    if (!article) return;
-    const success = navigateToCfi(bookmark.cfi, article);
-    if (success) {
-      closeModal();
-    }
+  } finally {
+    isTransitioning.value = false;
   }
 };
 
@@ -628,7 +648,6 @@ const reRenderContent = async () => {
     const html = content?.html || "";
     const resources = content?.resources || [];
     currentChapterResources.value = resources;
-    pagination.clearCache();
     await pagination.paginate(readerStore.currentChapter.id, { html, resources });
   }
 };
@@ -713,13 +732,14 @@ onUnmounted(() => {
       :content="displayContent"
       :settings="settingsStore.settings"
       :is-pagination-mode="isPaginationMode"
-      :current-page="pagination.currentPage.value"
+      :scroll-offset="pagination.scrollOffset.value"
+      :chapter-loading="chapterLoading"
       :loaded-chapters="rewrittenLoadedContent"
       :epub-resources="currentChapterResources"
-      :transitioning="isTransitioning"
       :on-link-click="handleInternalLinkClick"
       @resize="handleResize"
       @scroll-update="handleScrollUpdate"
+      @column-layout="handleColumnLayout"
       @gesture-tap="gestures.handleIframeTap"
       @gesture-swipe-left="
         () => {

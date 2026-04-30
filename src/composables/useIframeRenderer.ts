@@ -103,6 +103,7 @@ export function useIframeRenderer(
         <style id="base-style">${styles.base}</style>
         <style id="typography-style">${styles.typography}</style>
         <style id="epub-style"></style>
+        <style id="pagination-style"></style>
         ${linkHandlerScript}
       </head>
       <body class="reader-content${!options.value.isPaginationMode ? " vertical-content" : ""}"></body>

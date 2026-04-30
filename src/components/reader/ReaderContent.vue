@@ -2,12 +2,14 @@
 import { ref, onMounted, onUnmounted, watch, nextTick, computed } from "vue";
 import type { ReaderSettings } from "../../core/types";
 import { useIframeRenderer } from "../../composables/useIframeRenderer";
+import { generatePaginationCSS } from "../../utils/reader-styles";
 
 const props = defineProps<{
   content: string;
   settings: ReaderSettings;
   isPaginationMode: boolean;
-  currentPage?: number;
+  scrollOffset?: number;
+  chapterLoading?: boolean;
   loadedChapters?: Array<{ chapterId: string; title: string; content: string }>;
   epubResources?: HTMLElement[];
   onLinkClick?: (href: string) => void;
@@ -24,6 +26,14 @@ const emit = defineEmits<{
       percent: number;
       chapterId: string | null;
       chapterProgress: number;
+    },
+  ): void;
+  (
+    e: "column-layout",
+    data: {
+      columnWidth: number;
+      gap: number;
+      scrollWidth: number;
     },
   ): void;
 }>();
@@ -80,9 +90,50 @@ const {
 );
 
 let resizeObserver: ResizeObserver | null = null;
+let columnMeasureTimer: ReturnType<typeof setTimeout> | null = null;
 
 function emitResize() {
   emit("resize");
+}
+
+function getPaginationStyleEl(): HTMLStyleElement | null {
+  const doc = getDocument();
+  return doc?.getElementById("pagination-style") as HTMLStyleElement | null;
+}
+
+function injectColumnCSS() {
+  const styleEl = getPaginationStyleEl();
+  if (!styleEl) return;
+  const iframe = iframeRef.value;
+  if (!iframe) return;
+  const margin = props.settings.margin || 24;
+  const cw = iframe.clientWidth - margin * 2;
+  const ch = iframe.clientHeight - margin * 2;
+  const gap = margin;
+  styleEl.textContent = generatePaginationCSS(cw, ch, gap);
+}
+
+function measureColumns() {
+  if (columnMeasureTimer) clearTimeout(columnMeasureTimer);
+  columnMeasureTimer = setTimeout(() => {
+    const doc = getDocument();
+    if (!doc?.body || !props.isPaginationMode) return;
+    requestAnimationFrame(() => {
+      const iframe = iframeRef.value;
+      if (!iframe) return;
+      const margin = props.settings.margin || 24;
+      const cw = iframe.clientWidth - margin * 2;
+      const gap = margin;
+      const sw = doc.body.scrollWidth;
+      emit("column-layout", { columnWidth: cw, gap, scrollWidth: sw || cw });
+    });
+  }, 50);
+}
+
+function paginationUpdateContent(html: string) {
+  injectColumnCSS();
+  updateContent(html);
+  measureColumns();
 }
 
 // 初始化 iframe
@@ -90,9 +141,8 @@ onMounted(() => {
   nextTick(() => {
     if (iframeRef.value) {
       initIframe();
-      // 加载内容
       if (props.isPaginationMode) {
-        updateContent(props.content);
+        paginationUpdateContent(props.content);
       } else if (props.loadedChapters) {
         const combinedContent = props.loadedChapters
           .map(
@@ -102,7 +152,6 @@ onMounted(() => {
           .join("");
         updateContent(combinedContent);
       }
-      // 初始内容加载后，刷新 IntersectionObserver
       refreshScrollObserver();
     }
 
@@ -124,8 +173,20 @@ onMounted(() => {
 watch(
   () => props.content,
   (newContent) => {
-    if (props.isPaginationMode && isReady.value) {
-      updateContent(newContent);
+    if (props.isPaginationMode && isReady.value && newContent) {
+      paginationUpdateContent(newContent);
+    }
+  },
+);
+
+// 监听 scrollOffset 变化（分页模式：transform 平移 body 切换列）
+watch(
+  () => props.scrollOffset,
+  (offset) => {
+    if (!props.isPaginationMode || offset === undefined) return;
+    const article = getArticle();
+    if (article) {
+      article.style.transform = `translateX(-${offset}px)`;
     }
   },
 );
@@ -214,6 +275,10 @@ watch(
 );
 
 onUnmounted(() => {
+  if (columnMeasureTimer) {
+    clearTimeout(columnMeasureTimer);
+    columnMeasureTimer = null;
+  }
   if (resizeObserver) {
     resizeObserver.disconnect();
     resizeObserver = null;
@@ -237,6 +302,7 @@ defineExpose({
     <iframe
       ref="iframeRef"
       class="reader-iframe"
+      :class="{ 'iframe-fade-out': chapterLoading }"
       :scrolling="isPaginationMode ? 'no' : undefined"
       frameborder="0"
     ></iframe>
@@ -260,5 +326,11 @@ defineExpose({
   width: 100%;
   height: 100%;
   border: none;
+  transition: opacity 0.35s ease;
+}
+
+.reader-iframe.iframe-fade-out {
+  opacity: 0;
+  transition: none;
 }
 </style>

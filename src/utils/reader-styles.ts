@@ -167,6 +167,29 @@ export function generateTypographyCSS(settings: ReaderSettings): string {
 }
 
 // ============================================================
+// 分页模式：CSS columns 列布局
+// ============================================================
+
+/**
+ * 生成分页模式的 CSS columns 样式
+ * html 设为横向滚动容器，body 使用 column-width 自动分列
+ */
+export function generatePaginationCSS(columnWidth: number, height: number, gap: number): string {
+  return `
+    html {
+      overflow: hidden;
+    }
+    body.reader-content {
+      column-width: ${columnWidth}px;
+      column-gap: ${gap}px;
+      column-fill: auto;
+      height: ${height}px;
+      overflow: visible;
+    }
+  `;
+}
+
+// ============================================================
 // 组合函数（一次性生成完整样式）
 // ============================================================
 
