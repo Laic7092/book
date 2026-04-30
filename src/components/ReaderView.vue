@@ -46,6 +46,7 @@ import {
   generateCfiFromRange,
   navigateToCfi,
   resolveCfi,
+  resolveCfiRange,
   parseCfi,
 } from "../utils/epub-cfi";
 import type { ParsedCfi, CfiStep } from "../utils/epub-cfi";
@@ -73,6 +74,13 @@ const stats = ref<BookReadingStats | null>(null);
 const isTransitioning = ref(false);
 const isRestoring = ref(false);
 const currentChapterResources = ref<HTMLElement[]>([]);
+
+// Search jump state — saved before first search navigation for "go back"
+interface SearchJumpState {
+  previousChapterId: string;
+  previousPage: number;
+}
+const searchJumpState = ref<SearchJumpState | null>(null);
 
 // Annotation state
 const showSelectionToolbar = ref(false);
@@ -548,8 +556,13 @@ function chapterMatchesHref(chapter: Chapter, filePath: string): boolean {
   );
 }
 
-function handleColumnLayout(data: { columnWidth: number; gap: number; scrollWidth: number }) {
-  pagination.updateColumnLayout(data.columnWidth, data.gap, data.scrollWidth);
+function handleColumnLayout(data: {
+  columnWidth: number;
+  gap: number;
+  scrollWidth: number;
+  iframeWidth: number;
+}) {
+  pagination.updateColumnLayout(data.columnWidth, data.gap, data.scrollWidth, data.iframeWidth);
 }
 
 async function handleChaptersChanged() {
@@ -561,17 +574,206 @@ async function handleChaptersChanged() {
 
 // ── Search navigation ──
 
-const navigateToSearchResult = async (result: SearchResult) => {
+async function handleSearchGoBack() {
+  if (!searchJumpState.value) return;
+  const { previousChapterId, previousPage } = searchJumpState.value;
+  searchJumpState.value = null;
+  if (previousChapterId !== readerStore.currentChapter?.id) {
+    await handleSelectChapter(previousChapterId, previousPage);
+  } else if (isPaginationMode.value) {
+    pagination.goToPage(previousPage);
+  }
+}
+
+let clearTempSearchHighlight: (() => void) | null = null;
+
+function applySearchHighlight(
+  doc: Document,
+  container: Element,
+  position: number,
+  textLength: number,
+) {
+  // Clean up any previous temp highlight
+  clearTempSearchHighlight?.();
+  clearTempSearchHighlight = null;
+
+  const startCfi = generateCfiFromCharOffset(0, container, position);
+  const endCfi = generateCfiFromCharOffset(0, container, position + textLength);
+  if (!startCfi || !endCfi) return;
+
+  const range = resolveCfiRange(startCfi, endCfi, doc.body);
+  if (!range || range.collapsed) return;
+
+  const marks: HTMLElement[] = [];
+
+  // Collect text nodes that intersect the range
+  const textNodes: Text[] = [];
+  if (
+    range.startContainer === range.endContainer &&
+    range.startContainer.nodeType === Node.TEXT_NODE
+  ) {
+    textNodes.push(range.startContainer as Text);
+  } else {
+    const walker = doc.createTreeWalker(range.commonAncestorContainer, NodeFilter.SHOW_TEXT, {
+      acceptNode: (node) =>
+        range.intersectsNode(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT,
+    });
+    let node: Text | null;
+    while ((node = walker.nextNode() as Text | null)) {
+      if (node.textContent && node.textContent.length > 0) {
+        textNodes.push(node);
+      }
+    }
+  }
+
+  for (const textNode of textNodes) {
+    let startOffset = 0;
+    let endOffset = (textNode.textContent || "").length;
+
+    if (textNode === range.startContainer) startOffset = range.startOffset;
+    if (textNode === range.endContainer) endOffset = range.endOffset;
+    if (startOffset >= endOffset) continue;
+
+    textNode.splitText(endOffset);
+    const selectedNode = startOffset > 0 ? textNode.splitText(startOffset) : textNode;
+
+    if (selectedNode.textContent && selectedNode.textContent.length > 0) {
+      const mark = doc.createElement("mark");
+      mark.style.backgroundColor = "rgba(251, 191, 36, 0.45)";
+      mark.style.borderRadius = "2px";
+      mark.style.transition = "background-color 1.5s ease";
+      selectedNode.parentNode!.insertBefore(mark, selectedNode);
+      mark.appendChild(selectedNode);
+      marks.push(mark);
+    }
+  }
+
+  if (marks.length > 0) {
+    clearTempSearchHighlight = () => {
+      for (const mark of marks) {
+        const parent = mark.parentNode;
+        if (parent) {
+          while (mark.firstChild) {
+            parent.insertBefore(mark.firstChild, mark);
+          }
+          mark.remove();
+        }
+      }
+    };
+
+    // Auto-fade after 3s
+    setTimeout(() => {
+      for (const mark of marks) {
+        mark.style.backgroundColor = "transparent";
+      }
+    }, 1500);
+
+    // Remove DOM nodes after fade
+    setTimeout(() => {
+      clearTempSearchHighlight?.();
+      clearTempSearchHighlight = null;
+    }, 3000);
+  }
+}
+
+async function navigateToSearchResult(result: SearchResult) {
   if (!result) return;
 
-  if (isPaginationMode.value) {
-    await handleSelectChapter(result.chapterId);
-  } else {
-    await chapterLoader.loadChapter(result.chapterId);
-    await nextTick();
-    readerContentRef.value?.scrollToChapter?.(result.chapterId);
+  const targetChapter = readerStore.chapters.find((c) => c.id === result.chapterId);
+  if (!targetChapter) return;
+
+  // Save current position for "go back" (only on first search jump)
+  if (!searchJumpState.value && readerStore.currentChapter) {
+    searchJumpState.value = {
+      previousChapterId: readerStore.currentChapter.id,
+      previousPage: isPaginationMode.value ? pagination.currentPage.value : 0,
+    };
   }
-};
+
+  const sameChapter = targetChapter.id === readerStore.currentChapter?.id;
+
+  isTransitioning.value = true;
+
+  try {
+    if (isPaginationMode.value) {
+      if (!sameChapter) {
+        await handleSelectChapter(targetChapter.id, 0, false);
+      } else {
+        closeModal();
+      }
+
+      if (!pagination.isReady.value) {
+        await new Promise<void>((resolve) => {
+          const stop = watch(
+            () => pagination.isReady.value,
+            (ready) => {
+              if (ready) {
+                stop();
+                resolve();
+              }
+            },
+          );
+        });
+      }
+
+      await annotationsStore.loadAnnotationsForChapter(props.book.id, targetChapter.id);
+      applyAnnotations();
+
+      const fullHtml = pagination.rawHtml.value;
+      if (fullHtml) {
+        const fullText = fullHtml.replace(/<[^>]*>/g, "");
+        const estimatedPage = Math.min(
+          pagination.totalPages.value - 1,
+          Math.max(
+            0,
+            Math.floor((result.position / fullText.length) * pagination.totalPages.value),
+          ),
+        );
+        pagination.goToPage(estimatedPage);
+
+        // Apply temp highlight to the rendered content (no scroll)
+        await nextTick();
+        const doc = readerContentRef.value?.getDocument?.();
+        if (doc?.body) {
+          applySearchHighlight(doc, doc.body, result.position, result.text.length);
+        }
+      }
+    } else {
+      // Scroll mode
+      if (!sameChapter) {
+        await chapterLoader.loadChapter(result.chapterId);
+        await nextTick();
+        await annotationsStore.loadAnnotationsForChapter(props.book.id, targetChapter.id);
+        applyAnnotations();
+      } else {
+        closeModal();
+      }
+
+      const article = readerContentRef.value?.getArticle?.();
+      if (article) {
+        const root =
+          (article.querySelector(
+            `[data-chapter-id="${targetChapter.id}"]`,
+          ) as HTMLElement | null) || article;
+        applySearchHighlight(article.ownerDocument, root, result.position, result.text.length);
+
+        // Scroll to the highlighted text in scroll mode
+        await nextTick();
+        const mark = root.querySelector("mark");
+        if (mark) {
+          mark.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }
+    }
+
+    // Enable search navigation footer (prev/next buttons)
+    search.hasHighlights.value = true;
+
+    closeModal();
+  } finally {
+    isTransitioning.value = false;
+  }
+}
 
 const goToNextMatch = async () => {
   const index = search.goToNextMatch();
@@ -1044,6 +1246,18 @@ watch(
   },
 );
 
+// Clear search jump state and temp highlight when highlights are dismissed
+watch(
+  () => search.hasHighlights.value,
+  (active) => {
+    if (!active) {
+      searchJumpState.value = null;
+      clearTempSearchHighlight?.();
+      clearTempSearchHighlight = null;
+    }
+  },
+);
+
 // Lifecycle
 onMounted(async () => {
   await bookmarksStore.loadBookmarks(props.book.id);
@@ -1087,6 +1301,8 @@ onMounted(async () => {
 onUnmounted(() => {
   gestureCleanup?.();
   gestureCleanup = null;
+  clearTempSearchHighlight?.();
+  clearTempSearchHighlight = null;
   scrollCleanup?.();
   scrollCleanup = null;
   annotationListenerCleanup?.();
@@ -1151,6 +1367,29 @@ onUnmounted(() => {
       :total-pages="pagination.totalPages.value"
       :show="uiStore.showControls && isPaginationMode && pagination.isReady.value"
     />
+
+    <!-- Search go-back button -->
+    <Transition name="fade">
+      <button
+        v-if="searchJumpState"
+        class="search-back-btn"
+        @click.stop="handleSearchGoBack"
+        aria-label="Go back to previous position"
+      >
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M19 12H5M12 19l-7-7 7-7" />
+        </svg>
+      </button>
+    </Transition>
 
     <SelectionToolbar
       :visible="showSelectionToolbar"
@@ -1236,6 +1475,38 @@ onUnmounted(() => {
 
 .reader-view::-webkit-scrollbar-thumb:hover {
   background: color-mix(in srgb, var(--border) 70%, var(--reader-text));
+}
+
+.search-back-btn {
+  position: fixed;
+  bottom: max(100px, env(safe-area-inset-bottom, 0) + 80px);
+  left: max(16px, env(safe-area-inset-left, 0));
+  z-index: 102;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated, #fff);
+  color: var(--reader-text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+  transition:
+    opacity 200ms ease,
+    transform 150ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.search-back-btn:hover {
+  background: var(--hover-bg);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.search-back-btn:active {
+  transform: scale(0.92);
 }
 
 @media (max-width: 768px) {

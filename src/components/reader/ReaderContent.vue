@@ -13,7 +13,12 @@ const props = defineProps<{
   loadedChapters?: Array<{ chapterId: string; title: string; content: string }>;
   epubResources?: HTMLElement[];
   onLinkClick?: (href: string) => void;
-  onColumnLayout?: (data: { columnWidth: number; gap: number; scrollWidth: number }) => void;
+  onColumnLayout?: (data: {
+    columnWidth: number;
+    gap: number;
+    scrollWidth: number;
+    iframeWidth: number;
+  }) => void;
   onChaptersChanged?: () => void;
 }>();
 
@@ -59,7 +64,7 @@ function injectColumnCSS() {
   const margin = props.settings.margin || 24;
   const cw = iframe.clientWidth - margin * 2;
   const ch = iframe.clientHeight - margin * 2;
-  const gap = margin;
+  const gap = margin * 2;
   styleEl.textContent = generatePaginationCSS(cw, ch, gap);
 }
 
@@ -73,9 +78,14 @@ function measureColumns() {
       if (!iframe) return;
       const margin = props.settings.margin || 24;
       const cw = iframe.clientWidth - margin * 2;
-      const gap = margin;
+      const gap = margin * 2;
       const sw = doc.body.scrollWidth;
-      props.onColumnLayout?.({ columnWidth: cw, gap, scrollWidth: sw || cw });
+      props.onColumnLayout?.({
+        columnWidth: cw,
+        gap,
+        scrollWidth: sw || cw,
+        iframeWidth: iframe.clientWidth,
+      });
     });
   }, 50);
 }
