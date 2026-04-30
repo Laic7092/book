@@ -8,6 +8,7 @@ export interface AnnotationsState {
   currentBookId: string | null;
   currentChapterId: string | null;
   annotations: Annotation[];
+  allAnnotations: Annotation[];
 }
 
 export const useAnnotationsStore = defineStore("annotations", {
@@ -15,6 +16,7 @@ export const useAnnotationsStore = defineStore("annotations", {
     currentBookId: null,
     currentChapterId: null,
     annotations: [],
+    allAnnotations: [],
   }),
 
   actions: {
@@ -26,8 +28,8 @@ export const useAnnotationsStore = defineStore("annotations", {
     },
 
     async loadAnnotationsForBook(bookId: string): Promise<Annotation[]> {
-      const result = await annotationsStorage.getAnnotationsByBook(bookId);
-      return result;
+      this.allAnnotations = await annotationsStorage.getAnnotationsByBook(bookId);
+      return this.allAnnotations;
     },
 
     async addAnnotation(
@@ -55,6 +57,9 @@ export const useAnnotationsStore = defineStore("annotations", {
       if (this.currentBookId === bookId && this.currentChapterId === chapterId) {
         this.annotations.push(annotation);
       }
+      if (this.currentBookId === bookId) {
+        this.allAnnotations.push(annotation);
+      }
 
       return annotation;
     },
@@ -76,12 +81,14 @@ export const useAnnotationsStore = defineStore("annotations", {
     async removeAnnotation(id: string): Promise<void> {
       await annotationsStorage.deleteAnnotation(id);
       this.annotations = this.annotations.filter((a) => a.id !== id);
+      this.allAnnotations = this.allAnnotations.filter((a) => a.id !== id);
     },
 
     reset(): void {
       this.currentBookId = null;
       this.currentChapterId = null;
       this.annotations = [];
+      this.allAnnotations = [];
     },
   },
 });

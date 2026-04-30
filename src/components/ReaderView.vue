@@ -103,6 +103,9 @@ const chapterLoading = computed(() => {
 });
 
 const openModal = (modal: string) => {
+  if (modal === "annotations") {
+    annotationsStore.loadAnnotationsForBook(props.book.id);
+  }
   uiStore.openModal(modal as any);
 };
 
@@ -785,20 +788,71 @@ async function handleDeleteAnnotation(id: string) {
 }
 
 async function handleNavigateAnnotation(annotation: Annotation) {
-  const targetChapter = readerStore.chapters.find((c) => c.id === annotation.chapterId);
-  if (!targetChapter) return;
+  const parsed = parseCfi(annotation.startCfi);
+  if (!parsed) return;
 
-  if (targetChapter.id !== readerStore.currentChapter?.id) {
-    await handleSelectChapter(targetChapter.id);
-    await nextTick();
+  const targetChapter = readerStore.chapters.find((c) => c.order === parsed.spineIndex);
+  if (!targetChapter) {
+    const fallbackChapter = readerStore.chapters.find((c) => c.id === annotation.chapterId);
+    if (!fallbackChapter) return;
+    await handleSelectChapter(fallbackChapter.id);
+    return;
   }
-  closeModal();
 
-  if (!isPaginationMode.value) {
-    const doc = readerContentRef.value?.getDocument?.();
-    if (doc) {
-      navigateToCfi(annotation.startCfi, doc.body);
+  isTransitioning.value = true;
+
+  try {
+    if (targetChapter.id !== readerStore.currentChapter?.id) {
+      await handleSelectChapter(targetChapter.id, 0, false);
+    } else {
+      closeModal();
     }
+
+    if (isPaginationMode.value) {
+      if (!pagination.isReady.value) {
+        await new Promise<void>((resolve) => {
+          const stop = watch(
+            () => pagination.isReady.value,
+            (ready) => {
+              if (ready) {
+                stop();
+                resolve();
+              }
+            },
+          );
+        });
+      }
+
+      await annotationsStore.loadAnnotationsForChapter(props.book.id, targetChapter.id);
+      applyAnnotations();
+
+      const fullHtml = pagination.rawHtml.value;
+      if (!fullHtml) return;
+
+      const charOffset = calculateAbsoluteCharOffset(fullHtml, parsed);
+
+      if (charOffset !== null) {
+        const fullText = fullHtml.replace(/<[^>]*>/g, "");
+        const estimatedPage = Math.min(
+          pagination.totalPages.value - 1,
+          Math.max(0, Math.floor((charOffset / fullText.length) * pagination.totalPages.value)),
+        );
+        pagination.goToPage(estimatedPage);
+      }
+    } else {
+      await annotationsStore.loadAnnotationsForChapter(props.book.id, targetChapter.id);
+      await nextTick();
+      applyAnnotations();
+
+      const article = readerContentRef.value?.getArticle?.();
+      if (article) {
+        navigateToCfi(annotation.startCfi, article);
+      }
+    }
+
+    closeModal();
+  } finally {
+    isTransitioning.value = false;
   }
 }
 
@@ -1124,7 +1178,7 @@ onUnmounted(() => {
       :chapters="readerStore.chapters"
       :current-chapter-id="readerStore.currentChapter?.id ?? null"
       :bookmarks="bookmarksStore.bookmarks"
-      :annotations="annotationsStore.annotations"
+      :annotations="annotationsStore.allAnnotations"
       :search-results="search.searchResults.value"
       :search-query="search.searchQuery.value"
       :settings="settingsStore.settings"
