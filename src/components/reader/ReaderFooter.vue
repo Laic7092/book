@@ -22,7 +22,7 @@ const emit = defineEmits<{
   (e: "next-page"): void;
   (e: "prev-chapter"): void;
   (e: "next-chapter"): void;
-  (e: "open-modal", modal: "toc" | "search" | "bookmarks" | "stats"): void;
+  (e: "open-modal", modal: "toc" | "search" | "bookmarks" | "annotations" | "stats"): void;
   (e: "go-to-previous-match"): void;
   (e: "go-to-next-match"): void;
   (e: "clear-highlights"): void;
@@ -38,7 +38,7 @@ function closeMenu() {
   showMenu.value = false;
 }
 
-function openModal(modal: "toc" | "search" | "bookmarks" | "stats") {
+function openModal(modal: "toc" | "search" | "bookmarks" | "annotations" | "stats") {
   closeMenu();
   emit("open-modal", modal);
 }
@@ -67,6 +67,21 @@ function openModal(modal: "toc" | "search" | "bookmarks" | "stats") {
             <path d="M21 21l-4.35-4.35" />
           </svg>
           <span>Search</span>
+        </button>
+        <button class="menu-item" @click.stop="openModal('annotations')">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          >
+            <path
+              d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+            />
+          </svg>
+          <span>Annotations</span>
         </button>
         <button class="menu-item" @click.stop="openModal('stats')">
           <svg

@@ -41,7 +41,6 @@ export const SCROLL_MODE_OPTIONS = [
 // Pagination animation options
 export const ANIMATION_OPTIONS = [
   { label: "Slide", value: "slide", desc: "Smooth slide" },
-  { label: "Flip", value: "flip", desc: "Page flip" },
   { label: "Fade", value: "fade", desc: "Fade transition" },
 ] as const;
 

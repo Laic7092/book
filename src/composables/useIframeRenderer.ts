@@ -34,7 +34,6 @@ export function useIframeRenderer(
 ) {
   const isReady = ref(false);
   let iframeDoc: Document | null = null;
-  let isInitialized = false;
 
   const injectedResources = new Map<string, ResourceInfo>();
 
@@ -87,7 +86,6 @@ export function useIframeRenderer(
     `);
     iframeDoc.close();
 
-    isInitialized = true;
     isReady.value = true;
 
     if (onLinkClick) {
@@ -128,10 +126,6 @@ export function useIframeRenderer(
     clearResources(iframeDoc, injectedResources, "epub-style");
   }
 
-  function getBody(): HTMLElement | null {
-    return iframeDoc?.body || null;
-  }
-
   function getArticle(): HTMLElement | null {
     return iframeDoc?.body || null;
   }
@@ -160,36 +154,24 @@ export function useIframeRenderer(
     }
   }
 
-  function scrollTo(y: number): void {
-    if (!iframeDoc) return;
-    const win = iframeDoc.defaultView;
-    if (win) {
-      win.scrollTo({ top: y, behavior: "instant" });
-    }
-  }
-
   function cleanup() {
     clearEpubResources();
     window.removeEventListener("message", messageHandler);
     iframeDoc = null;
-    isInitialized = false;
     isReady.value = false;
   }
 
   return {
     isReady,
-    isInitialized,
     initIframe,
     updateContent,
     updateStyles,
     updateEpubResources,
     clearEpubResources,
-    getBody,
     getArticle,
     getDocument,
     scrollToChapter,
     restoreScrollPosition,
-    scrollTo,
     cleanup,
   };
 }

@@ -13,7 +13,6 @@ const props = defineProps<{
   loadedChapters?: Array<{ chapterId: string; title: string; content: string }>;
   epubResources?: HTMLElement[];
   onLinkClick?: (href: string) => void;
-  onResize?: () => void;
   onColumnLayout?: (data: { columnWidth: number; gap: number; scrollWidth: number }) => void;
   onChaptersChanged?: () => void;
 }>();
@@ -37,7 +36,6 @@ const {
   getDocument,
   scrollToChapter,
   restoreScrollPosition,
-  scrollTo,
   cleanup,
 } = useIframeRenderer(
   iframeRef,
@@ -112,12 +110,43 @@ onMounted(() => {
           isFirst = false;
           return;
         }
-        props.onResize?.();
+        if (props.isPaginationMode) {
+          injectColumnCSS();
+          measureColumns();
+        }
       });
       resizeObserver.observe(containerRef.value);
     }
   });
 });
+
+watch(
+  () => props.isPaginationMode,
+  (isPagination) => {
+    const doc = getDocument();
+    if (!doc?.body) return;
+
+    const body = doc.body;
+    body.classList.toggle("vertical-content", !isPagination);
+
+    const styleEl = doc.getElementById("pagination-style");
+    if (!isPagination) {
+      if (styleEl) styleEl.textContent = "";
+      body.style.transform = "";
+    }
+
+    if (!isPagination && props.loadedChapters && props.loadedChapters.length > 0) {
+      const combined = props.loadedChapters
+        .map(
+          (ch) =>
+            `<div data-chapter-id="${ch.chapterId}" class="chapter-container">${ch.content}</div>`,
+        )
+        .join("");
+      updateContent(combined);
+      props.onChaptersChanged?.();
+    }
+  },
+);
 
 watch(
   () => props.content,
@@ -144,33 +173,44 @@ watch(
   (newChapters) => {
     if (props.isPaginationMode || !newChapters || !isReady.value) return;
     const doc = getDocument();
-    if (!doc) return;
+    if (!doc?.body) return;
 
-    const currentIds = new Map(newChapters.map((ch) => [ch.chapterId, ch]));
+    const hasContainers = doc.querySelectorAll("[data-chapter-id]").length > 0;
+    if (hasContainers) {
+      const currentIds = new Map(newChapters.map((ch) => [ch.chapterId, ch]));
 
-    const existing = doc.querySelectorAll("[data-chapter-id]");
-    existing.forEach((el) => {
-      const id = el.getAttribute("data-chapter-id");
-      if (id && !currentIds.has(id)) {
-        el.remove();
+      const existing = doc.querySelectorAll("[data-chapter-id]");
+      existing.forEach((el) => {
+        const id = el.getAttribute("data-chapter-id");
+        if (id && !currentIds.has(id)) {
+          el.remove();
+        }
+      });
+
+      for (const ch of newChapters) {
+        if (doc.querySelector(`[data-chapter-id="${ch.chapterId}"]`)) continue;
+
+        const html = `<div data-chapter-id="${ch.chapterId}" class="chapter-container">${ch.content}</div>`;
+
+        const next = newChapters
+          .filter((c) => (c as any).order > (ch as any).order)
+          .find((c) => doc.querySelector(`[data-chapter-id="${c.chapterId}"]`));
+
+        if (next) {
+          const ref = doc.querySelector(`[data-chapter-id="${next.chapterId}"]`);
+          ref?.insertAdjacentHTML("beforebegin", html);
+        } else {
+          doc.body.insertAdjacentHTML("beforeend", html);
+        }
       }
-    });
-
-    for (const ch of newChapters) {
-      if (doc.querySelector(`[data-chapter-id="${ch.chapterId}"]`)) continue;
-
-      const html = `<div data-chapter-id="${ch.chapterId}" class="chapter-container">${ch.content}</div>`;
-
-      const next = newChapters
-        .filter((c) => (c as any).order > (ch as any).order)
-        .find((c) => doc.querySelector(`[data-chapter-id="${c.chapterId}"]`));
-
-      if (next) {
-        const ref = doc.querySelector(`[data-chapter-id="${next.chapterId}"]`);
-        ref?.insertAdjacentHTML("beforebegin", html);
-      } else {
-        doc.body.insertAdjacentHTML("beforeend", html);
-      }
+    } else {
+      const combined = newChapters
+        .map(
+          (ch) =>
+            `<div data-chapter-id="${ch.chapterId}" class="chapter-container">${ch.content}</div>`,
+        )
+        .join("");
+      updateContent(combined);
     }
 
     props.onChaptersChanged?.();
@@ -191,6 +231,12 @@ watch(
   () => {
     if (isReady.value) {
       updateStyles();
+      if (props.isPaginationMode) {
+        nextTick(() => {
+          injectColumnCSS();
+          measureColumns();
+        });
+      }
     }
   },
 );
@@ -200,6 +246,12 @@ watch(
   () => {
     if (isReady.value) {
       updateStyles();
+      if (props.isPaginationMode) {
+        nextTick(() => {
+          injectColumnCSS();
+          measureColumns();
+        });
+      }
     }
   },
 );
@@ -228,13 +280,11 @@ onUnmounted(() => {
 });
 
 defineExpose({
-  iframeRef,
   isReady,
   getArticle,
   getDocument,
   scrollToChapter,
   restoreScrollPosition,
-  scrollTo,
 });
 </script>
 

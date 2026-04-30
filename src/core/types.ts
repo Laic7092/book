@@ -39,6 +39,20 @@ export interface Bookmark {
   note?: string;
 }
 
+export interface Annotation {
+  id: string;
+  bookId: string;
+  chapterId: string;
+  type: "highlight" | "underline";
+  startCfi: string;
+  endCfi: string;
+  color: string;
+  note: string;
+  textPreview: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface ReaderSettings {
   fontSize: number;
   fontFamily: string;

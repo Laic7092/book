@@ -5,10 +5,12 @@ import type {
   ReaderSettings as ReaderSettingsType,
   Chapter,
   BookReadingStats,
+  Annotation,
 } from "../../core/types";
 import TableOfContents from "./TableOfContents.vue";
 import SearchPanel from "./SearchPanel.vue";
 import BookmarksPanel from "./BookmarksPanel.vue";
+import AnnotationsPanel from "./AnnotationsPanel.vue";
 import ReaderSettings from "./ReaderSettings.vue";
 import TypographySettings from "./TypographySettings.vue";
 import StatsPanel from "./StatsPanel.vue";
@@ -20,7 +22,15 @@ const settingsStore = useSettingsStore();
 const themeClass = computed(() => `theme-${settingsStore.settings.theme}`);
 
 defineProps<{
-  modalType: "toc" | "search" | "bookmarks" | "settings" | "typographySettings" | "stats" | null;
+  modalType:
+    | "toc"
+    | "search"
+    | "bookmarks"
+    | "annotations"
+    | "settings"
+    | "typographySettings"
+    | "stats"
+    | null;
   chapters: Chapter[];
   currentChapterId: string | null;
   bookmarks: Bookmark[];
@@ -30,6 +40,7 @@ defineProps<{
   hasHighlights: boolean;
   stats: BookReadingStats | null;
   totalChapters: number;
+  annotations: Annotation[];
 }>();
 
 const emit = defineEmits<{
@@ -44,6 +55,8 @@ const emit = defineEmits<{
   (e: "add-bookmark"): void;
   (e: "delete-bookmark", bookmarkId: string, event: MouseEvent): void;
   (e: "open-typography-settings"): void;
+  (e: "navigate-annotation", annotation: Annotation): void;
+  (e: "delete-annotation", id: string): void;
 }>();
 
 function handleClose() {
@@ -84,6 +97,16 @@ function handleClose() {
           @add-bookmark="emit('add-bookmark')"
           @delete-bookmark="(id, evt) => emit('delete-bookmark', id, evt)"
           @navigate-bookmark="emit('navigate-bookmark', $event)"
+          @close="handleClose"
+        />
+
+        <!-- Annotations Panel -->
+        <AnnotationsPanel
+          v-else-if="modalType === 'annotations'"
+          :annotations="annotations"
+          :chapters="chapters"
+          @navigate="emit('navigate-annotation', $event)"
+          @delete="(id) => emit('delete-annotation', id)"
           @close="handleClose"
         />
 
@@ -166,7 +189,8 @@ function handleClose() {
 .modal-search,
 .modal-stats,
 .modal-settings,
-.modal-typographySettings {
+.modal-typographySettings,
+.modal-annotations {
   height: 85vh;
   max-height: 600px;
   display: flex;

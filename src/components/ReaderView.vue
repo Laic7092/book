@@ -10,9 +10,16 @@ import {
 } from "vue";
 import { useReaderStore } from "../stores/reader";
 import { useBookmarksStore } from "../stores/bookmarks";
+import { useAnnotationsStore } from "../stores/annotations";
 import { useUIStore } from "../stores/ui";
 import { useSettingsStore } from "../stores/settings";
-import { usePagination, useChapterLoader, useReaderSearch } from "../composables";
+import {
+  usePagination,
+  useChapterLoader,
+  useReaderSearch,
+  useAnnotationRenderer,
+} from "../composables";
+import type { SelectionInfo } from "../composables/useAnnotationRenderer";
 import {
   ReaderHeader,
   ReaderFooter,
@@ -20,13 +27,23 @@ import {
   ProgressBar,
   PageIndicator,
 } from "../components/reader";
+import SelectionToolbar from "../components/reader/SelectionToolbar.vue";
+import AnnotationPopover from "../components/reader/AnnotationPopover.vue";
 import { ModalWrapper } from "../components/modals";
-import type { Bookmark, SearchResult, Chapter, Book, BookReadingStats } from "../core/types";
+import type {
+  Bookmark,
+  SearchResult,
+  Chapter,
+  Book,
+  BookReadingStats,
+  Annotation,
+} from "../core/types";
 import * as statsStore from "../storage/stats";
+import * as annotationsStorage from "../storage/annotations";
 import {
   generateCfiFromElement,
-  generateCfiFromRange,
   generateCfiFromCharOffset,
+  generateCfiFromRange,
   navigateToCfi,
   resolveCfi,
   parseCfi,
@@ -46,6 +63,7 @@ const emit = defineEmits<{
 
 const readerStore = useReaderStore();
 const bookmarksStore = useBookmarksStore();
+const annotationsStore = useAnnotationsStore();
 const uiStore = useUIStore();
 const settingsStore = useSettingsStore();
 
@@ -55,6 +73,27 @@ const stats = ref<BookReadingStats | null>(null);
 const isTransitioning = ref(false);
 const isRestoring = ref(false);
 const currentChapterResources = ref<HTMLElement[]>([]);
+
+// Annotation state
+const showSelectionToolbar = ref(false);
+const selectionToolbarPos = ref({ top: 0, left: 0 });
+const showNoteInput = ref(false);
+const pendingSelection = ref<{
+  startCfi: string;
+  endCfi: string;
+  text: string;
+} | null>(null);
+const showAnnotationPopover = ref(false);
+const popoverAnnotation = ref<Annotation | null>(null);
+const popoverPosition = ref<{ top: number; left: number; height: number }>({
+  top: 0,
+  left: 0,
+  height: 0,
+});
+
+const annotationRenderer = useAnnotationRenderer(
+  () => readerContentRef.value?.getDocument?.() ?? null,
+);
 
 const chapterLoading = computed(() => {
   if (isRestoring.value) return true;
@@ -107,11 +146,7 @@ const totalBookProgress = computed(() => {
   return Math.round(current * chapterPortion + chapterProgressValue * chapterPortion);
 });
 
-const pagination = usePagination(
-  props.book.id,
-  readerStore.$state.chapters,
-  computed(() => settingsStore.settings),
-);
+const pagination = usePagination();
 
 const displayContent = computed(() => {
   if (isPaginationMode.value) {
@@ -157,13 +192,10 @@ function saveReadingProgress(chapterProgress: number, readingProgress: number, p
   });
 }
 
-const debouncedSaveScroll = debounce(
-  (chapterId: string, chapterProgress: number, readingProgress: number) => {
-    if (isRestoring.value) return;
-    saveReadingProgress(chapterProgress, readingProgress, 0);
-  },
-  1000,
-);
+const debouncedSaveScroll = debounce((chapterProgress: number, readingProgress: number) => {
+  if (isRestoring.value) return;
+  saveReadingProgress(chapterProgress, readingProgress, 0);
+}, 1000);
 
 // ── Inline gesture handling ──
 
@@ -223,8 +255,11 @@ function refreshScrollObserver() {
 }
 
 function setupScrollHandler(doc: Document) {
+  if (scrollObserver) return;
+
   scrollObserver = new IntersectionObserver(
     (entries) => {
+      if (isPaginationMode.value) return;
       for (const entry of entries) {
         if (entry.isIntersecting) {
           scrollCurrentChapterId = (entry.target as HTMLElement).getAttribute("data-chapter-id");
@@ -240,7 +275,7 @@ function setupScrollHandler(doc: Document) {
 
   let ticking = false;
   const handler = () => {
-    if (ticking) return;
+    if (ticking || isPaginationMode.value) return;
     ticking = true;
     requestAnimationFrame(() => {
       ticking = false;
@@ -289,7 +324,7 @@ function setupScrollHandler(doc: Document) {
 
       const curId = readerStore.currentChapter?.id;
       if (curId) {
-        debouncedSaveScroll(curId, chapterProgress, percent);
+        debouncedSaveScroll(chapterProgress, percent);
       }
     });
   };
@@ -316,12 +351,13 @@ function setupDirectHandlers(doc: Document) {
   };
 
   const handlePointerUp = (e: PointerEvent) => {
+    if (gestureStartTime <= 0) return;
     const deltaX = e.clientX - gestureStartX;
     const deltaY = e.clientY - gestureStartY;
     const deltaTime = Date.now() - gestureStartTime;
+    gestureStartTime = 0;
 
     const isTap = deltaTime < 300 && Math.abs(deltaX) < 10 && Math.abs(deltaY) < 10;
-
     const isHorizontalSwipe =
       Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > SWIPE_THRESHOLD;
 
@@ -343,18 +379,16 @@ function setupDirectHandlers(doc: Document) {
       } else {
         toggleControls();
       }
-    } else if (isHorizontalSwipe) {
+    } else if (isHorizontalSwipe && isPaginationMode.value) {
       if (uiStore.activeModal) {
         uiStore.closeModal();
         return;
       }
-      if (isPaginationMode.value) {
-        if (deltaX > 0) {
-          prevPage();
-        } else {
-          nextPage();
-        }
-      }
+      // if (deltaX > 0) {
+      //   prevPage();
+      // } else {
+      //   nextPage();
+      // }
     }
   };
 
@@ -435,8 +469,10 @@ const handleSelectChapter = async (
       if (autoClearTransition) {
         const stopWatch = watch(
           () => pagination.isReady.value,
-          (ready) => {
+          async (ready) => {
             if (ready) {
+              await annotationsStore.loadAnnotationsForChapter(props.book.id, chapterId);
+              applyAnnotations();
               isTransitioning.value = false;
               uiStore.showControls = wasShowingControls;
               stopWatch();
@@ -445,7 +481,9 @@ const handleSelectChapter = async (
         );
       }
     } else {
-      setTimeout(() => {
+      setTimeout(async () => {
+        await annotationsStore.loadAnnotationsForChapter(props.book.id, chapterId);
+        applyAnnotations();
         isTransitioning.value = false;
         uiStore.showControls = wasShowingControls;
       }, 50);
@@ -507,16 +545,15 @@ function chapterMatchesHref(chapter: Chapter, filePath: string): boolean {
   );
 }
 
-async function handleResize() {
-  await reRenderContent();
-}
-
 function handleColumnLayout(data: { columnWidth: number; gap: number; scrollWidth: number }) {
   pagination.updateColumnLayout(data.columnWidth, data.gap, data.scrollWidth);
 }
 
-function handleChaptersChanged() {
+async function handleChaptersChanged() {
   refreshScrollObserver();
+  if (!isPaginationMode.value) {
+    await syncScrollModeAnnotations();
+  }
 }
 
 // ── Search navigation ──
@@ -602,6 +639,167 @@ const addBookmark = async () => {
 
 function extractPreviewAround(text: string, offset: number): string {
   return text.slice(Math.max(offset - 1, 0), offset + 50);
+}
+
+// ── Annotation handlers ──
+
+async function syncScrollModeAnnotations() {
+  const loaded = chapterLoader.allLoadedContent.value;
+  if (!loaded.length) return;
+  const all: Annotation[] = [];
+  for (const ch of loaded) {
+    const anns = await annotationsStorage.getAnnotationsByChapter(props.book.id, ch.chapterId);
+    all.push(...anns);
+  }
+  const doc = readerContentRef.value?.getDocument?.();
+  if (doc) {
+    annotationRenderer.applyToContent(all);
+  }
+}
+
+function applyAnnotations() {
+  const doc = readerContentRef.value?.getDocument?.();
+  if (!doc) return;
+  annotationRenderer.applyToContent(annotationsStore.annotations);
+}
+
+function handleSelectionChange(info: SelectionInfo | null) {
+  if (!info) {
+    showSelectionToolbar.value = false;
+    showNoteInput.value = false;
+    return;
+  }
+  const doc = readerContentRef.value?.getDocument?.();
+  if (!doc) return;
+  const sel = doc.getSelection();
+  if (!sel || sel.isCollapsed) return;
+  const range = sel.getRangeAt(0);
+  const spineIndex = readerStore.chapters.findIndex((c) => c.id === readerStore.currentChapter?.id);
+
+  // CFI generation skips [data-annotation-id] spans (see isIgnorableNode),
+  // so the generated paths are independent of rendered annotation state.
+  // No DOM modification needed here.
+  const startCollapsed = doc.createRange();
+  startCollapsed.setStart(range.startContainer, range.startOffset);
+  startCollapsed.collapse(true);
+  const startCfi = generateCfiFromRange(spineIndex, startCollapsed, doc.body);
+
+  const endCollapsed = doc.createRange();
+  endCollapsed.setStart(range.endContainer, range.endOffset);
+  endCollapsed.collapse(true);
+  const endCfi = generateCfiFromRange(spineIndex, endCollapsed, doc.body);
+
+  pendingSelection.value = { startCfi, endCfi, text: info.text };
+  selectionToolbarPos.value = {
+    top: Math.max(8, info.rect.top - 56),
+    left: info.rect.left,
+  };
+  showSelectionToolbar.value = true;
+}
+
+async function handleHighlight(color: string) {
+  const sel = pendingSelection.value;
+  if (!sel || !readerStore.currentChapter) return;
+  showSelectionToolbar.value = false;
+  showNoteInput.value = false;
+  await annotationsStore.addAnnotation(
+    props.book.id,
+    readerStore.currentChapter.id,
+    "highlight",
+    sel.startCfi,
+    sel.endCfi,
+    color,
+    sel.text,
+  );
+  applyAnnotations();
+  pendingSelection.value = null;
+}
+
+async function handleUnderline() {
+  const sel = pendingSelection.value;
+  if (!sel || !readerStore.currentChapter) return;
+  showSelectionToolbar.value = false;
+  await annotationsStore.addAnnotation(
+    props.book.id,
+    readerStore.currentChapter.id,
+    "underline",
+    sel.startCfi,
+    sel.endCfi,
+    "#60a5fa",
+    sel.text,
+  );
+  applyAnnotations();
+  pendingSelection.value = null;
+}
+
+function handleAddNote() {
+  showNoteInput.value = true;
+}
+
+async function handleSaveNote(noteText: string) {
+  const sel = pendingSelection.value;
+  if (!sel || !readerStore.currentChapter) return;
+  showSelectionToolbar.value = false;
+  showNoteInput.value = false;
+  await annotationsStore.addAnnotation(
+    props.book.id,
+    readerStore.currentChapter.id,
+    "highlight",
+    sel.startCfi,
+    sel.endCfi,
+    "#fbbf24",
+    sel.text,
+    noteText,
+  );
+  applyAnnotations();
+  pendingSelection.value = null;
+}
+
+function handleCancelNote() {
+  showSelectionToolbar.value = false;
+  showNoteInput.value = false;
+}
+
+function handleAnnotationClick(annotationId: string, rect: DOMRect) {
+  const annotation = annotationsStore.annotations.find((a) => a.id === annotationId);
+  if (!annotation) return;
+  popoverAnnotation.value = annotation;
+  popoverPosition.value = { top: rect.top, left: rect.left, height: rect.height };
+  showAnnotationPopover.value = true;
+}
+
+async function handleUpdateAnnotationNote(id: string, note: string) {
+  await annotationsStore.updateAnnotation(id, { note } as Partial<Annotation>);
+  showAnnotationPopover.value = false;
+}
+
+async function handleUpdateAnnotationColor(id: string, color: string) {
+  await annotationsStore.updateAnnotation(id, { color } as Partial<Annotation>);
+  applyAnnotations();
+}
+
+async function handleDeleteAnnotation(id: string) {
+  await annotationsStore.removeAnnotation(id);
+  showAnnotationPopover.value = false;
+  applyAnnotations();
+}
+
+async function handleNavigateAnnotation(annotation: Annotation) {
+  const targetChapter = readerStore.chapters.find((c) => c.id === annotation.chapterId);
+  if (!targetChapter) return;
+
+  if (targetChapter.id !== readerStore.currentChapter?.id) {
+    await handleSelectChapter(targetChapter.id);
+    await nextTick();
+  }
+  closeModal();
+
+  if (!isPaginationMode.value) {
+    const doc = readerContentRef.value?.getDocument?.();
+    if (doc) {
+      navigateToCfi(annotation.startCfi, doc.body);
+    }
+  }
 }
 
 function createTempContainer(html: string): Element {
@@ -763,27 +961,6 @@ watch(
   { immediate: true },
 );
 
-const reRenderContent = async () => {
-  if (!isPaginationMode.value) return;
-  if (readerStore.currentChapter) {
-    const content = await readerStore.getCurrentChapterContent();
-    const html = content?.html || "";
-    const resources = content?.resources || [];
-    currentChapterResources.value = resources;
-    await pagination.paginate(readerStore.currentChapter.id, { html, resources });
-  }
-};
-
-// Watch for settings changes that affect pagination
-watch(
-  () => [
-    settingsStore.settings.margin,
-    settingsStore.settings.fontSize,
-    settingsStore.settings.lineHeight,
-  ],
-  reRenderContent,
-);
-
 // Watch for page changes in pagination mode to auto-save
 watch([() => pagination.currentPage.value, () => pagination.totalPages.value], ([page, total]) => {
   if (!isPaginationMode.value) return;
@@ -791,7 +968,9 @@ watch([() => pagination.currentPage.value, () => pagination.totalPages.value], (
   saveReadingProgress(cp, readingProgress.value, page);
 });
 
-// Watch for iframe ready → set up direct gesture + scroll handlers
+// Watch for iframe ready → set up direct gesture + scroll + annotation handlers
+let annotationListenerCleanup: (() => void) | null = null;
+
 watch(
   () => readerContentRef.value?.isReady,
   (ready) => {
@@ -800,16 +979,23 @@ watch(
     if (!doc) return;
 
     setupDirectHandlers(doc);
+    setupScrollHandler(doc);
 
-    if (!isPaginationMode.value) {
-      setupScrollHandler(doc);
-    }
+    // Set up annotation selection/click listeners
+    annotationListenerCleanup?.();
+    annotationListenerCleanup = annotationRenderer.setupListeners({
+      onSelectionChange: handleSelectionChange,
+      onAnnotationClick: handleAnnotationClick,
+    });
   },
 );
 
 // Lifecycle
 onMounted(async () => {
   await bookmarksStore.loadBookmarks(props.book.id);
+  if (readerStore.currentChapter) {
+    await annotationsStore.loadAnnotationsForChapter(props.book.id, readerStore.currentChapter.id);
+  }
   updateThemeClass();
 
   uiStore.showControls = true;
@@ -849,6 +1035,10 @@ onUnmounted(() => {
   gestureCleanup = null;
   scrollCleanup?.();
   scrollCleanup = null;
+  annotationListenerCleanup?.();
+  annotationListenerCleanup = null;
+  annotationRenderer.cleanup();
+  annotationsStore.reset();
   pagination.cleanup();
 });
 </script>
@@ -875,7 +1065,6 @@ onUnmounted(() => {
       :loaded-chapters="rewrittenLoadedContent"
       :epub-resources="currentChapterResources"
       :on-link-click="handleInternalLinkClick"
-      :on-resize="handleResize"
       :on-column-layout="handleColumnLayout"
       :on-chapters-changed="handleChaptersChanged"
     />
@@ -906,7 +1095,28 @@ onUnmounted(() => {
     <PageIndicator
       :current-page="pagination.currentPage.value"
       :total-pages="pagination.totalPages.value"
-      :show="uiStore.showControls && isPaginationMode"
+      :show="uiStore.showControls && isPaginationMode && pagination.isReady.value"
+    />
+
+    <SelectionToolbar
+      :visible="showSelectionToolbar"
+      :position="selectionToolbarPos"
+      :show-note-input="showNoteInput"
+      @highlight="handleHighlight"
+      @underline="handleUnderline"
+      @add-note="handleAddNote"
+      @save-note="handleSaveNote"
+      @cancel-note="handleCancelNote"
+    />
+
+    <AnnotationPopover
+      :visible="showAnnotationPopover"
+      :annotation="popoverAnnotation"
+      :position="popoverPosition"
+      @update-note="handleUpdateAnnotationNote"
+      @update-color="handleUpdateAnnotationColor"
+      @delete="handleDeleteAnnotation"
+      @close="showAnnotationPopover = false"
     />
 
     <ModalWrapper
@@ -914,6 +1124,7 @@ onUnmounted(() => {
       :chapters="readerStore.chapters"
       :current-chapter-id="readerStore.currentChapter?.id ?? null"
       :bookmarks="bookmarksStore.bookmarks"
+      :annotations="annotationsStore.annotations"
       :search-results="search.searchResults.value"
       :search-query="search.searchQuery.value"
       :settings="settingsStore.settings"
@@ -923,6 +1134,8 @@ onUnmounted(() => {
       @close="closeModal"
       @select-chapter="handleSelectChapter"
       @navigate-bookmark="navigateToBookmark"
+      @navigate-annotation="handleNavigateAnnotation"
+      @delete-annotation="handleDeleteAnnotation"
       @update:search-query="
         (val) => {
           search.searchQuery.value = val;

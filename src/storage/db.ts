@@ -1,7 +1,7 @@
 // IndexedDB wrapper with Promise-based API
 
 const DB_NAME = "reader-db";
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 
 export const STORES = {
   BOOKS: "books",
@@ -10,6 +10,7 @@ export const STORES = {
   SETTINGS: "settings",
   RESOURCES: "resources",
   STATS: "stats",
+  ANNOTATIONS: "annotations",
 } as const;
 
 export type StoreName = (typeof STORES)[keyof typeof STORES];
@@ -98,6 +99,15 @@ export async function openDB(): Promise<IDBDatabase> {
       }
 
       // v6: CFI field added to bookmarks (migration handled lazily in getBookmarks)
+
+      // v7: Annotations store
+      if (!db.objectStoreNames.contains(STORES.ANNOTATIONS)) {
+        const annotationsStore = db.createObjectStore(STORES.ANNOTATIONS, { keyPath: "id" });
+        annotationsStore.createIndex("bookId", "bookId", { unique: false });
+        annotationsStore.createIndex("chapterId", "chapterId", { unique: false });
+        annotationsStore.createIndex("book_chapter", ["bookId", "chapterId"], { unique: false });
+        annotationsStore.createIndex("createdAt", "createdAt", { unique: false });
+      }
     };
   });
 

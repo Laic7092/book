@@ -118,10 +118,13 @@ onUnmounted(() => {
         </div>
 
         <!-- 翻页动画 -->
-        <div class="setting-row" v-if="(settings.scrollMode || 'vertical') === 'pagination'">
+        <div
+          class="setting-row"
+          v-if="(settings.scrollMode || 'vertical') === 'pagination' && false"
+        >
           <label class="setting-label">
             <span>翻页效果</span>
-            <span class="setting-value">{{ settings.paginationAnimation || "slide" }}</span>
+            <span class="setting-value">{{ settings.paginationAnimation || "fade" }}</span>
           </label>
           <div class="anim-options">
             <button
@@ -129,7 +132,7 @@ onUnmounted(() => {
               :key="anim.value"
               :class="[
                 'anim-btn',
-                { active: (settings.paginationAnimation || 'slide') === anim.value },
+                { active: (settings.paginationAnimation || 'fade') === anim.value },
               ]"
               @click="emit('update-settings', { paginationAnimation: anim.value })"
             >

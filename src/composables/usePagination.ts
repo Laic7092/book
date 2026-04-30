@@ -1,17 +1,4 @@
-import { ref, computed, onUnmounted, type Ref } from "vue";
-import type { ReaderSettings } from "../core/types";
-
-export interface Page {
-  index: number;
-  html: string;
-  blockStart: number;
-  blockEnd: number;
-}
-
-export interface PaginationChapter {
-  id: string;
-  html?: string;
-}
+import { ref, computed, onUnmounted } from "vue";
 
 export interface PaginateOptions {
   html?: string;
@@ -19,11 +6,7 @@ export interface PaginateOptions {
   resources?: HTMLElement[];
 }
 
-export function usePagination(
-  _bookId: string,
-  chapters: PaginationChapter[],
-  _settings: Ref<ReaderSettings>,
-) {
+export function usePagination() {
   const currentPage = ref(0);
   const totalPages = ref(1);
   const isReady = ref(false);
@@ -32,20 +15,10 @@ export function usePagination(
   const currentHtml = ref("");
   const columnWidth = ref(0);
   const columnGap = ref(0);
-  const computedCount = ref(0);
 
   let pendingTargetPage: number | undefined;
 
   const scrollOffset = computed(() => currentPage.value * (columnWidth.value + columnGap.value));
-
-  const pages = computed<Page[]>(() => {
-    const count = totalPages.value;
-    const result: Page[] = [];
-    for (let i = 0; i < count; i++) {
-      result.push({ index: i, html: rawHtml.value, blockStart: 0, blockEnd: 0 });
-    }
-    return result;
-  });
 
   function clampPage(target: number | undefined, length: number): number {
     if (length <= 0) return 0;
@@ -54,15 +27,9 @@ export function usePagination(
     return Math.min(target, length - 1);
   }
 
-  function getChapterHtml(chapterId: string): string | null {
-    const chapter = chapters.find((c) => c.id === chapterId);
-    if (!chapter || !("html" in chapter)) return null;
-    return (chapter as { html?: string }).html ?? null;
-  }
-
-  async function paginate(chapterId: string, options?: PaginateOptions): Promise<void> {
-    const html = options?.html ?? getChapterHtml(chapterId);
-    if (html === null) return;
+  async function paginate(_chapterId: string, options?: PaginateOptions): Promise<void> {
+    const html = options?.html;
+    if (!html) return;
 
     isPaginating.value = true;
     isReady.value = false;
@@ -83,7 +50,6 @@ export function usePagination(
     const step = columnWidth.value + columnGap.value;
     const newTotal = step > 0 ? Math.max(1, Math.ceil(scrollW / step)) : 1;
     totalPages.value = newTotal;
-    computedCount.value = newTotal;
 
     if (pendingTargetPage !== undefined) {
       currentPage.value = clampPage(pendingTargetPage, newTotal);
@@ -111,11 +77,6 @@ export function usePagination(
     return true;
   }
 
-  function getPageProgress(): number {
-    if (totalPages.value <= 1) return 100;
-    return ((currentPage.value + 1) / totalPages.value) * 100;
-  }
-
   function cleanup(): void {
     rawHtml.value = "";
     currentHtml.value = "";
@@ -126,14 +87,6 @@ export function usePagination(
     pendingTargetPage = undefined;
   }
 
-  function clearCache(): void {
-    /* no-op */
-  }
-
-  function clearCacheForBook(_clearBookId: string): void {
-    /* no-op */
-  }
-
   onUnmounted(() => cleanup());
 
   return {
@@ -142,19 +95,13 @@ export function usePagination(
     isPaginating,
     isReady,
     currentHtml,
-    pages,
     rawHtml,
-    computedCount,
     scrollOffset,
-    columnWidth,
     goToPage,
     nextPage,
     prevPage,
     paginate,
-    getPageProgress,
     updateColumnLayout,
     cleanup,
-    clearCache,
-    clearCacheForBook,
   };
 }

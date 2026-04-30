@@ -158,6 +158,10 @@ function isIgnorableNode(node: Node): boolean {
   if (node.nodeType === Node.COMMENT_NODE) return true;
   if (node.nodeType === Node.PROCESSING_INSTRUCTION_NODE) return true;
   if (isTextNode(node) && (node.textContent || "").trim().length === 0) return true;
+  // Annotation spans are presentation-only, skip them so CFI paths remain stable
+  // regardless of whether annotations are rendered
+  if (node.nodeType === Node.ELEMENT_NODE && (node as Element).hasAttribute("data-annotation-id"))
+    return true;
   return false;
 }
 
@@ -355,8 +359,9 @@ export function generateCfiFromCharOffset(
 // ─── CFI → DOM Resolution ─────────────────────────────────────────────────
 
 function findNthNonIgnorableChild(parent: Node, targetIndex: number): Node | null {
-  // targetIndex is the CFI index (1-based, * 2)
-  // Convert to 0-based position among non-ignorable children
+  // targetIndex is an even CFI index (element step).
+  // getCfiIndex uses separate elPosition/textPosition counters, so we
+  // must only count element children here — not text nodes.
   const position = targetIndex / 2 - 1;
   let count = 0;
 
@@ -364,6 +369,7 @@ function findNthNonIgnorableChild(parent: Node, targetIndex: number): Node | nul
   for (let i = 0; i < children.length; i++) {
     const child = children[i];
     if (isIgnorableNode(child)) continue;
+    if (isTextNode(child)) continue;
     if (count === position) return child;
     count++;
   }
@@ -474,6 +480,24 @@ export function resolveCfiToRange(cfi: string, contentRoot: Element): Range | nu
     range.setEnd(startResult.node, startResult.offset);
   }
 
+  return range;
+}
+
+/**
+ * Resolve a start+end CFI pair to a DOM Range spanning both positions.
+ */
+export function resolveCfiRange(
+  startCfi: string,
+  endCfi: string,
+  contentRoot: Element,
+): Range | null {
+  const start = resolveCfi(startCfi, contentRoot);
+  const end = resolveCfi(endCfi, contentRoot);
+  if (!start || !end) return null;
+
+  const range = contentRoot.ownerDocument!.createRange();
+  range.setStart(start.node, start.offset);
+  range.setEnd(end.node, end.offset);
   return range;
 }
 

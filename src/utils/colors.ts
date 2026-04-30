@@ -79,3 +79,21 @@ export const BOOKMARK_COLORS = [
   { value: "#a78bfa", label: "Purple" },
   { value: "#fb923c", label: "Orange" },
 ] as const;
+
+export const HIGHLIGHT_COLORS = [
+  { value: "#fbbf24", label: "Yellow" },
+  { value: "#86efac", label: "Green" },
+  { value: "#93c5fd", label: "Blue" },
+  { value: "#fca5a5", label: "Red" },
+  { value: "#d8b4fe", label: "Purple" },
+  { value: "#fdba74", label: "Orange" },
+  { value: "#f9a8d4", label: "Pink" },
+  { value: "#a7f3d0", label: "Mint" },
+] as const;
+
+export function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}

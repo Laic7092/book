@@ -92,7 +92,7 @@ export async function getAllBooks(): Promise<Book[]> {
  */
 export async function deleteBook(bookId: string): Promise<void> {
   await dbTransaction(
-    [STORES.BOOKS, STORES.CHAPTERS, STORES.BOOKMARKS, STORES.RESOURCES],
+    [STORES.BOOKS, STORES.CHAPTERS, STORES.BOOKMARKS, STORES.RESOURCES, STORES.ANNOTATIONS],
     "readwrite",
     async (stores) => {
       // Delete book metadata
@@ -135,6 +135,20 @@ export async function deleteBook(bookId: string): Promise<void> {
         request.onsuccess = () => {
           const keys = request.result as Array<[string, string]>;
           keys.forEach((key) => resourcesStore.delete(key));
+          resolve();
+        };
+        request.onerror = () => reject(request.error);
+      });
+
+      // Delete annotations for this book
+      const annotationsStore = stores.get(STORES.ANNOTATIONS)!;
+      const annotationsIndex = annotationsStore.index("bookId");
+
+      await new Promise<void>((resolve, reject) => {
+        const request = annotationsIndex.getAllKeys(IDBKeyRange.only(bookId));
+        request.onsuccess = () => {
+          const keys = request.result as string[];
+          keys.forEach((key) => annotationsStore.delete(key));
           resolve();
         };
         request.onerror = () => reject(request.error);

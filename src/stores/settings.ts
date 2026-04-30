@@ -19,7 +19,7 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
   textAlign: "left",
   contrast: "normal",
   scrollMode: "pagination",
-  paginationAnimation: "slide",
+  paginationAnimation: "fade",
   customTypography: false,
 };
 

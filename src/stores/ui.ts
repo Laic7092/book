@@ -7,6 +7,7 @@ export type ModalType =
   | "toc"
   | "search"
   | "bookmarks"
+  | "annotations"
   | "settings"
   | "typographySettings"
   | "stats"
