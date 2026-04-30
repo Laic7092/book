@@ -49,8 +49,9 @@ import {
   resolveCfiRange,
   parseCfi,
 } from "../utils/epub-cfi";
-import type { ParsedCfi, CfiStep } from "../utils/epub-cfi";
+import type { ParsedCfi } from "../utils/epub-cfi";
 import { rewriteResourcePaths } from "../utils/resource-urls";
+import { stripHtml } from "../search/engine";
 import { debounce } from "../utils/debounce";
 import { SWIPE_THRESHOLD, TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../utils/constants";
 
@@ -478,18 +479,25 @@ const handleSelectChapter = async (
 
     if (isPaginationMode.value) {
       if (autoClearTransition) {
-        const stopWatch = watch(
-          () => pagination.isReady.value,
-          async (ready) => {
-            if (ready) {
-              await annotationsStore.loadAnnotationsForChapter(props.book.id, chapterId);
-              applyAnnotations();
-              isTransitioning.value = false;
-              uiStore.showControls = wasShowingControls;
-              stopWatch();
-            }
-          },
-        );
+        const onReady = async () => {
+          await annotationsStore.loadAnnotationsForChapter(props.book.id, chapterId);
+          applyAnnotations();
+          isTransitioning.value = false;
+          uiStore.showControls = wasShowingControls;
+        };
+        if (pagination.isReady.value) {
+          onReady();
+        } else {
+          const stopWatch = watch(
+            () => pagination.isReady.value,
+            (ready) => {
+              if (ready) {
+                stopWatch();
+                onReady();
+              }
+            },
+          );
+        }
       }
     } else {
       setTimeout(async () => {
@@ -505,6 +513,37 @@ const handleSelectChapter = async (
   }
 };
 
+function waitForPaginationReady(): Promise<void> {
+  if (pagination.isReady.value) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const stop = watch(
+      () => pagination.isReady.value,
+      (ready) => {
+        if (ready) {
+          stop();
+          resolve();
+        }
+      },
+    );
+  });
+}
+
+/** Resolve a CFI in the iframe document and return the page it falls on. */
+function getPageForCfi(cfi: string): number | null {
+  const doc = readerContentRef.value?.getDocument?.();
+  if (!doc?.body) return null;
+  const target = resolveCfi(cfi, doc.body);
+  if (!target) return null;
+  const element =
+    target.node.nodeType === Node.TEXT_NODE
+      ? (target.node.parentElement as HTMLElement | null)
+      : (target.node as HTMLElement);
+  if (!element) return null;
+  const bodyRect = doc.body.getBoundingClientRect();
+  const elRect = element.getBoundingClientRect();
+  return pagination.getPageAtOffset(elRect.left - bodyRect.left);
+}
+
 function handleInternalLinkClick(href: string) {
   if (href.startsWith("http://") || href.startsWith("https://") || href.startsWith("mailto:")) {
     return;
@@ -517,13 +556,22 @@ function handleInternalLinkClick(href: string) {
   const scrollToAnchor = () => {
     if (!anchor) return;
     const article = readerContentRef.value?.getArticle?.();
-    if (article) {
-      const target =
-        article.querySelector(`[id="${CSS.escape(anchor)}"]`) ||
-        article.querySelector(`[name="${CSS.escape(anchor)}"]`);
-      if (target) {
-        target.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
+    if (!article) return;
+    const target =
+      article.querySelector(`[id="${CSS.escape(anchor)}"]`) ||
+      article.querySelector(`[name="${CSS.escape(anchor)}"]`);
+    if (!target) return;
+
+    if (isPaginationMode.value) {
+      const articleRect = article.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      // Both rects are shifted by the same translateX transform, so the
+      // subtraction cancels it — offsetInBody is the element's position
+      // relative to the body's left edge in the natural column layout.
+      const offsetInBody = targetRect.left - articleRect.left;
+      pagination.goToPage(pagination.getPageAtOffset(offsetInBody));
+    } else {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   };
 
@@ -533,17 +581,32 @@ function handleInternalLinkClick(href: string) {
   }
 
   const targetChapter = readerStore.chapters.find((c) => chapterMatchesHref(c, filePath));
+  if (!targetChapter) return;
 
-  if (targetChapter) {
-    handleSelectChapter(targetChapter.id).then(async () => {
-      if (anchor) {
-        await nextTick();
-        requestAnimationFrame(() => {
-          requestAnimationFrame(scrollToAnchor);
-        });
-      }
-    });
+  // Same chapter: skip re-pagination, just scroll to anchor
+  if (targetChapter.id === readerStore.currentChapter?.id) {
+    if (isPaginationMode.value) {
+      waitForPaginationReady().then(scrollToAnchor);
+    } else {
+      scrollToAnchor();
+    }
+    return;
   }
+
+  // Different chapter: load it, then scroll to anchor
+  handleSelectChapter(targetChapter.id).then(async () => {
+    if (!anchor) return;
+
+    if (isPaginationMode.value) {
+      await waitForPaginationReady();
+      scrollToAnchor();
+    } else {
+      await nextTick();
+      requestAnimationFrame(() => {
+        requestAnimationFrame(scrollToAnchor);
+      });
+    }
+  });
 }
 
 function chapterMatchesHref(chapter: Chapter, filePath: string): boolean {
@@ -702,40 +765,19 @@ async function navigateToSearchResult(result: SearchResult) {
         closeModal();
       }
 
-      if (!pagination.isReady.value) {
-        await new Promise<void>((resolve) => {
-          const stop = watch(
-            () => pagination.isReady.value,
-            (ready) => {
-              if (ready) {
-                stop();
-                resolve();
-              }
-            },
-          );
-        });
-      }
+      await waitForPaginationReady();
 
       await annotationsStore.loadAnnotationsForChapter(props.book.id, targetChapter.id);
       applyAnnotations();
 
-      const fullHtml = pagination.rawHtml.value;
-      if (fullHtml) {
-        const fullText = fullHtml.replace(/<[^>]*>/g, "");
-        const estimatedPage = Math.min(
-          pagination.totalPages.value - 1,
-          Math.max(
-            0,
-            Math.floor((result.position / fullText.length) * pagination.totalPages.value),
-          ),
-        );
-        pagination.goToPage(estimatedPage);
-
-        // Apply temp highlight to the rendered content (no scroll)
-        await nextTick();
-        const doc = readerContentRef.value?.getDocument?.();
-        if (doc?.body) {
-          applySearchHighlight(doc, doc.body, result.position, result.text.length);
+      const doc = readerContentRef.value?.getDocument?.();
+      if (doc?.body) {
+        applySearchHighlight(doc, doc.body, result.position, result.text.length);
+        const mark = doc.body.querySelector("mark");
+        if (mark) {
+          const bodyRect = doc.body.getBoundingClientRect();
+          const markRect = mark.getBoundingClientRect();
+          pagination.goToPage(pagination.getPageAtOffset(markRect.left - bodyRect.left));
         }
       }
     } else {
@@ -811,10 +853,7 @@ const addBookmark = async () => {
       charOffset,
     );
 
-    const plainText = fullHtml
-      .replace(/<[^>]*>/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
+    const plainText = stripHtml(fullHtml).replace(/\s+/g, " ").trim();
     preview = extractPreviewAround(plainText, charOffset);
   } else {
     const viewportCenter = article.getBoundingClientRect().top + article.clientHeight * 0.2;
@@ -1011,35 +1050,14 @@ async function handleNavigateAnnotation(annotation: Annotation) {
     }
 
     if (isPaginationMode.value) {
-      if (!pagination.isReady.value) {
-        await new Promise<void>((resolve) => {
-          const stop = watch(
-            () => pagination.isReady.value,
-            (ready) => {
-              if (ready) {
-                stop();
-                resolve();
-              }
-            },
-          );
-        });
-      }
+      await waitForPaginationReady();
 
       await annotationsStore.loadAnnotationsForChapter(props.book.id, targetChapter.id);
       applyAnnotations();
 
-      const fullHtml = pagination.rawHtml.value;
-      if (!fullHtml) return;
-
-      const charOffset = calculateAbsoluteCharOffset(fullHtml, parsed);
-
-      if (charOffset !== null) {
-        const fullText = fullHtml.replace(/<[^>]*>/g, "");
-        const estimatedPage = Math.min(
-          pagination.totalPages.value - 1,
-          Math.max(0, Math.floor((charOffset / fullText.length) * pagination.totalPages.value)),
-        );
-        pagination.goToPage(estimatedPage);
+      const page = getPageForCfi(annotation.startCfi);
+      if (page !== null) {
+        pagination.goToPage(page);
       }
     } else {
       await annotationsStore.loadAnnotationsForChapter(props.book.id, targetChapter.id);
@@ -1091,37 +1109,14 @@ const navigateToBookmark = async (bookmark: Bookmark) => {
     }
 
     if (isPaginationMode.value) {
-      if (!pagination.isReady.value) {
-        await new Promise<void>((resolve) => {
-          const stop = watch(
-            () => pagination.isReady.value,
-            (ready) => {
-              if (ready) {
-                stop();
-                resolve();
-              }
-            },
-          );
-        });
+      await waitForPaginationReady();
+
+      const page = getPageForCfi(bookmark.cfi);
+      if (page !== null) {
+        pagination.goToPage(page);
+      } else {
+        pagination.goToPage(0);
       }
-
-      const fullHtml = pagination.rawHtml.value;
-      if (!fullHtml) return;
-
-      const charOffset = calculateAbsoluteCharOffset(fullHtml, parsed);
-
-      if (charOffset !== null) {
-        const fullText = fullHtml.replace(/<[^>]*>/g, "");
-        const estimatedPage = Math.min(
-          pagination.totalPages.value - 1,
-          Math.max(0, Math.floor((charOffset / fullText.length) * pagination.totalPages.value)),
-        );
-        pagination.goToPage(estimatedPage);
-        closeModal();
-        return;
-      }
-
-      pagination.goToPage(0);
       closeModal();
     } else {
       const article = readerContentRef.value?.getArticle?.();
@@ -1135,37 +1130,6 @@ const navigateToBookmark = async (bookmark: Bookmark) => {
     isTransitioning.value = false;
   }
 };
-
-function calculateAbsoluteCharOffset(fullHtml: string, parsed: ParsedCfi): number | null {
-  const tempContainer = document.createElement("div");
-  tempContainer.innerHTML = fullHtml;
-
-  const target = resolveCfi(`epubcfi(/6/1${buildPathFromSteps(parsed.steps)})`, tempContainer);
-  if (!target) return null;
-
-  const walker = document.createTreeWalker(tempContainer, NodeFilter.SHOW_TEXT, null);
-  let charOffset = 0;
-
-  if (target.node.nodeType === Node.TEXT_NODE) {
-    let node: Node | null = walker.nextNode();
-    while (node) {
-      if (node === target.node) {
-        charOffset += target.offset;
-        tempContainer.remove();
-        return charOffset;
-      }
-      charOffset += (node.textContent || "").length;
-      node = walker.nextNode();
-    }
-  }
-
-  tempContainer.remove();
-  return null;
-}
-
-function buildPathFromSteps(steps: CfiStep[]): string {
-  return steps.length > 0 ? `/${steps.map((s) => s.index).join("/")}` : "";
-}
 
 const updateThemeClass = () => {
   const container = document.querySelector(".reader-view-container");

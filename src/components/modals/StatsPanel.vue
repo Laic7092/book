@@ -44,11 +44,20 @@ const emit = defineEmits<{
               <div class="progress-bar">
                 <div
                   class="progress-fill"
-                  :style="{ width: `${(stats.chaptersCompleted / totalChapters) * 100}%` }"
+                  :style="{
+                    width:
+                      totalChapters > 0
+                        ? `${(stats.chaptersCompleted / totalChapters) * 100}%`
+                        : '0%',
+                  }"
                 ></div>
               </div>
               <div class="progress-percentage">
-                {{ Math.round((stats.chaptersCompleted / totalChapters) * 100) }}%
+                {{
+                  totalChapters > 0
+                    ? Math.round((stats.chaptersCompleted / totalChapters) * 100)
+                    : 0
+                }}%
               </div>
             </div>
           </div>

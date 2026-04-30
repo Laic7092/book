@@ -98,7 +98,7 @@ function extractContext(text: string, position: number, contextLength: number): 
 /**
  * Strip HTML tags from content
  */
-function stripHtml(html: string): string {
+export function stripHtml(html: string): string {
   const temp = document.createElement("div");
   temp.innerHTML = html;
   return temp.textContent || temp.innerText || "";

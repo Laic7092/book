@@ -60,6 +60,18 @@ export function usePagination() {
     isReady.value = true;
   }
 
+  function getPageAtOffset(offsetInBody: number): number {
+    const step = columnWidth.value + columnGap.value;
+    if (step <= 0 || totalPages.value <= 0) return 0;
+    return Math.max(0, Math.min(totalPages.value - 1, Math.floor(offsetInBody / step)));
+  }
+
+  /** ratio: 0-1 fraction within the total content (e.g. charOffset / totalChars) */
+  function getPageAtRatio(ratio: number): number {
+    if (totalPages.value <= 0) return 0;
+    return Math.max(0, Math.min(totalPages.value - 1, Math.floor(ratio * totalPages.value)));
+  }
+
   function goToPage(page: number): void {
     if (page < 0 || page >= totalPages.value) return;
     currentPage.value = page;
@@ -97,6 +109,8 @@ export function usePagination() {
     currentHtml,
     rawHtml,
     scrollOffset,
+    getPageAtOffset,
+    getPageAtRatio,
     goToPage,
     nextPage,
     prevPage,
