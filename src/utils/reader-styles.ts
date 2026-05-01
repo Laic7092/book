@@ -66,6 +66,7 @@ export function generateBaseCSS(): string {
       -webkit-hyphens: auto;
       margin: 24px;
       touch-action: pan-y;
+      will-change: transform;
     }
 
     body.reader-content p.split{
