@@ -77,7 +77,7 @@ function measureColumns() {
       const iframe = iframeRef.value;
       if (!iframe) return;
       const margin = props.settings.margin || 24;
-      const cw = iframe.clientWidth - margin * 2;
+      const cw = iframe.getBoundingClientRect().width - margin * 2;
       const gap = margin * 2;
       const sw = doc.body.scrollWidth;
       props.onColumnLayout?.({

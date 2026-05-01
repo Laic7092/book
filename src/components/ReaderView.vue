@@ -625,7 +625,7 @@ function handleColumnLayout(data: {
   scrollWidth: number;
   iframeWidth: number;
 }) {
-  pagination.updateColumnLayout(data.columnWidth, data.gap, data.scrollWidth, data.iframeWidth);
+  pagination.updateColumnLayout(data.columnWidth, data.gap, data.scrollWidth);
 }
 
 async function handleChaptersChanged() {
