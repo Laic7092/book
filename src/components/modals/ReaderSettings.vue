@@ -79,7 +79,7 @@ onUnmounted(() => {
         </div>
 
         <!-- 阅读模式 -->
-        <div class="setting-row">
+        <div class="setting-row" v-if="false">
           <label class="setting-label">阅读模式</label>
           <div class="mode-options">
             <button
