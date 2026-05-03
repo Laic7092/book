@@ -354,61 +354,33 @@ function setupScrollHandler(doc: Document) {
 function setupDirectHandlers(doc: Document) {
   if (gestureCleanup) return;
 
-  const handlePointerDown = (e: PointerEvent) => {
+  const handleClick = (e: MouseEvent) => {
     if (shouldIgnoreTarget(e.target)) return;
-    gestureStartX = e.clientX;
-    gestureStartY = e.clientY;
-    gestureStartTime = Date.now();
-  };
 
-  const handlePointerUp = (e: PointerEvent) => {
-    if (gestureStartTime <= 0) return;
-    const deltaX = e.clientX - gestureStartX;
-    const deltaY = e.clientY - gestureStartY;
-    const deltaTime = Date.now() - gestureStartTime;
-    gestureStartTime = 0;
+    // 模态框优先关闭
+    if (uiStore.activeModal) {
+      uiStore.closeModal();
+      return;
+    }
 
-    const isTap = deltaTime < 300 && Math.abs(deltaX) < 10 && Math.abs(deltaY) < 10;
-    const isHorizontalSwipe =
-      Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > SWIPE_THRESHOLD;
-
-    if (isTap) {
-      if (uiStore.activeModal) {
-        uiStore.closeModal();
-        return;
-      }
-      if (isPaginationMode.value) {
-        const width = window.innerWidth;
-        const x = e.clientX;
-        if (x < width * TAP_ZONE_LEFT) {
-          prevPage();
-        } else if (x > width * TAP_ZONE_RIGHT) {
-          nextPage();
-        } else {
-          toggleControls();
-        }
+    if (isPaginationMode.value) {
+      const width = window.innerWidth;
+      const x = e.clientX;
+      if (x < width * TAP_ZONE_LEFT) {
+        prevPage();
+      } else if (x > width * TAP_ZONE_RIGHT) {
+        nextPage();
       } else {
         toggleControls();
       }
-    } else if (isHorizontalSwipe && isPaginationMode.value) {
-      if (uiStore.activeModal) {
-        uiStore.closeModal();
-        return;
-      }
-      // if (deltaX > 0) {
-      //   prevPage();
-      // } else {
-      //   nextPage();
-      // }
+    } else {
+      toggleControls();
     }
   };
 
-  doc.addEventListener("pointerdown", handlePointerDown, { passive: true });
-  doc.addEventListener("pointerup", handlePointerUp, { passive: true });
-
+  doc.addEventListener("click", handleClick);
   gestureCleanup = () => {
-    doc.removeEventListener("pointerdown", handlePointerDown);
-    doc.removeEventListener("pointerup", handlePointerUp);
+    doc.removeEventListener("click", handleClick);
   };
 }
 
