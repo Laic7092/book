@@ -45,11 +45,10 @@ import {
   generateCfiFromCharOffset,
   generateCfiFromRange,
   navigateToCfi,
-  resolveCfi,
+  resolveCfiToElement,
   resolveCfiRange,
-  parseCfi,
+  getSpineIndex,
 } from "../utils/epub-cfi";
-import type { ParsedCfi } from "../utils/epub-cfi";
 import { rewriteResourcePaths } from "../utils/resource-urls";
 import { stripHtml } from "../search/engine";
 import { debounce } from "../utils/debounce";
@@ -532,12 +531,7 @@ function waitForPaginationReady(): Promise<void> {
 function getPageForCfi(cfi: string): number | null {
   const doc = readerContentRef.value?.getDocument?.();
   if (!doc?.body) return null;
-  const target = resolveCfi(cfi, doc.body);
-  if (!target) return null;
-  const element =
-    target.node.nodeType === Node.TEXT_NODE
-      ? (target.node.parentElement as HTMLElement | null)
-      : (target.node as HTMLElement);
+  const element = resolveCfiToElement(cfi, doc.body);
   if (!element) return null;
   const bodyRect = doc.body.getBoundingClientRect();
   const elRect = element.getBoundingClientRect();
@@ -655,13 +649,14 @@ function applySearchHighlight(
   container: Element,
   position: number,
   textLength: number,
+  spineIndex: number,
 ) {
   // Clean up any previous temp highlight
   clearTempSearchHighlight?.();
   clearTempSearchHighlight = null;
 
-  const startCfi = generateCfiFromCharOffset(0, container, position);
-  const endCfi = generateCfiFromCharOffset(0, container, position + textLength);
+  const startCfi = generateCfiFromCharOffset(spineIndex, container, position);
+  const endCfi = generateCfiFromCharOffset(spineIndex, container, position + textLength);
   if (!startCfi || !endCfi) return;
 
   const range = resolveCfiRange(startCfi, endCfi, doc.body);
@@ -772,7 +767,13 @@ async function navigateToSearchResult(result: SearchResult) {
 
       const doc = readerContentRef.value?.getDocument?.();
       if (doc?.body) {
-        applySearchHighlight(doc, doc.body, result.position, result.text.length);
+        applySearchHighlight(
+          doc,
+          doc.body,
+          result.position,
+          result.text.length,
+          targetChapter.order,
+        );
         const mark = doc.body.querySelector("mark");
         if (mark) {
           const bodyRect = doc.body.getBoundingClientRect();
@@ -797,7 +798,13 @@ async function navigateToSearchResult(result: SearchResult) {
           (article.querySelector(
             `[data-chapter-id="${targetChapter.id}"]`,
           ) as HTMLElement | null) || article;
-        applySearchHighlight(article.ownerDocument, root, result.position, result.text.length);
+        applySearchHighlight(
+          article.ownerDocument,
+          root,
+          result.position,
+          result.text.length,
+          targetChapter.order,
+        );
 
         // Scroll to the highlighted text in scroll mode
         await nextTick();
@@ -918,7 +925,7 @@ function handleSelectionChange(info: SelectionInfo | null) {
   const sel = doc.getSelection();
   if (!sel || sel.isCollapsed) return;
   const range = sel.getRangeAt(0);
-  const spineIndex = readerStore.chapters.findIndex((c) => c.id === readerStore.currentChapter?.id);
+  const spineIndex = readerStore.currentChapter?.order ?? 0;
 
   // CFI generation skips [data-annotation-id] spans (see isIgnorableNode),
   // so the generated paths are independent of rendered annotation state.
@@ -1028,13 +1035,17 @@ async function handleDeleteAnnotation(id: string) {
   applyAnnotations();
 }
 
-async function handleNavigateAnnotation(annotation: Annotation) {
-  const parsed = parseCfi(annotation.startCfi);
-  if (!parsed) return;
+async function navigateToCfiLocation(
+  cfi: string,
+  chapterId: string,
+  opts?: { loadAnnotations?: boolean },
+) {
+  const spineIndex = getSpineIndex(cfi);
+  if (spineIndex < 0) return;
 
-  const targetChapter = readerStore.chapters.find((c) => c.order === parsed.spineIndex);
+  const targetChapter = readerStore.chapters.find((c) => c.order === spineIndex);
   if (!targetChapter) {
-    const fallbackChapter = readerStore.chapters.find((c) => c.id === annotation.chapterId);
+    const fallbackChapter = readerStore.chapters.find((c) => c.id === chapterId);
     if (!fallbackChapter) return;
     await handleSelectChapter(fallbackChapter.id);
     return;
@@ -1052,21 +1063,27 @@ async function handleNavigateAnnotation(annotation: Annotation) {
     if (isPaginationMode.value) {
       await waitForPaginationReady();
 
-      await annotationsStore.loadAnnotationsForChapter(props.book.id, targetChapter.id);
-      applyAnnotations();
+      if (opts?.loadAnnotations) {
+        await annotationsStore.loadAnnotationsForChapter(props.book.id, targetChapter.id);
+        applyAnnotations();
+      }
 
-      const page = getPageForCfi(annotation.startCfi);
+      const page = getPageForCfi(cfi);
       if (page !== null) {
         pagination.goToPage(page);
+      } else {
+        pagination.goToPage(0);
       }
     } else {
-      await annotationsStore.loadAnnotationsForChapter(props.book.id, targetChapter.id);
-      await nextTick();
-      applyAnnotations();
+      if (opts?.loadAnnotations) {
+        await annotationsStore.loadAnnotationsForChapter(props.book.id, targetChapter.id);
+        await nextTick();
+        applyAnnotations();
+      }
 
       const article = readerContentRef.value?.getArticle?.();
       if (article) {
-        navigateToCfi(annotation.startCfi, article);
+        navigateToCfi(cfi, article);
       }
     }
 
@@ -1074,6 +1091,12 @@ async function handleNavigateAnnotation(annotation: Annotation) {
   } finally {
     isTransitioning.value = false;
   }
+}
+
+async function handleNavigateAnnotation(annotation: Annotation) {
+  await navigateToCfiLocation(annotation.startCfi, annotation.chapterId, {
+    loadAnnotations: true,
+  });
 }
 
 function createTempContainer(html: string): Element {
@@ -1088,47 +1111,7 @@ const deleteBookmark = async (bookmarkId: string, e: MouseEvent) => {
 };
 
 const navigateToBookmark = async (bookmark: Bookmark) => {
-  const parsed = parseCfi(bookmark.cfi);
-  if (!parsed) return;
-
-  const targetChapter = readerStore.chapters.find((c) => c.order === parsed.spineIndex);
-  if (!targetChapter) {
-    const fallbackChapter = readerStore.chapters.find((c) => c.id === bookmark.chapterId);
-    if (!fallbackChapter) return;
-    await handleSelectChapter(fallbackChapter.id);
-    return;
-  }
-
-  isTransitioning.value = true;
-
-  try {
-    if (targetChapter.id !== readerStore.currentChapter?.id) {
-      await handleSelectChapter(targetChapter.id, 0, false);
-    } else {
-      closeModal();
-    }
-
-    if (isPaginationMode.value) {
-      await waitForPaginationReady();
-
-      const page = getPageForCfi(bookmark.cfi);
-      if (page !== null) {
-        pagination.goToPage(page);
-      } else {
-        pagination.goToPage(0);
-      }
-      closeModal();
-    } else {
-      const article = readerContentRef.value?.getArticle?.();
-      if (!article) return;
-      const success = navigateToCfi(bookmark.cfi, article);
-      if (success) {
-        closeModal();
-      }
-    }
-  } finally {
-    isTransitioning.value = false;
-  }
+  await navigateToCfiLocation(bookmark.cfi, bookmark.chapterId);
 };
 
 const updateThemeClass = () => {

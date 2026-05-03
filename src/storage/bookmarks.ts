@@ -2,6 +2,7 @@
 
 import type { Bookmark } from "../core/types";
 import { ErrorCode, createReaderError } from "../core/errors";
+import { compareCfi, LEGACY_FALLBACK_CFI } from "../utils/epub-cfi";
 import { STORES, dbPut, dbGet, dbGetAll, dbDelete, dbGetAllFromIndex } from "./db";
 
 interface LegacyBookmark {
@@ -24,7 +25,7 @@ function migrateLegacyBookmark(bm: LegacyBookmark): Bookmark {
   const { position: _position, ...rest } = bm;
   return {
     ...rest,
-    cfi: `epubcfi(/6/1/2)`,
+    cfi: LEGACY_FALLBACK_CFI,
   };
 }
 
@@ -56,7 +57,7 @@ export async function getBookmarks(bookId: string): Promise<Bookmark[]> {
 
   return migrated.sort((a, b) => {
     if (a.cfi !== b.cfi) {
-      return compareCfiStrings(a.cfi, b.cfi);
+      return compareCfi(a.cfi, b.cfi);
     }
     return b.createdAt - a.createdAt;
   });
@@ -100,35 +101,4 @@ export function createBookmark(
     color,
     note,
   };
-}
-
-function compareCfiStrings(a: string, b: string): number {
-  const parseCfi = (cfi: string) => {
-    if (!cfi.startsWith("epubcfi(") || !cfi.endsWith(")")) return { spineIndex: 0, path: [] };
-    const inner = cfi.slice(8, -1);
-    const steps = inner.split("/").filter(Boolean);
-    const spineIndex = parseInt(steps[1] || "0", 10) - 1;
-    const path: number[] = [];
-    for (let i = 2; i < steps.length; i++) {
-      const match = steps[i].match(/^(\d+)/);
-      if (match) path.push(parseInt(match[1], 10));
-    }
-    return { spineIndex, path };
-  };
-
-  const parsedA = parseCfi(a);
-  const parsedB = parseCfi(b);
-
-  if (parsedA.spineIndex !== parsedB.spineIndex) {
-    return parsedA.spineIndex - parsedB.spineIndex;
-  }
-
-  const maxLen = Math.max(parsedA.path.length, parsedB.path.length);
-  for (let i = 0; i < maxLen; i++) {
-    const stepA = parsedA.path[i] ?? 0;
-    const stepB = parsedB.path[i] ?? 0;
-    if (stepA !== stepB) return stepA - stepB;
-  }
-
-  return 0;
 }

@@ -431,6 +431,23 @@ function resolveSteps(steps: CfiStep[], root: Node): { node: Node; offset: numbe
 }
 
 /**
+ * Resolve a CFI to the nearest Element (ascending from text node if needed).
+ */
+export function resolveCfiToElement(cfi: string, contentRoot: Element): Element | null {
+  const target = resolveCfi(cfi, contentRoot);
+  if (!target) return null;
+  if (target.node.nodeType === Node.TEXT_NODE) {
+    return (target.node as Text).parentElement;
+  }
+  return target.node as Element;
+}
+
+/**
+ * LEGACY_FALLBACK_CFI — used for bookmarks migrated from the pre-CFI schema.
+ */
+export const LEGACY_FALLBACK_CFI = "epubcfi(/6/1/2)";
+
+/**
  * Resolve a CFI to a DOM target within a content document.
  * @param cfi - The CFI string
  * @param contentRoot - Root element of the content document
