@@ -129,9 +129,94 @@ function applyDomCleanup(doc: Document | HTMLElement): void {
 }
 
 /**
+ * Split block elements that contain <br> children into separate elements
+ * for CSS column performance. Browsers struggle to break a single monolithic
+ * block across columns — each <br> becomes a natural column-break boundary.
+ *
+ * Processes deepest-first so nested structures are handled correctly.
+ * Skips <pre> (whitespace-significant) and heading tags.
+ */
+function splitBrBlocks(root: Document | HTMLElement): void {
+  const SKIP_TAGS = new Set(["pre", "code", "h1", "h2", "h3", "h4", "h5", "h6", "li"]);
+
+  // Collect parent elements that have at least one direct <br> child
+  const brs = root.querySelectorAll("br");
+  const parents = new Set<Element>();
+  for (const br of brs) {
+    const p = br.parentElement;
+    if (p && p !== root && !SKIP_TAGS.has(p.tagName.toLowerCase())) {
+      parents.add(p);
+    }
+  }
+  if (parents.size === 0) return;
+
+  // Deepest first so inner splits complete before outer parents are processed
+  const sorted = Array.from(parents).sort((a, b) => {
+    let da = 0,
+      db = 0;
+    let na: Node | null = a,
+      nb: Node | null = b;
+    while (na) {
+      da++;
+      na = na.parentNode;
+    }
+    while (nb) {
+      db++;
+      nb = nb.parentNode;
+    }
+    return db - da;
+  });
+
+  for (const el of sorted) {
+    const ownerDoc = el.ownerDocument!;
+    const tag = el.tagName.toLowerCase();
+    const fragment = ownerDoc.createDocumentFragment();
+    let group: Node[] = [];
+    let firstGroup = true;
+
+    const flush = () => {
+      const meaningful = group.filter((n) => {
+        if (n.nodeType === Node.TEXT_NODE) {
+          return n.textContent !== null && n.textContent.trim().length > 0;
+        }
+        return true;
+      });
+      if (meaningful.length > 0) {
+        const clone = ownerDoc.createElement(tag);
+        for (const attr of Array.from(el.attributes)) {
+          if (attr.name === "id" && !firstGroup) continue;
+          clone.setAttribute(attr.name, attr.value);
+        }
+        for (const n of meaningful) {
+          clone.appendChild(n.cloneNode(true));
+        }
+        fragment.appendChild(clone);
+        firstGroup = false;
+      }
+      group = [];
+    };
+
+    for (const child of Array.from(el.childNodes)) {
+      if (
+        child.nodeType === Node.ELEMENT_NODE &&
+        (child as Element).tagName.toLowerCase() === "br"
+      ) {
+        flush();
+      } else {
+        group.push(child);
+      }
+    }
+    flush();
+
+    el.replaceWith(fragment);
+  }
+}
+
+/**
  * Clean HTML content for reading
  * - Removes scripts, styles
- * - Normalizes whitespace
+ * - Silently drops <html>, <head>, <body> wrapper elements
+ * - Splits <br>-heavy blocks for CSS column performance
  * - Removes fixed width/height from media elements for responsive display
  *
  * Uses XML parsing first to avoid triggering external resource loading.
@@ -144,16 +229,7 @@ export function cleanHtml(html: string): string {
 
   if (!hasXmlError) {
     applyDomCleanup(xmlDoc);
-
-    // Normalize whitespace in text nodes
-    const walker = document.createTreeWalker(xmlDoc, NodeFilter.SHOW_TEXT, null);
-    const nodes: Text[] = [];
-    let node: Node | null;
-    while ((node = walker.nextNode())) {
-      if (node.nodeValue && node.nodeValue.trim()) {
-        nodes.push(node as Text);
-      }
-    }
+    splitBrBlocks(xmlDoc);
 
     return xmlDoc.documentElement.innerHTML;
   }
@@ -165,16 +241,7 @@ export function cleanHtml(html: string): string {
   temp.innerHTML = safeHtml;
 
   applyDomCleanup(temp);
-
-  // Normalize whitespace in text nodes
-  const walker = document.createTreeWalker(temp, NodeFilter.SHOW_TEXT, null);
-  const nodes: Text[] = [];
-  let node: Node | null;
-  while ((node = walker.nextNode())) {
-    if (node.nodeValue && node.nodeValue.trim()) {
-      nodes.push(node as Text);
-    }
-  }
+  splitBrBlocks(temp);
 
   const result = temp.innerHTML;
   return restoreResourceAttrs(result);
