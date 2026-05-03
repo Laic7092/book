@@ -48,8 +48,8 @@ export async function searchInBook(
       continue;
     }
 
-    // Strip HTML tags for searching
-    const textContent = stripHtml(content);
+    // Extract body text (excludes <head> content like <title>)
+    const textContent = extractBodyText(content);
 
     let match: RegExpExecArray | null;
     while ((match = regex.exec(textContent)) !== null) {
@@ -102,6 +102,16 @@ export function stripHtml(html: string): string {
   const temp = document.createElement("div");
   temp.innerHTML = html;
   return temp.textContent || temp.innerText || "";
+}
+
+/**
+ * Extract text content from HTML body only (excludes <head> content like <title>).
+ * Matches what the renderer displays, so search positions align with the DOM.
+ */
+function extractBodyText(html: string): string {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, "text/html");
+  return doc.body.textContent || "";
 }
 
 /**

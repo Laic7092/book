@@ -185,9 +185,14 @@ const search = useReaderSearch({
 const rewrittenLoadedContent = computed(() => {
   const chapters = chapterLoader.allLoadedContent.value;
   const resourceUrls = readerStore.resourceUrls;
-  if (!resourceUrls || resourceUrls.size === 0) return chapters;
   return chapters.map((ch) => {
-    const doc = rewriteResourcePaths(ch.content, resourceUrls);
+    if (resourceUrls && resourceUrls.size > 0) {
+      const doc = rewriteResourcePaths(ch.content, resourceUrls);
+      return { ...ch, content: doc.body.innerHTML };
+    }
+    // Always extract body HTML to match search text extraction
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(ch.content, "text/html");
     return { ...ch, content: doc.body.innerHTML };
   });
 });

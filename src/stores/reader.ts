@@ -298,28 +298,29 @@ export const useReaderStore = defineStore("reader", {
         return null;
       }
 
+      // Parse to extract body HTML consistently
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(content, "text/html");
+
       // Rewrite resource URLs if available
       if (this.resourceUrls && this.resourceUrls.size > 0) {
         const { rewriteResourcePaths } = await import("../utils/resource-urls");
-        const doc = rewriteResourcePaths(content, this.resourceUrls);
+        const rewrittenDoc = rewriteResourcePaths(content, this.resourceUrls);
 
-        // 收集资源元素
         const resources: HTMLElement[] = [];
-        const headElements = Array.from(doc.head.children);
+        const headElements = Array.from(rewrittenDoc.head.children);
         for (const element of headElements) {
-          // 克隆元素
-          const clonedElement = element.cloneNode(true) as HTMLElement;
-          resources.push(clonedElement);
+          resources.push(element.cloneNode(true) as HTMLElement);
         }
 
         return {
-          html: doc.body.innerHTML,
+          html: rewrittenDoc.body.innerHTML,
           resources,
         };
       }
 
       return {
-        html: content,
+        html: doc.body.innerHTML,
         resources: [],
       };
     },
