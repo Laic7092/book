@@ -8,13 +8,6 @@ export interface PluginEventMap {
   "book:opened": { bookId: string };
   "book:closed": { bookId: string; chapterId?: string };
   "book:deleted": { bookId: string };
-  "bookmark:create": {
-    bookId: string;
-    chapterId: string;
-    cfi: string;
-    title: string;
-    contentPreview: string;
-  };
   [key: string]: unknown;
 }
 

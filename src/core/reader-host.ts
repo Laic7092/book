@@ -28,8 +28,12 @@ export interface ReaderHost {
   updateSettings(partial: Partial<ReaderSettings>): void;
 
   // ── Actions ──
-  createBookmark(): Promise<void>;
   openModal(name: string): void;
+
+  // ── Pagination state (for plugins that compute CFI) ──
+  getCurrentPage(): number;
+  getTotalPages(): number;
+  getCurrentChapterRawHtml(): string;
 
   // ── Content pipeline ──
   getChapterContent(chapterId: string): Promise<string | undefined>;

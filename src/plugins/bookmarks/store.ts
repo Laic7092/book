@@ -1,7 +1,14 @@
 import { defineStore } from "pinia";
 import type { Bookmark } from "../../core/types";
 import { ErrorCode, createReaderError } from "../../core/errors";
-import { compareCfi, LEGACY_FALLBACK_CFI } from "../../utils/epub-cfi";
+import {
+  compareCfi,
+  LEGACY_FALLBACK_CFI,
+  generateCfiFromElement,
+  generateCfiFromCharOffset,
+} from "../../utils/epub-cfi";
+import { stripHtml } from "../../utils/dom";
+import { getReaderHost } from "../../core/reader-host";
 import type { PluginStorageAdapter } from "../types";
 
 let adapter: PluginStorageAdapter | null = null;
@@ -104,6 +111,63 @@ export const useBookmarksStore = defineStore("bookmarks", {
         this.bookmarks.push(bookmark);
       }
       return bookmark;
+    },
+
+    /** Compute CFI from current reading position and persist a bookmark. */
+    async addBookmarkFromHost(): Promise<void> {
+      const host = getReaderHost();
+      if (!host) return;
+
+      const chapter = host.getCurrentChapter();
+      if (!chapter) return;
+
+      const article = host.getArticle();
+      if (!article) return;
+
+      const bookId = host.getCurrentBookId();
+      if (!bookId) return;
+
+      let cfi: string;
+      let preview: string;
+
+      if (host.isPaginationMode.value) {
+        const fullHtml = host.getCurrentChapterRawHtml();
+        if (!fullHtml) return;
+
+        const totalPages = host.getTotalPages();
+        const currentPage = host.getCurrentPage();
+        const fullText = fullHtml.replace(/<[^>]*>/g, "");
+        const charOffset = Math.floor(((currentPage + 0.5) / totalPages) * fullText.length);
+
+        const tempContainer = document.createElement("div");
+        tempContainer.innerHTML = fullHtml;
+        cfi = generateCfiFromCharOffset(chapter.order ?? 0, tempContainer, charOffset);
+
+        const plainText = stripHtml(fullHtml).replace(/\s+/g, " ").trim();
+        preview = plainText.slice(Math.max(charOffset - 1, 0), charOffset + 50);
+      } else {
+        const articleRect = article.getBoundingClientRect();
+        const viewportCenter = articleRect.top + article.clientHeight * 0.2;
+        const elementAtPoint = document.elementFromPoint(articleRect.left + 20, viewportCenter);
+
+        let targetEl: Element;
+        if (elementAtPoint && article.contains(elementAtPoint)) {
+          targetEl =
+            elementAtPoint.closest("p, h1, h2, h3, h4, h5, h6, li, div, section") || article;
+        } else {
+          targetEl = article;
+        }
+
+        cfi = generateCfiFromElement(chapter.order ?? 0, targetEl, article);
+
+        const plainText = article.textContent?.replace(/\s+/g, " ").trim() || "";
+        const targetText = targetEl.textContent?.replace(/\s+/g, " ").trim() || "";
+        const offsetInArticle = plainText.indexOf(targetText.slice(0, 30));
+        preview = plainText.slice(Math.max(offsetInArticle - 1, 0), offsetInArticle + 50);
+      }
+
+      await this.addBookmark(bookId, chapter.id, cfi, chapter.title, preview);
+      await this.loadBookmarks(bookId);
     },
 
     async removeBookmark(bookmarkId: string): Promise<void> {

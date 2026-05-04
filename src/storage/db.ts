@@ -73,13 +73,6 @@ export async function openDB(): Promise<IDBDatabase> {
       // v2: title field added (optional, no index needed)
       // v3: order field added for proper chapter sorting
 
-      // Bookmarks store
-      if (!db.objectStoreNames.contains(STORES.BOOKMARKS)) {
-        const bookmarksStore = db.createObjectStore(STORES.BOOKMARKS, { keyPath: "id" });
-        bookmarksStore.createIndex("bookId", "bookId");
-        bookmarksStore.createIndex("createdAt", "createdAt");
-      }
-
       // Settings store
       if (!db.objectStoreNames.contains(STORES.SETTINGS)) {
         db.createObjectStore(STORES.SETTINGS, { keyPath: "key" });
@@ -94,23 +87,7 @@ export async function openDB(): Promise<IDBDatabase> {
         resourcesStore.createIndex("type", "type");
       }
 
-      // Stats store (v5): stores reading statistics
-      if (!db.objectStoreNames.contains(STORES.STATS)) {
-        const statsStore = db.createObjectStore(STORES.STATS, { keyPath: "bookId" });
-        statsStore.createIndex("lastActiveDate", "lastActiveDate");
-        statsStore.createIndex("lastReadAt", "lastReadAt");
-      }
-
       // v6: CFI field added to bookmarks (migration handled lazily in getBookmarks)
-
-      // v7: Annotations store
-      if (!db.objectStoreNames.contains(STORES.ANNOTATIONS)) {
-        const annotationsStore = db.createObjectStore(STORES.ANNOTATIONS, { keyPath: "id" });
-        annotationsStore.createIndex("bookId", "bookId", { unique: false });
-        annotationsStore.createIndex("chapterId", "chapterId", { unique: false });
-        annotationsStore.createIndex("book_chapter", ["bookId", "chapterId"], { unique: false });
-        annotationsStore.createIndex("createdAt", "createdAt", { unique: false });
-      }
 
       // v8: Raw zip storage for lazy EPUB extraction
       if (!db.objectStoreNames.contains(STORES.ZIPS)) {
@@ -223,68 +200,4 @@ export async function dbGetAllFromIndex<T>(
 
 export async function initSettings(settings: { key: string; value: unknown }): Promise<void> {
   await dbPut(STORES.SETTINGS, settings);
-}
-
-// ── v9 plugin_store data migration ──
-
-const MIGRATION_V9_KEY = "__migration_v9_done__";
-
-async function isMigrationV9Done(): Promise<boolean> {
-  const record = await dbGet<{ value: boolean }>(STORES.SETTINGS, MIGRATION_V9_KEY);
-  return record?.value === true;
-}
-
-async function markMigrationV9Done(): Promise<void> {
-  await dbPut(STORES.SETTINGS, { key: MIGRATION_V9_KEY, value: true });
-}
-
-/** Migrate data from legacy shared stores into plugin_store. */
-export async function migrateToPluginStore(): Promise<void> {
-  if (await isMigrationV9Done()) return;
-
-  const db = await openDB();
-
-  // ── bookmarks → plugin_store (pluginId: "bookmarks") ──
-  if (db.objectStoreNames.contains(STORES.BOOKMARKS)) {
-    const bookmarks = await dbGetAll<Record<string, unknown>>(STORES.BOOKMARKS);
-    for (const bm of bookmarks) {
-      await dbPut(STORES.PLUGIN_STORE, {
-        pluginId: "bookmarks",
-        key: bm.id as string,
-        value: bm,
-        createdAt: (bm.createdAt as number) || Date.now(),
-      });
-    }
-  }
-
-  // ── annotations → plugin_store (pluginId: "annotations") ──
-  if (db.objectStoreNames.contains(STORES.ANNOTATIONS)) {
-    const annotations = await dbGetAll<Record<string, unknown>>(STORES.ANNOTATIONS);
-    for (const ann of annotations) {
-      await dbPut(STORES.PLUGIN_STORE, {
-        pluginId: "annotations",
-        key: ann.id as string,
-        value: ann,
-        createdAt: (ann.createdAt as number) || Date.now(),
-      });
-    }
-  }
-
-  // ── stats → plugin_store (pluginId: "stats") ──
-  if (db.objectStoreNames.contains(STORES.STATS)) {
-    const stats = await dbGetAll<Record<string, unknown>>(STORES.STATS);
-    for (const s of stats) {
-      // The sessions record has bookId = "__reading_sessions__"
-      const bid = s.bookId as string;
-      const key = bid === "__reading_sessions__" ? "sessions" : `stats:${bid}`;
-      await dbPut(STORES.PLUGIN_STORE, {
-        pluginId: "stats",
-        key,
-        value: s,
-        createdAt: Date.now(),
-      });
-    }
-  }
-
-  await markMigrationV9Done();
 }

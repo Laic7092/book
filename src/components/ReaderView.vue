@@ -20,9 +20,8 @@ import {
   PageIndicator,
 } from "../components/reader";
 import { ModalWrapper } from "../components/modals";
-import type { Bookmark, SearchResult, Chapter, Book } from "../core/types";
+import type { SearchResult, Chapter, Book } from "../core/types";
 import {
-  generateCfiFromElement,
   generateCfiFromCharOffset,
   generateCfiFromRange,
   navigateToCfi,
@@ -31,14 +30,12 @@ import {
   getSpineIndex,
 } from "../utils/epub-cfi";
 import { rewriteResourcePaths } from "../utils/resource-urls";
-import { stripHtml } from "../utils/dom";
 import { debounce } from "../utils/debounce";
 import { SWIPE_THRESHOLD, TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../utils/constants";
 import { registerReaderHost, unregisterReaderHost } from "../core/reader-host";
 import type { ReaderHost } from "../core/reader-host";
 import { getSearchApis, getOverlayComponents, pluginStateVersion } from "../plugins/registry";
 import { STORES, dbPut, dbGet } from "../storage/db";
-import { pluginEvents } from "../plugins/context";
 import { getChapterContent as fetchChapterContent } from "../storage/books";
 
 const props = defineProps<{
@@ -255,11 +252,17 @@ const host: ReaderHost = {
   updateSettings(partial) {
     settingsStore.updateSettings(partial);
   },
-  async createBookmark() {
-    await addBookmark();
-  },
   openModal(name: string) {
     uiStore.openModal(name);
+  },
+  getCurrentPage() {
+    return pagination.currentPage.value;
+  },
+  getTotalPages() {
+    return pagination.totalPages.value;
+  },
+  getCurrentChapterRawHtml() {
+    return pagination.rawHtml.value;
   },
   async getChapterContent(chapterId: string) {
     return fetchChapterContent(props.book.id, chapterId);
@@ -856,76 +859,6 @@ async function navigateToSearchResult(result: SearchResult) {
     isTransitioning.value = false;
   }
 }
-
-// ── Bookmark handlers ──
-
-function createTempContainer(html: string): Element {
-  const container = document.createElement("div");
-  container.innerHTML = html;
-  return container;
-}
-
-function extractPreviewAround(text: string, offset: number): string {
-  return text.slice(Math.max(offset - 1, 0), offset + 50);
-}
-
-const addBookmark = async () => {
-  const chapter = readerStore.getCurrentChapter();
-  if (!chapter) return;
-  const article = readerContentRef.value?.getArticle?.() ?? null;
-  if (!article) return;
-
-  let cfi: string;
-  let preview: string;
-
-  if (isPaginationMode.value) {
-    const fullHtml = pagination.rawHtml.value;
-    if (!fullHtml) return;
-
-    const totalPages = pagination.totalPages.value;
-    const currentPage = pagination.currentPage.value;
-    const fullText = fullHtml.replace(/<[^>]*>/g, "");
-    const charOffset = Math.floor(((currentPage + 0.5) / totalPages) * fullText.length);
-
-    cfi = generateCfiFromCharOffset(
-      readerStore.currentChapter?.order ?? 0,
-      createTempContainer(fullHtml),
-      charOffset,
-    );
-
-    const plainText = stripHtml(fullHtml).replace(/\s+/g, " ").trim();
-    preview = extractPreviewAround(plainText, charOffset);
-  } else {
-    const viewportCenter = article.getBoundingClientRect().top + article.clientHeight * 0.2;
-    const elementAtPoint = document.elementFromPoint(
-      article.getBoundingClientRect().left + 20,
-      viewportCenter,
-    );
-
-    let targetEl: Element;
-    if (elementAtPoint && article.contains(elementAtPoint)) {
-      targetEl = elementAtPoint.closest("p, h1, h2, h3, h4, h5, h6, li, div, section") || article;
-    } else {
-      targetEl = article;
-    }
-
-    cfi = generateCfiFromElement(readerStore.currentChapter?.order ?? 0, targetEl, article);
-
-    const plainText = article.textContent?.replace(/\s+/g, " ").trim() || "";
-    const targetText = targetEl.textContent?.replace(/\s+/g, " ").trim() || "";
-    const offsetInArticle = plainText.indexOf(targetText.slice(0, 30));
-    preview = extractPreviewAround(plainText, Math.max(0, offsetInArticle));
-  }
-
-  void pluginEvents.emit("bookmark:create", {
-    bookId: props.book.id,
-    chapterId: chapter.id,
-    cfi,
-    title: chapter.title,
-    contentPreview: preview,
-  });
-  closeModal();
-};
 
 // ── CFI navigation ──
 

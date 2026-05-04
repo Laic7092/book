@@ -6,16 +6,12 @@ import App from "./App.vue";
 import "./styles/index.css";
 
 import { registerPlugin, initializePlugins, loadPluginStates } from "./plugins/registry";
-import { migrateToPluginStore } from "./storage/db";
 import { PLUGIN_BRAND } from "./plugins/types";
 import type { Plugin } from "./plugins/types";
 
 const app = createApp(App);
 const pinia = createPinia();
 app.use(pinia);
-
-// v9 one-time migration: copy legacy store data into plugin_store
-await migrateToPluginStore();
 
 // Phase 1: auto-discover and register all plugins
 const modules = import.meta.glob<Record<string, unknown>>("./plugins/*/index.ts", { eager: true });

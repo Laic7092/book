@@ -15,9 +15,6 @@ export const bookmarksPlugin: Plugin = {
     store = useBookmarksStore(ctx.pinia);
 
     ctx.events.on("book:opened", ({ bookId }) => store?.loadBookmarks(bookId));
-    ctx.events.on("bookmark:create", (data) =>
-      store?.addBookmark(data.bookId, data.chapterId, data.cfi, data.title, data.contentPreview),
-    );
 
     ctx.ui.registerModal("bookmarks", BookmarksPanel);
     ctx.ui.registerFooterAction({

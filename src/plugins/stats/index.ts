@@ -17,8 +17,9 @@ export const statsPlugin: Plugin = {
     ctx.events.on("book:opened", ({ bookId }) => engine.startSession(bookId));
     ctx.events.on("book:closed", ({ bookId, chapterId }) => engine.endSession(bookId, chapterId));
     ctx.events.on("book:deleted", ({ bookId }) => {
-      engine.deleteStats(bookId);
-      triggerStatsRefresh();
+      void engine.deleteStats(bookId).then(() => {
+        triggerStatsRefresh();
+      });
     });
 
     ctx.ui.registerBookshelfWidget(StatsBar);

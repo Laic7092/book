@@ -21,11 +21,7 @@ function handleNavigate(bookmark: Bookmark) {
 }
 
 async function handleAdd() {
-  await host?.createBookmark();
-  // ReaderView saves directly to IndexedDB; reload store to reflect the new bookmark
-  if (bookmarksStore.currentBookId) {
-    await bookmarksStore.loadBookmarks(bookmarksStore.currentBookId);
-  }
+  await bookmarksStore.addBookmarkFromHost();
 }
 
 function handleDelete(bookmarkId: string, event: MouseEvent) {
