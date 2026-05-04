@@ -1,10 +1,8 @@
 // Bookmarks Store - Manages bookmark state and operations
 
 import { defineStore } from "pinia";
-import type { Bookmark } from "../core/types";
-import { ErrorCode, createReaderError } from "../core/errors";
-import * as bookmarksStore from "../storage/bookmarks";
-import { dbPut, STORES } from "../storage/db";
+import type { Bookmark } from "../../core/types";
+import * as bookmarksStore from "./storage";
 
 export interface BookmarksState {
   currentBookId: string | null;
@@ -60,16 +58,10 @@ export const useBookmarksStore = defineStore("bookmarks", {
     },
 
     async updateBookmark(bookmarkId: string, updates: Partial<Bookmark>): Promise<void> {
-      const bookmark = await bookmarksStore.getBookmark(bookmarkId);
-      if (!bookmark) {
-        throw createReaderError("Bookmark not found", ErrorCode.BOOKMARK_NOT_FOUND);
-      }
-
-      const updated = { ...bookmark, ...updates };
-      await dbPut(STORES.BOOKMARKS, updated);
-
+      await bookmarksStore.updateBookmark({ id: bookmarkId, ...updates });
+      const updated = await bookmarksStore.getBookmark(bookmarkId);
       const index = this.bookmarks.findIndex((b) => b.id === bookmarkId);
-      if (index !== -1) {
+      if (index !== -1 && updated) {
         this.bookmarks[index] = updated;
       }
     },
@@ -90,8 +82,8 @@ export const useBookmarksStore = defineStore("bookmarks", {
       const existing = await bookmarksStore.getBookmark(id);
 
       if (existing) {
-        await dbPut(STORES.BOOKMARKS, {
-          ...existing,
+        await bookmarksStore.updateBookmark({
+          id,
           chapterId,
           cfi,
           note: JSON.stringify(progressData),

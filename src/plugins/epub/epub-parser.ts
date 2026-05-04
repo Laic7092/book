@@ -2,9 +2,9 @@
 
 import { ZipReader, TextWriter, Uint8ArrayReader } from "@zip.js/zip.js";
 import type { Entry, FileEntry } from "@zip.js/zip.js";
-import { BaseBookParser, generateId, parseXML, cleanHtml } from "./base";
-import type { BookParser, ParsedBook, Chapter } from "../core/types";
-import { ErrorCode, createReaderError } from "../core/errors";
+import { BaseBookParser, generateId, parseXML, cleanHtml } from "../../core/base";
+import type { BookParser, ParsedBook, Chapter } from "../../core/types";
+import { ErrorCode, createReaderError } from "../../core/errors";
 
 interface EpubMetadata {
   title: string;

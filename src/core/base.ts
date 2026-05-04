@@ -1,7 +1,7 @@
 // Base parser interface and utilities
 
-import type { BookParser, ParsedBook, Chapter } from "../core/types";
-import { ErrorCode, createReaderError } from "../core/errors";
+import type { BookParser, ParsedBook, Chapter } from "./types";
+import { ErrorCode, createReaderError } from "./errors";
 
 /**
  * Generate a unique ID

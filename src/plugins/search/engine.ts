@@ -1,16 +1,16 @@
 // Full-text search engine
 
-import type { SearchResult, Chapter } from "../core/types";
-import { getChapterContent } from "../storage/books";
+import type { SearchResult, Chapter } from "../../core/types";
 
 export interface SearchOptions {
   caseSensitive?: boolean;
   wholeWord?: boolean;
   maxResults?: number;
   contextLength?: number;
+  getChapterContent?: (bookId: string, chapterId: string) => Promise<string | undefined>;
 }
 
-const DEFAULT_OPTIONS: Required<SearchOptions> = {
+const DEFAULT_OPTIONS: Required<Omit<SearchOptions, "getChapterContent">> = {
   caseSensitive: false,
   wholeWord: false,
   maxResults: 100,
@@ -43,7 +43,8 @@ export async function searchInBook(
       break;
     }
 
-    const content = await getChapterContent(bookId, chapter.id);
+    if (!opts.getChapterContent) continue;
+    const content = await opts.getChapterContent(bookId, chapter.id);
     if (!content) {
       continue;
     }
@@ -98,12 +99,6 @@ function extractContext(text: string, position: number, contextLength: number): 
 /**
  * Strip HTML tags from content
  */
-export function stripHtml(html: string): string {
-  const temp = document.createElement("div");
-  temp.innerHTML = html;
-  return temp.textContent || temp.innerText || "";
-}
-
 /**
  * Extract text content from HTML body only (excludes <head> content like <title>).
  * Matches what the renderer displays, so search positions align with the DOM.

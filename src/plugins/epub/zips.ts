@@ -1,6 +1,6 @@
 // Raw zip ArrayBuffer storage for lazy EPUB extraction
 
-import { STORES, dbPut, dbGet, dbDelete } from "./db";
+import { STORES, dbPut, dbGet, dbDelete } from "../../storage/db";
 
 interface StoredZip {
   bookId: string;

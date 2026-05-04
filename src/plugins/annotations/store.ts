@@ -1,8 +1,6 @@
 import { defineStore } from "pinia";
-import type { Annotation } from "../core/types";
-import { ErrorCode, createReaderError } from "../core/errors";
-import * as annotationsStorage from "../storage/annotations";
-import { dbPut, STORES } from "../storage/db";
+import type { Annotation } from "../../core/types";
+import * as annotationsStorage from "./storage";
 
 export interface AnnotationsState {
   currentBookId: string | null;
@@ -65,15 +63,10 @@ export const useAnnotationsStore = defineStore("annotations", {
     },
 
     async updateAnnotation(id: string, updates: Partial<Annotation>): Promise<void> {
-      const existing = await annotationsStorage.getAnnotation(id);
-      if (!existing) {
-        throw createReaderError("Annotation not found", ErrorCode.BOOKMARK_NOT_FOUND);
-      }
-      const updated = { ...existing, ...updates, updatedAt: Date.now() };
-      await dbPut(STORES.ANNOTATIONS, updated);
-
+      await annotationsStorage.updateAnnotation(id, updates);
+      const updated = await annotationsStorage.getAnnotation(id);
       const index = this.annotations.findIndex((a) => a.id === id);
-      if (index !== -1) {
+      if (index !== -1 && updated) {
         this.annotations[index] = updated;
       }
     },

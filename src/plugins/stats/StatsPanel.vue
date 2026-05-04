@@ -1,12 +1,21 @@
 <script setup lang="ts">
+import { ref, onMounted, computed } from "vue";
 import type { BookReadingStats } from "../../core/types";
 import { formatDuration, formatRelativeTime, formatHour } from "../../utils/time";
-import ModalHeader from "./ModalHeader.vue";
+import ModalHeader from "../../components/modals/ModalHeader.vue";
+import { getReaderHost } from "../../core/reader-host";
+import { getStats } from "./storage";
 
-defineProps<{
-  stats: BookReadingStats | null;
-  totalChapters: number;
-}>();
+const stats = ref<BookReadingStats | null>(null);
+const host = getReaderHost();
+const totalChapters = computed(() => host?.getChapters().length ?? 0);
+
+onMounted(async () => {
+  const bookId = host?.getCurrentBookId();
+  if (bookId) {
+    stats.value = await getStats(bookId);
+  }
+});
 
 const emit = defineEmits<{
   (e: "close"): void;

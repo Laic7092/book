@@ -3,23 +3,23 @@
 import { defineStore } from "pinia";
 import type { Book, Chapter, ParsedBook } from "../core/types";
 import { ErrorCode, createReaderError } from "../core/errors";
-import { TxtParser } from "../parsers/txt-parser";
-import { EpubParser } from "../parsers/epub-parser";
 import type { BookParser } from "../core/types";
+import {
+  getParsers,
+  dispatchOnBookOpen,
+  dispatchOnBookClose,
+  getResourceResolver,
+  getSessionTracker,
+} from "../plugins/registry";
 import * as booksStore from "../storage/books";
-import * as resourcesStore from "../storage/resources";
-import * as statsStore from "../storage/stats";
 import { assertValidBookFile, validateBookId } from "../utils/validation";
-
-/**
- * Parser registry
- */
-const parsers: BookParser[] = [new TxtParser(), new EpubParser()];
 
 /**
  * Get appropriate parser for a file
  */
 function getParserForFile(file: File): BookParser | null {
+  const parsers = getParsers();
+
   for (const parser of parsers) {
     if (parser.supportsFormat(file.type)) {
       return parser;
@@ -28,11 +28,14 @@ function getParserForFile(file: File): BookParser | null {
 
   // Fallback: try parsers based on file extension
   const ext = file.name.split(".").pop()?.toLowerCase();
-  if (ext === "txt") {
-    return new TxtParser();
-  }
-  if (ext === "epub") {
-    return new EpubParser();
+  for (const parser of parsers) {
+    if (
+      parser.supportsFormat(
+        ext === "txt" ? "text/plain" : ext === "epub" ? "application/epub+zip" : "",
+      )
+    ) {
+      return parser;
+    }
   }
 
   return null;
@@ -99,7 +102,7 @@ async function resolveMissingResources(
   const results = await Promise.all(
     missingPaths.map(async (path) => ({
       path,
-      url: await resourcesStore.getResourceUrl(bookId, path),
+      url: await getResourceResolver()?.getResourceUrl(bookId, path),
     })),
   );
 
@@ -185,7 +188,7 @@ export const useReaderStore = defineStore("reader", {
 
       // Revoke previous blob URLs before loading new book
       if (this.resourceUrls) {
-        resourcesStore.revokeResourceUrls(this.resourceUrls);
+        getResourceResolver()?.revokeResourceUrls(this.resourceUrls);
         this.resourceUrls = undefined;
       }
 
@@ -210,6 +213,9 @@ export const useReaderStore = defineStore("reader", {
         this.currentBook = book;
         this.chapters = chapters;
 
+        // Notify plugins
+        void dispatchOnBookOpen(bookId);
+
         // Initialize empty resource URL map — resources are lazily resolved per-chapter
         this.resourceUrls = new Map();
 
@@ -217,7 +223,7 @@ export const useReaderStore = defineStore("reader", {
         await booksStore.updateLastRead(bookId);
 
         // Start reading session
-        await statsStore.startSession(bookId);
+        await getSessionTracker()?.startSession(bookId);
 
         this.currentChapter = chapters.length > 0 ? chapters[0] : null;
 
@@ -307,12 +313,12 @@ export const useReaderStore = defineStore("reader", {
       // End reading session if a book is open
       if (this.currentBook) {
         const chapterId = this.currentChapter?.id;
-        await statsStore.endSession(this.currentBook.id, chapterId);
+        await getSessionTracker()?.endSession(this.currentBook.id, chapterId);
       }
 
       // Revoke blob URLs to free memory
       if (this.resourceUrls) {
-        resourcesStore.revokeResourceUrls(this.resourceUrls);
+        getResourceResolver()?.revokeResourceUrls(this.resourceUrls);
       }
 
       this.currentBook = null;
@@ -321,6 +327,8 @@ export const useReaderStore = defineStore("reader", {
       this.resourceUrls = undefined;
       this.readingProgress = 0;
       this.chapterProgress = 0;
+
+      void dispatchOnBookClose();
     },
 
     /**
@@ -329,7 +337,7 @@ export const useReaderStore = defineStore("reader", {
     reset() {
       // Revoke blob URLs before resetting to prevent memory leak
       if (this.resourceUrls) {
-        resourcesStore.revokeResourceUrls(this.resourceUrls);
+        getResourceResolver()?.revokeResourceUrls(this.resourceUrls);
       }
       this.$reset();
     },

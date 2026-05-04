@@ -1,6 +1,6 @@
-import type { Annotation } from "../core/types";
-import { resolveCfiRange, compareCfi } from "../utils/epub-cfi";
-import { hexToRgba } from "../utils/colors";
+import type { Annotation } from "../../core/types";
+import { resolveCfiRange, compareCfi } from "../../utils/epub-cfi";
+import { hexToRgba } from "../../utils/colors";
 
 export interface SelectionInfo {
   rect: { top: number; left: number; bottom: number; right: number };

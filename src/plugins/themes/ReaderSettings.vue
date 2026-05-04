@@ -1,21 +1,18 @@
 <script setup lang="ts">
 import { onUnmounted } from "vue";
-import type { ReaderSettings } from "../../core/types";
 import {
   THEME_OPTIONS,
   SCROLL_MODE_OPTIONS,
   ANIMATION_OPTIONS,
   FONT_SIZE_PRESETS,
 } from "../../utils/settings";
+import { getReaderHost } from "../../core/reader-host";
 
-const props = defineProps<{
-  settings: ReaderSettings;
-}>();
+const host = getReaderHost()!;
+const settings = host.getSettings();
 
 const emit = defineEmits<{
-  (e: "update-settings", settings: Partial<ReaderSettings>): void;
   (e: "close"): void;
-  (e: "open-typography-settings"): void;
 }>();
 
 let searchDebounceTimer: number | null = null;
@@ -55,7 +52,7 @@ onUnmounted(() => {
               v-for="theme in THEME_OPTIONS"
               :key="theme.value"
               :class="['theme-btn', { active: settings.theme === theme.value }]"
-              @click="emit('update-settings', { theme: theme.value })"
+              @click="host.updateSettings({ theme: theme.value })"
             >
               <div :class="['theme-preview', `theme-${theme.value}`]"></div>
               <span>{{ theme.label }}</span>
@@ -71,7 +68,7 @@ onUnmounted(() => {
               v-for="size in FONT_SIZE_PRESETS"
               :key="size"
               :class="['size-btn', { active: settings.fontSize === size }]"
-              @click="emit('update-settings', { fontSize: size })"
+              @click="host.updateSettings({ fontSize: size })"
             >
               {{ size }}
             </button>
@@ -86,7 +83,7 @@ onUnmounted(() => {
               v-for="mode in SCROLL_MODE_OPTIONS"
               :key="mode.value"
               :class="['mode-btn', { active: (settings.scrollMode || 'vertical') === mode.value }]"
-              @click="emit('update-settings', { scrollMode: mode.value })"
+              @click="host.updateSettings({ scrollMode: mode.value })"
             >
               <svg
                 v-if="mode.value === 'vertical'"
@@ -134,7 +131,7 @@ onUnmounted(() => {
                 'anim-btn',
                 { active: (settings.paginationAnimation || 'fade') === anim.value },
               ]"
-              @click="emit('update-settings', { paginationAnimation: anim.value })"
+              @click="host.updateSettings({ paginationAnimation: anim.value })"
             >
               {{ anim.label }}
             </button>
@@ -143,7 +140,7 @@ onUnmounted(() => {
       </div>
 
       <!-- 自定义排版按钮 -->
-      <button class="typography-btn" @click="emit('open-typography-settings')">
+      <button class="typography-btn" @click="host.openModal('typographySettings')">
         <svg
           width="18"
           height="18"

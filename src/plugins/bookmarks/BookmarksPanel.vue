@@ -1,22 +1,37 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { Bookmark } from "../../core/types";
-import ModalHeader from "./ModalHeader.vue";
+import ModalHeader from "../../components/modals/ModalHeader.vue";
+import { getReaderHost } from "../../core/reader-host";
+import { useBookmarksStore } from "./store";
 
-const props = defineProps<{
-  bookmarks: Bookmark[];
-}>();
+const bookmarksStore = useBookmarksStore();
+const host = getReaderHost();
 
 const visibleBookmarks = computed(() =>
-  props.bookmarks.filter((b) => !b.id.startsWith("__progress__")),
+  bookmarksStore.bookmarks.filter((b) => !b.id.startsWith("__progress__")),
 );
 
 const emit = defineEmits<{
-  (e: "add-bookmark"): void;
-  (e: "delete-bookmark", bookmarkId: string, event: MouseEvent): void;
-  (e: "navigate-bookmark", bookmark: Bookmark): void;
   (e: "close"): void;
 }>();
+
+function handleNavigate(bookmark: Bookmark) {
+  host?.navigateToCfi(bookmark.cfi, bookmark.chapterId);
+}
+
+async function handleAdd() {
+  await host?.createBookmark();
+  // ReaderView saves directly to IndexedDB; reload store to reflect the new bookmark
+  if (bookmarksStore.currentBookId) {
+    await bookmarksStore.loadBookmarks(bookmarksStore.currentBookId);
+  }
+}
+
+function handleDelete(bookmarkId: string, event: MouseEvent) {
+  event.stopPropagation();
+  bookmarksStore.removeBookmark(bookmarkId);
+}
 
 function formatDate(timestamp: number): string {
   const date = new Date(timestamp);
@@ -38,7 +53,7 @@ function formatDate(timestamp: number): string {
   <div class="modal-content-inner">
     <ModalHeader title="Bookmarks" @close="emit('close')" />
     <div class="bookmark-bar-fixed">
-      <button class="add-bookmark-btn" @click="emit('add-bookmark')">
+      <button class="add-bookmark-btn" @click="handleAdd()">
         <svg
           width="16"
           height="16"
@@ -55,7 +70,7 @@ function formatDate(timestamp: number): string {
     <div class="modal-body scroll-body">
       <ul class="bookmarks-list">
         <li v-for="bm in visibleBookmarks" :key="bm.id" class="bookmark-item">
-          <div class="bookmark-card" @click.stop="emit('navigate-bookmark', bm)">
+          <div class="bookmark-card" @click.stop="handleNavigate(bm)">
             <div
               class="bookmark-color-indicator"
               :style="{ backgroundColor: bm.color || 'var(--accent)' }"
@@ -69,7 +84,7 @@ function formatDate(timestamp: number): string {
             </div>
             <button
               class="action-btn delete-btn"
-              @click.stop="emit('delete-bookmark', bm.id, $event)"
+              @click.stop="handleDelete(bm.id, $event)"
               aria-label="Delete bookmark"
               title="Delete bookmark"
             >

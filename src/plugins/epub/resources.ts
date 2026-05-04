@@ -1,9 +1,9 @@
 // Resources storage module for EPUB assets (images, CSS, fonts)
 
-import type { Resource } from "../core/types";
-import { STORES, dbPut, dbDelete, dbGet, dbGetAllFromIndex } from "./db";
+import type { Resource } from "../../core/types";
+import { STORES, dbPut, dbDelete, dbGet, dbGetAllFromIndex } from "../../storage/db";
 import { getZip } from "./zips";
-import { EpubParser } from "../parsers/epub-parser";
+import { getLazyExtractResource } from "../registry";
 
 function getMimeTypeFromExtension(path: string): string {
   const ext = path.split(".").pop()?.toLowerCase();
@@ -110,7 +110,9 @@ export async function getResourceUrl(bookId: string, resourceId: string): Promis
   if (!zipData) return null;
 
   try {
-    const data = await EpubParser.extractResource(zipData, resourceId);
+    const extractResource = getLazyExtractResource();
+    if (!extractResource) return null;
+    const data = await extractResource(zipData, resourceId);
     const mimeType = getMimeTypeFromExtension(resourceId);
     await saveResource(bookId, resourceId, data, mimeType);
     const blob = new Blob([data], { type: mimeType });

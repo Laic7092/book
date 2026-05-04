@@ -1,34 +1,29 @@
 <script setup lang="ts">
-import { ref } from "vue";
 import type { SearchResult } from "../../core/types";
-import ModalHeader from "./ModalHeader.vue";
+import ModalHeader from "../../components/modals/ModalHeader.vue";
+import { getReaderHost } from "../../core/reader-host";
+import { getSearchApi } from "../../core/search-api";
 
-const props = defineProps<{
-  searchQuery: string;
-  searchResults: SearchResult[];
-  hasHighlights: boolean;
-}>();
+const emit = defineEmits<{ (e: "close"): void }>();
 
-const emit = defineEmits<{
-  (e: "update:searchQuery", value: string): void;
-  (e: "search"): void;
-  (e: "go-to-search-result", result: SearchResult): void;
-  (e: "clear-highlights"): void;
-  (e: "close"): void;
-}>();
+const api = getSearchApi()!;
+
+function handleResultClick(result: SearchResult) {
+  getReaderHost()?.navigateToSearchResult(result);
+}
 
 let searchDebounceTimer: number | null = null;
 
 function handleSearchInput(value: string) {
-  emit("update:searchQuery", value);
+  api.searchQuery = value;
   if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
   searchDebounceTimer = window.setTimeout(() => {
-    emit("search");
+    api.doSearch();
   }, 300);
 }
 
 function highlightMatch(context: string): string {
-  const query = props.searchQuery;
+  const query = api.searchQuery;
   if (!query) return context;
   const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const regex = new RegExp(`(${escaped})`, "gi");
@@ -43,13 +38,13 @@ function highlightMatch(context: string): string {
       <div class="search-box-wrapper">
         <div class="search-box">
           <input
-            :value="searchQuery"
+            :value="api.searchQuery"
             @input="handleSearchInput(($event.target as HTMLInputElement).value)"
             type="text"
             placeholder="Search in book..."
             class="search-input"
           />
-          <button class="search-submit" @click="emit('search')">
+          <button class="search-submit" @click="api.doSearch()">
             <svg
               width="18"
               height="18"
@@ -63,11 +58,13 @@ function highlightMatch(context: string): string {
             </svg>
           </button>
         </div>
-        <div class="search-results-info" v-if="searchResults.length > 0">
+        <div class="search-results-info" v-if="api.searchResults.length > 0">
           <span class="results-count"
-            >{{ searchResults.length }} result{{ searchResults.length !== 1 ? "s" : "" }}</span
+            >{{ api.searchResults.length }} result{{
+              api.searchResults.length !== 1 ? "s" : ""
+            }}</span
           >
-          <button class="clear-highlights" @click="emit('clear-highlights')" v-if="hasHighlights">
+          <button class="clear-highlights" @click="api.clearHighlights()" v-if="api.hasHighlights">
             Clear highlights
           </button>
         </div>
@@ -76,10 +73,10 @@ function highlightMatch(context: string): string {
     <div class="modal-body scroll-body">
       <ul class="search-results">
         <li
-          v-for="(result, i) in searchResults"
+          v-for="(result, i) in api.searchResults"
           :key="i"
           class="search-result"
-          @click.stop="emit('go-to-search-result', result)"
+          @click.stop="handleResultClick(result)"
         >
           <div class="result-header">
             <span class="result-chapter">{{ result.chapterTitle }}</span>
@@ -88,7 +85,9 @@ function highlightMatch(context: string): string {
           <p class="result-context" v-html="highlightMatch(result.context)"></p>
         </li>
       </ul>
-      <p v-if="searchResults.length === 0 && searchQuery" class="no-results">No results found</p>
+      <p v-if="api.searchResults.length === 0 && api.searchQuery" class="no-results">
+        No results found
+      </p>
     </div>
   </div>
 </template>

@@ -3,9 +3,8 @@
 import { defineStore } from "pinia";
 import type { Book } from "../core/types";
 import { dbGetAll, STORES } from "../storage/db";
+import { getResourceResolver, getStatsProvider } from "../plugins/registry";
 import * as booksStore from "../storage/books";
-import * as statsStore from "../storage/stats";
-import { getResourceUrl } from "../storage/resources";
 import { assertValidBookFile } from "../utils/validation";
 
 export interface BookshelfState {
@@ -54,12 +53,12 @@ export const useBookshelfStore = defineStore("bookshelf", {
       this.isLoading = true;
       try {
         this.books = await dbGetAll<Book>(STORES.BOOKS);
-        this.summaryStats = await statsStore.getSummaryStats();
+        this.summaryStats = (await getStatsProvider()?.getSummaryStats()) ?? null;
 
         // Resolve cover blob URLs for EPUB books that have a cover
         for (const book of this.books) {
           if (book.coverUrl && !this.coverUrls.has(book.id)) {
-            const url = await getResourceUrl(book.id, book.coverUrl);
+            const url = await getResourceResolver()?.getResourceUrl(book.id, book.coverUrl);
             if (url) {
               this.coverUrls.set(book.id, url);
             }
@@ -97,14 +96,14 @@ export const useBookshelfStore = defineStore("bookshelf", {
         await readerStore.closeBook();
       }
       await booksStore.deleteBook(bookId);
-      await statsStore.deleteStats(bookId);
+      await getStatsProvider()?.deleteStats(bookId);
       const coverUrl = this.coverUrls.get(bookId);
       if (coverUrl) {
         URL.revokeObjectURL(coverUrl);
         this.coverUrls.delete(bookId);
       }
       this.books = this.books.filter((b) => b.id !== bookId);
-      this.summaryStats = await statsStore.getSummaryStats();
+      this.summaryStats = (await getStatsProvider()?.getSummaryStats()) ?? null;
     },
 
     /**
@@ -118,7 +117,7 @@ export const useBookshelfStore = defineStore("bookshelf", {
      * Refresh summary statistics
      */
     async refreshStats() {
-      this.summaryStats = await statsStore.getSummaryStats();
+      this.summaryStats = (await getStatsProvider()?.getSummaryStats()) ?? null;
     },
   },
 });

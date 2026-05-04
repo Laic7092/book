@@ -1,9 +1,9 @@
 // Bookmarks storage module
 
-import type { Bookmark } from "../core/types";
-import { ErrorCode, createReaderError } from "../core/errors";
-import { compareCfi, LEGACY_FALLBACK_CFI } from "../utils/epub-cfi";
-import { STORES, dbPut, dbGet, dbGetAll, dbDelete, dbGetAllFromIndex } from "./db";
+import type { Bookmark } from "../../core/types";
+import { ErrorCode, createReaderError } from "../../core/errors";
+import { compareCfi, LEGACY_FALLBACK_CFI } from "../../utils/epub-cfi";
+import { STORES, dbPut, dbGet, dbGetAll, dbDelete, dbGetAllFromIndex } from "../../storage/db";
 
 interface LegacyBookmark {
   id: string;

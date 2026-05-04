@@ -2,9 +2,7 @@
 
 import type { Book, ParsedBook } from "../core/types";
 import { STORES, dbPut, dbGet, dbGetAll, dbTransaction } from "./db";
-import { saveResource } from "./resources";
-import { saveZip, getZip } from "./zips";
-import { EpubParser } from "../parsers/epub-parser";
+import { getLazyExtractChapter, getResourceSaver, getZipStore } from "../plugins/registry";
 
 /** In-flight dedup: prevents concurrent extraction of the same chapter */
 const extractionInProgress = new Map<string, Promise<string>>();
@@ -44,14 +42,16 @@ export async function saveBook(parsedBook: ParsedBook): Promise<void> {
     const savePromises: Promise<void>[] = [];
     for (const [resourceId, data] of parsedBook.resources) {
       const mimeType = getMimeTypeFromExtension(resourceId);
-      savePromises.push(saveResource(parsedBook.book.id, resourceId, data, mimeType));
+      savePromises.push(
+        getResourceSaver()!.saveResource(parsedBook.book.id, resourceId, data, mimeType),
+      );
     }
     await Promise.all(savePromises);
   }
 
   // Store raw zip data for lazy extraction
   if (parsedBook.rawData) {
-    await saveZip(parsedBook.book.id, parsedBook.rawData, parsedBook.book.fileSize);
+    await getZipStore()!.saveZip(parsedBook.book.id, parsedBook.rawData, parsedBook.book.fileSize);
   }
 }
 
@@ -247,14 +247,16 @@ async function lazyExtractChapterContent(
   if (inflight) return inflight;
 
   const promise = (async () => {
-    const zipData = await getZip(bookId);
+    const zipData = await getZipStore()?.getZip(bookId);
     if (!zipData) {
       throw new Error(
         "Chapter content not available. The book data has been cleared from local storage. Please re-import the book.",
       );
     }
 
-    const content = await EpubParser.extractChapterContent(zipData, href);
+    const extractChapter = getLazyExtractChapter();
+    if (!extractChapter) throw new Error("No lazy chapter extractor registered");
+    const content = await extractChapter(zipData, href);
     await updateChapterContent(bookId, chapterId, content);
     return content;
   })();

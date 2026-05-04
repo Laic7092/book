@@ -1,9 +1,9 @@
 // Composable for search functionality in reader
 
 import { ref, type Ref } from "vue";
-import { searchInBook, highlightMatches } from "../search/engine";
-import type { Chapter, SearchResult } from "../core/types";
-import * as booksStore from "../storage/books";
+import { searchInBook, highlightMatches } from "./engine";
+import type { Chapter, SearchResult } from "../../core/types";
+import { getReaderHost } from "../../core/reader-host";
 
 interface UseReaderSearchOptions {
   bookId: Ref<string | undefined>;
@@ -28,7 +28,11 @@ export function useReaderSearch(options: UseReaderSearchOptions) {
       return;
     }
 
-    searchResults.value = await searchInBook(bookId.value, searchQuery.value, chapters.value);
+    const host = getReaderHost();
+    searchResults.value = await searchInBook(bookId.value, searchQuery.value, chapters.value, {
+      getChapterContent: (_: string, chapterId: string) =>
+        host?.getChapterContent(chapterId) ?? Promise.resolve(undefined),
+    });
 
     if (
       !isPaginationMode.value &&
@@ -40,7 +44,7 @@ export function useReaderSearch(options: UseReaderSearchOptions) {
       const newMap = new Map(chapterContents.value);
       for (const chapter of chapters.value) {
         if (loadedChapters.value.has(chapter.id)) {
-          const originalContent = await booksStore.getChapterContent(bookId.value!, chapter.id);
+          const originalContent = await host?.getChapterContent(chapter.id);
           if (originalContent) {
             newMap.set(chapter.id, highlightMatches(originalContent, searchQuery.value));
           }
@@ -55,10 +59,11 @@ export function useReaderSearch(options: UseReaderSearchOptions) {
     currentResultIndex.value = -1;
 
     if (!isPaginationMode.value && loadedChapters && chapterContents) {
+      const host = getReaderHost();
       const newMap = new Map(chapterContents.value);
       for (const chapter of chapters.value) {
         if (loadedChapters.value.has(chapter.id)) {
-          const originalContent = await booksStore.getChapterContent(bookId.value!, chapter.id);
+          const originalContent = await host?.getChapterContent(chapter.id);
           if (originalContent) {
             newMap.set(chapter.id, originalContent);
           }

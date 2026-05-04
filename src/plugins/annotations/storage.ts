@@ -1,6 +1,6 @@
-import type { Annotation } from "../core/types";
-import { ErrorCode, createReaderError } from "../core/errors";
-import { STORES, dbPut, dbGet, dbGetAll, dbDelete, dbGetAllFromIndex } from "./db";
+import type { Annotation } from "../../core/types";
+import { ErrorCode, createReaderError } from "../../core/errors";
+import { STORES, dbPut, dbGet, dbGetAll, dbDelete, dbGetAllFromIndex } from "../../storage/db";
 
 export function createAnnotation(
   bookId: string,

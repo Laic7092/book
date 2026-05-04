@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, nextTick, onMounted, onUnmounted } from "vue";
-import type { ReaderSettings } from "../../core/types";
+import { ref, watch, onMounted, onUnmounted } from "vue";
 import {
   FONT_OPTIONS,
   LINE_HEIGHT_PRESETS,
@@ -8,72 +7,48 @@ import {
   TEXT_ALIGN_OPTIONS,
   CONTRAST_OPTIONS,
 } from "../../utils/settings";
-import { useIframeRenderer } from "../../composables/useIframeRenderer";
+import { createPreviewIframe, type PreviewIframe } from "../../utils/preview-iframe";
+import { getReaderHost } from "../../core/reader-host";
 
-const props = defineProps<{
-  settings: ReaderSettings;
-}>();
+const host = getReaderHost()!;
+const settings = host.getSettings();
 
 const emit = defineEmits<{
-  (e: "update-settings", settings: Partial<ReaderSettings>): void;
   (e: "close"): void;
 }>();
 
-const previewIframeRef = ref<HTMLIFrameElement | null>(null);
-
-// 预览 iframe 的渲染器
-const rendererOptions = computed(() => ({
-  settings: props.settings,
-  isPaginationMode: false,
-}));
-
-const { isReady, initIframe, updateContent, updateStyles, cleanup } = useIframeRenderer(
-  previewIframeRef,
-  rendererOptions,
-);
-
-// 预览内容
-const previewContent = `
-  <h2 class="chapter-heading">预览</h2>
-  <p>这是预览效果，将根据您的设置进行调整。阅读体验包括段落间距、行距、字体选择等参数的实时展示。</p>
-  <p>第一段文字展示了阅读器的核心显示效果。您可以在这里看到不同设置下的视觉呈现。通过调整各项参数，找到最适合您的阅读体验。</p>
-`;
+const previewContainerRef = ref<HTMLElement | null>(null);
+let preview: PreviewIframe | null = null;
 
 onMounted(() => {
-  nextTick(() => {
-    if (previewIframeRef.value) {
-      initIframe();
-      updateContent(previewContent);
-    }
-  });
+  const container = previewContainerRef.value;
+  if (!container) return;
+  preview = createPreviewIframe(container, settings.value);
 });
 
-// 监听设置变化，更新预览样式
 watch(
   () => [
-    props.settings.fontSize,
-    props.settings.fontFamily,
-    props.settings.lineHeight,
-    props.settings.letterSpacing,
-    props.settings.textAlign,
-    props.settings.paragraphSpacing,
-    props.settings.customTypography,
-    props.settings.theme,
-    props.settings.contrast,
+    settings.value.fontSize,
+    settings.value.fontFamily,
+    settings.value.lineHeight,
+    settings.value.letterSpacing,
+    settings.value.textAlign,
+    settings.value.paragraphSpacing,
+    settings.value.customTypography,
+    settings.value.theme,
+    settings.value.contrast,
   ],
   () => {
-    if (isReady.value) {
-      updateStyles();
-    }
+    preview?.updateStyles(settings.value);
   },
 );
 
 onUnmounted(() => {
-  cleanup();
+  preview?.destroy();
 });
 
 function resetSettings() {
-  emit("update-settings", {
+  host.updateSettings({
     fontSize: 18,
     fontFamily: "Literata, Georgia, serif",
     lineHeight: 1.6,
@@ -118,7 +93,7 @@ function resetSettings() {
           </label>
           <button
             :class="['toggle-switch', { active: settings.customTypography }]"
-            @click="emit('update-settings', { customTypography: !settings.customTypography })"
+            @click="host.updateSettings({ customTypography: !settings.customTypography })"
             :aria-checked="settings.customTypography"
             role="switch"
           >
@@ -148,9 +123,7 @@ function resetSettings() {
       <!-- 预览 -->
       <div class="setting-section">
         <label class="setting-label">预览</label>
-        <div class="preview-card">
-          <iframe ref="previewIframeRef" class="preview-iframe" frameborder="0"></iframe>
-        </div>
+        <div ref="previewContainerRef" class="preview-card"></div>
       </div>
 
       <!-- 排版设置（受开关控制） -->
@@ -163,7 +136,7 @@ function resetSettings() {
               v-for="font in FONT_OPTIONS"
               :key="font.value"
               :class="['font-btn', { active: settings.fontFamily.includes(font.value) }]"
-              @click="emit('update-settings', { fontFamily: font.value })"
+              @click="host.updateSettings({ fontFamily: font.value })"
               :style="{ fontFamily: font.preview || font.value }"
             >
               {{ font.label }}
@@ -182,7 +155,7 @@ function resetSettings() {
               v-for="height in LINE_HEIGHT_PRESETS"
               :key="height"
               :class="['lh-btn', { active: Math.abs(settings.lineHeight - height) < 0.05 }]"
-              @click="emit('update-settings', { lineHeight: height })"
+              @click="host.updateSettings({ lineHeight: height })"
             >
               {{ height }}
             </button>
@@ -200,7 +173,7 @@ function resetSettings() {
               v-for="margin in MARGIN_PRESETS"
               :key="margin"
               :class="['margin-btn', { active: settings.margin === margin }]"
-              @click="emit('update-settings', { margin: margin })"
+              @click="host.updateSettings({ margin: margin })"
             >
               {{ margin }}
             </button>
@@ -215,7 +188,7 @@ function resetSettings() {
               v-for="align in TEXT_ALIGN_OPTIONS"
               :key="align.value"
               :class="['align-btn', { active: settings.textAlign === align.value }]"
-              @click="emit('update-settings', { textAlign: align.value })"
+              @click="host.updateSettings({ textAlign: align.value })"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                 <rect v-if="align.value === 'left'" x="3" y="5" width="18" height="2" />
@@ -246,7 +219,7 @@ function resetSettings() {
               v-for="option in CONTRAST_OPTIONS"
               :key="option.value"
               :class="['contrast-btn', { active: settings.contrast === option.value }]"
-              @click="emit('update-settings', { contrast: option.value })"
+              @click="host.updateSettings({ contrast: option.value })"
             >
               {{ option.label }}
             </button>
@@ -266,7 +239,7 @@ function resetSettings() {
             step="0.01"
             :value="settings.letterSpacing || 0"
             @input="
-              emit('update-settings', {
+              host.updateSettings({
                 letterSpacing: Number(($event.target as HTMLInputElement).value),
               })
             "
@@ -287,7 +260,7 @@ function resetSettings() {
             step="0.1"
             :value="settings.paragraphSpacing || 1.2"
             @input="
-              emit('update-settings', {
+              host.updateSettings({
                 paragraphSpacing: Number(($event.target as HTMLInputElement).value),
               })
             "
@@ -477,13 +450,6 @@ function resetSettings() {
   border-radius: 10px;
   overflow: hidden;
   height: 180px;
-}
-
-.preview-iframe {
-  width: 100%;
-  height: 100%;
-  border: none;
-  display: block;
 }
 
 /* Typography settings group */

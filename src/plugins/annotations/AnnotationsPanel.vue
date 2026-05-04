@@ -1,25 +1,33 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import type { Annotation } from "../../core/types";
-import ModalHeader from "./ModalHeader.vue";
+import ModalHeader from "../../components/modals/ModalHeader.vue";
+import { getReaderHost } from "../../core/reader-host";
+import { useAnnotationsStore } from "./store";
 
-const props = defineProps<{
-  annotations: Annotation[];
-  chapters?: Array<{ id: string; title: string }>;
-}>();
+const annotationsStore = useAnnotationsStore();
+const host = getReaderHost();
 
 const emit = defineEmits<{
-  (e: "navigate", annotation: Annotation): void;
-  (e: "delete", id: string): void;
   (e: "close"): void;
 }>();
+
+function handleNavigate(annotation: Annotation) {
+  host?.navigateToCfi(annotation.startCfi, annotation.chapterId);
+}
+
+function handleDelete(id: string) {
+  annotationsStore.removeAnnotation(id);
+}
 
 type Filter = "all" | "highlight" | "underline";
 const filter = ref<Filter>("all");
 
+const annotations = computed(() => annotationsStore.allAnnotations);
+
 const filtered = computed(() => {
-  if (filter.value === "all") return props.annotations;
-  return props.annotations.filter((a) => a.type === filter.value);
+  if (filter.value === "all") return annotations.value;
+  return annotations.value.filter((a) => a.type === filter.value);
 });
 
 const groupedByChapter = computed(() => {
@@ -32,10 +40,9 @@ const groupedByChapter = computed(() => {
   for (const ann of filtered.value) {
     let group = groups.find((g) => g.chapterId === ann.chapterId);
     if (!group) {
-      const ch = props.chapters?.find((c) => c.id === ann.chapterId);
       group = {
         chapterId: ann.chapterId,
-        title: ch?.title || "Unknown Chapter",
+        title: host?.getChapterTitle(ann.chapterId) ?? "Unknown Chapter",
         annotations: [],
       };
       groups.push(group);
@@ -88,7 +95,7 @@ function formatDate(ts: number): string {
           <h4 class="chapter-title">{{ group.title }}</h4>
           <ul class="annotations-list">
             <li v-for="ann in group.annotations" :key="ann.id" class="annotation-item">
-              <div class="annotation-card" @click.stop="emit('navigate', ann)">
+              <div class="annotation-card" @click.stop="handleNavigate(ann)">
                 <div class="annotation-left">
                   <span
                     v-if="ann.type === 'highlight'"
@@ -116,7 +123,7 @@ function formatDate(ts: number): string {
                 </div>
                 <button
                   class="delete-btn"
-                  @click.stop="emit('delete', ann.id)"
+                  @click.stop="handleDelete(ann.id)"
                   aria-label="Delete annotation"
                 >
                   <svg

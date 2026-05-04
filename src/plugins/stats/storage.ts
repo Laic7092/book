@@ -1,7 +1,7 @@
 // Reading statistics storage module
 
-import type { ReadingSession, BookReadingStats } from "../core/types";
-import { STORES, dbPut, dbGet, dbDelete, dbGetAllFromIndex } from "./db";
+import type { ReadingSession, BookReadingStats } from "../../core/types";
+import { STORES, dbPut, dbGet, dbDelete, dbGetAllFromIndex } from "../../storage/db";
 
 const SESSIONS_DB_KEY = "__reading_sessions__";
 

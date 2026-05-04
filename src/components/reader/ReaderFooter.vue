@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { ref } from "vue";
-import type { SearchResult } from "../../core/types";
+import { computed, ref, nextTick } from "vue";
+import { getFooterActions, pluginStateVersion } from "../../plugins/registry";
+import { getSearchApi } from "../../core/search-api";
+import { getReaderHost } from "../../core/reader-host";
 
 defineProps<{
   showControls: boolean;
-  hasHighlights: boolean;
-  searchResults: SearchResult[];
-  currentResultIndex: number;
   isPaginationMode: boolean;
   currentPage: number;
   pagesCount: number;
@@ -22,13 +21,22 @@ const emit = defineEmits<{
   (e: "next-page"): void;
   (e: "prev-chapter"): void;
   (e: "next-chapter"): void;
-  (e: "open-modal", modal: "toc" | "search" | "bookmarks" | "annotations" | "stats"): void;
-  (e: "go-to-previous-match"): void;
-  (e: "go-to-next-match"): void;
-  (e: "clear-highlights"): void;
+  (e: "open-modal", modal: string): void;
 }>();
 
+const api = computed(() => getSearchApi());
+
 const showMenu = ref(false);
+
+const barActions = computed(() => {
+  void pluginStateVersion.value;
+  return getFooterActions().filter((a) => a.position === "bar");
+});
+const menuActions = computed(() => {
+  void pluginStateVersion.value;
+  return getFooterActions().filter((a) => a.position === "menu");
+});
+const hasMenuActions = computed(() => menuActions.value.length > 0);
 
 function toggleMenu() {
   showMenu.value = !showMenu.value;
@@ -38,9 +46,26 @@ function closeMenu() {
   showMenu.value = false;
 }
 
-function openModal(modal: "toc" | "search" | "bookmarks" | "annotations" | "stats") {
+async function openModal(modal: string) {
   closeMenu();
+  await nextTick();
   emit("open-modal", modal);
+}
+
+function handlePrevMatch() {
+  const s = getSearchApi();
+  const idx = s?.goToPreviousMatch();
+  if (idx !== undefined && s?.searchResults) {
+    getReaderHost()?.navigateToSearchResult(s.searchResults[idx]);
+  }
+}
+
+function handleNextMatch() {
+  const s = getSearchApi();
+  const idx = s?.goToNextMatch();
+  if (idx !== undefined && s?.searchResults) {
+    getReaderHost()?.navigateToSearchResult(s.searchResults[idx]);
+  }
 }
 </script>
 
@@ -54,7 +79,12 @@ function openModal(modal: "toc" | "search" | "bookmarks" | "annotations" | "stat
     <!-- Menu Popover -->
     <Transition name="menu">
       <div v-if="showMenu" class="menu-popover" @click.stop>
-        <button class="menu-item" @click.stop="openModal('search')">
+        <button
+          v-for="a in menuActions"
+          :key="a.id"
+          class="menu-item"
+          @click.stop="openModal(a.modal!)"
+        >
           <svg
             width="18"
             height="18"
@@ -62,52 +92,22 @@ function openModal(modal: "toc" | "search" | "bookmarks" | "annotations" | "stat
             fill="none"
             stroke="currentColor"
             stroke-width="1.5"
-          >
-            <circle cx="11" cy="11" r="8" />
-            <path d="M21 21l-4.35-4.35" />
-          </svg>
-          <span>Search</span>
-        </button>
-        <button class="menu-item" @click.stop="openModal('annotations')">
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-          >
-            <path
-              d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-            />
-          </svg>
-          <span>Annotations</span>
-        </button>
-        <button class="menu-item" @click.stop="openModal('stats')">
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-          >
-            <path d="M12 20V10M18 20V4M6 20v-4" />
-          </svg>
-          <span>Statistics</span>
+            v-html="a.icon"
+          />
+          <span>{{ a.label }}</span>
         </button>
       </div>
     </Transition>
 
     <!-- Search Mode -->
     <Transition name="slide-fade" mode="out-in">
-      <div v-if="hasHighlights && searchResults.length > 0" key="search" class="footer-sections">
+      <div
+        v-if="api?.hasHighlights && api?.searchResults.length"
+        key="search"
+        class="footer-sections"
+      >
         <div class="actions-section">
-          <button
-            class="footer-btn"
-            @click.stop="emit('clear-highlights')"
-            aria-label="Exit search"
-          >
+          <button class="footer-btn" @click.stop="api?.clearHighlights()" aria-label="Exit search">
             <svg
               width="16"
               height="16"
@@ -122,15 +122,11 @@ function openModal(modal: "toc" | "search" | "bookmarks" | "annotations" | "stat
         </div>
         <div class="center-section">
           <span class="search-counter"
-            >{{ currentResultIndex + 1 }} / {{ searchResults.length }}</span
+            >{{ (api?.currentResultIndex ?? -1) + 1 }} / {{ api?.searchResults.length ?? 0 }}</span
           >
         </div>
         <div class="nav-section">
-          <button
-            class="footer-btn"
-            @click.stop="emit('go-to-previous-match')"
-            aria-label="Previous match"
-          >
+          <button class="footer-btn" @click.stop="handlePrevMatch()" aria-label="Previous match">
             <svg
               width="16"
               height="16"
@@ -142,7 +138,7 @@ function openModal(modal: "toc" | "search" | "bookmarks" | "annotations" | "stat
               <path d="M15 18l-6-6 6-6" />
             </svg>
           </button>
-          <button class="footer-btn" @click.stop="emit('go-to-next-match')" aria-label="Next match">
+          <button class="footer-btn" @click.stop="handleNextMatch()" aria-label="Next match">
             <svg
               width="16"
               height="16"
@@ -160,10 +156,13 @@ function openModal(modal: "toc" | "search" | "bookmarks" | "annotations" | "stat
       <!-- Normal Mode -->
       <div v-else key="normal" class="footer-sections">
         <div class="actions-section">
+          <!-- Plugin bar actions (e.g. bookmarks) -->
           <button
+            v-for="a in barActions"
+            :key="a.id"
             class="footer-btn"
-            @click.stop="emit('open-modal', 'bookmarks')"
-            aria-label="Bookmarks"
+            @click.stop="openModal(a.modal!)"
+            :aria-label="a.label"
           >
             <svg
               width="18"
@@ -172,11 +171,12 @@ function openModal(modal: "toc" | "search" | "bookmarks" | "annotations" | "stat
               fill="none"
               stroke="currentColor"
               stroke-width="1.5"
-            >
-              <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
-            </svg>
+              v-html="a.icon"
+            />
           </button>
+          <!-- Overflow menu toggle -->
           <button
+            v-if="hasMenuActions"
             class="footer-btn"
             :class="{ active: showMenu }"
             @click.stop="toggleMenu"

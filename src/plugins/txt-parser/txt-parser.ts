@@ -1,14 +1,14 @@
 // TXT file parser - robust chapter detection with fallback strategies
 
 import chardet from "chardet";
-import { BaseBookParser, generateId } from "./base";
-import type { BookParser, ParsedBook, Chapter } from "../core/types";
+import { BaseBookParser, generateId } from "../../core/base";
+import type { BookParser, ParsedBook, Chapter } from "../../core/types";
 import {
   PARAGRAPHS_PER_CHUNK,
   MAX_CHARS_PER_CHUNK,
   MAX_CHARS_PER_CHAPTER,
   MAX_FILE_SIZE_BYTES,
-} from "../utils/constants";
+} from "../../utils/constants";
 
 // Chapter detection pattern configuration
 const MARKER_DEDUPLICATION_THRESHOLD = 30; // Minimum distance between chapter markers
