@@ -5,5 +5,6 @@ export const txtParserPlugin: Plugin = {
   id: "txt-parser",
   name: "TXT Parser",
   version: "1.0.0",
+  core: true,
   parsers: [new TxtParser()],
 };

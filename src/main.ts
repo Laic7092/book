@@ -13,8 +13,12 @@ import { bookmarksPlugin } from "./plugins/bookmarks";
 import { searchPlugin } from "./plugins/search";
 import { statsPlugin } from "./plugins/stats";
 import { themesPlugin } from "./plugins/themes";
+import { typographyPlugin } from "./plugins/typography";
+import { corePlugin } from "./plugins/core";
 
 registerPlugin(txtParserPlugin);
+registerPlugin(typographyPlugin);
+registerPlugin(corePlugin);
 registerPlugin(epubPlugin);
 registerPlugin(annotationsPlugin);
 registerPlugin(bookmarksPlugin);

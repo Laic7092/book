@@ -19,8 +19,8 @@ const pluginModals = computed(() => {
 
 const props = defineProps<{
   modalType: string | null;
-  chapters: Chapter[];
-  currentChapterId: string | null;
+  chapters?: Chapter[];
+  currentChapterId?: string | null;
 }>();
 
 const emit = defineEmits<{

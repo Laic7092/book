@@ -169,12 +169,7 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.modal-content-inner {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-}
+@import "../../styles/modal-shared.css";
 
 .modal-header {
   display: flex;
@@ -212,8 +207,6 @@ onUnmounted(() => {
 }
 
 .modal-body {
-  flex: 1;
-  overflow-y: auto;
   padding: 16px 20px 24px;
 }
 

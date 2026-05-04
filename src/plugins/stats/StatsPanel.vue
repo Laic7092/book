@@ -137,26 +137,6 @@ const emit = defineEmits<{
 <style scoped>
 @import "../../styles/modal-shared.css";
 
-.modal-content-inner {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scroll-behavior: smooth;
-  -webkit-overflow-scrolling: touch;
-  contain: layout style;
-  scrollbar-gutter: stable;
-  overscroll-behavior-y: contain;
-  min-height: 0;
-}
-
-.modal-body.scroll-body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-}
-
 .modal-stats .stats-content {
   padding: 20px;
 }

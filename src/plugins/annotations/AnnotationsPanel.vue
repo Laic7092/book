@@ -167,13 +167,6 @@ function formatDate(ts: number): string {
 <style scoped>
 @import "../../styles/modal-shared.css";
 
-.modal-content-inner {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-}
-
 .filter-bar {
   display: flex;
   gap: 4px;
@@ -202,13 +195,6 @@ function formatDate(ts: number): string {
 .filter-btn.active {
   background: var(--accent-soft, #eef2ff);
   color: var(--accent, #6366f1);
-}
-
-.modal-body {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
 }
 
 .chapter-group {

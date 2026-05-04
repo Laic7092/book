@@ -100,35 +100,6 @@ function setRef(el: HTMLElement | null, chapterId: string) {
 <style scoped>
 @import "../../styles/modal-shared.css";
 
-.modal-content-inner {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-  min-height: 0;
-}
-
-.modal-body {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-  contain: layout style;
-  scrollbar-gutter: stable;
-  overscroll-behavior-y: contain;
-  min-height: 0;
-}
-
-.modal-body.scroll-body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-  scroll-behavior: auto;
-}
-
 .no-chapters {
   display: flex;
   align-items: center;

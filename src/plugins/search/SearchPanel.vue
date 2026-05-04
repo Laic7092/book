@@ -95,14 +95,6 @@ function highlightMatch(context: string): string {
 <style scoped>
 @import "../../styles/modal-shared.css";
 
-.modal-content-inner {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-  min-height: 0;
-}
-
 .search-header-fixed {
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-subtle);
@@ -219,26 +211,6 @@ function highlightMatch(context: string): string {
 
 .clear-highlights:hover {
   background: var(--hover-bg);
-}
-
-.modal-body {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scroll-behavior: smooth;
-  -webkit-overflow-scrolling: touch;
-  contain: layout style;
-  scrollbar-gutter: stable;
-  overscroll-behavior-y: contain;
-  min-height: 0;
-}
-
-.modal-body.scroll-body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
 }
 
 .search-results {

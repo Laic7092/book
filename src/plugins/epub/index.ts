@@ -7,6 +7,7 @@ export const epubPlugin: Plugin = {
   id: "epub",
   name: "EPUB Parser",
   version: "1.0.0",
+  core: true,
   parsers: [new EpubParser()],
   lazyExtractChapter: (zipData, href) => EpubParser.extractChapterContent(zipData, href),
   lazyExtractResource: (zipData, resourceId) => EpubParser.extractResource(zipData, resourceId),

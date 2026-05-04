@@ -607,7 +607,7 @@ function handleInternalLinkClick(href: string) {
   }
 
   const hashIndex = href.indexOf("#");
-  const filePath = hashIndex > 0 ? href.substring(0, hashIndex) : "";
+  const filePath = hashIndex > 0 ? href.substring(0, hashIndex) : href;
   const anchor = hashIndex >= 0 ? href.substring(hashIndex + 1) : "";
 
   const scrollToAnchor = () => {

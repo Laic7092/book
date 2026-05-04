@@ -28,6 +28,9 @@ export interface Plugin {
   /** Whether this plugin is enabled. Defaults to true. */
   enabled?: boolean;
 
+  /** If true, this is a core plugin that cannot be disabled */
+  core?: boolean;
+
   /** Format parsers provided by this plugin */
   parsers?: BookParser[];
 

@@ -7,7 +7,7 @@ import { formatDuration } from "../utils/time";
 import { formatBookToast } from "../utils/toast";
 import { validateBookFile } from "../utils/validation";
 import type { Book } from "../core/types";
-import PluginsPanel from "./modals/PluginsPanel.vue";
+import { ModalWrapper } from "./modals";
 
 const emit = defineEmits<{
   (e: "book:select", book: Book): void;
@@ -17,9 +17,12 @@ const emit = defineEmits<{
 const bookshelfStore = useBookshelfStore();
 const uiStore = useUIStore();
 
+function closePluginsModal() {
+  uiStore.activeModal = null;
+}
+
 // Local state
 const searchFocused = ref(false);
-const showPlugins = ref(false);
 
 async function handleFileUpload(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0];
@@ -126,7 +129,11 @@ onMounted(() => {
         </div>
       </div>
       <div class="header-actions">
-        <button class="plugins-btn" @click="showPlugins = true" aria-label="Plugin settings">
+        <button
+          class="plugins-btn"
+          @click="uiStore.activeModal = 'plugins'"
+          aria-label="Plugin settings"
+        >
           <svg
             width="18"
             height="18"
@@ -388,14 +395,12 @@ onMounted(() => {
       </div>
     </transition>
 
-    <!-- Plugins Panel Overlay -->
-    <Teleport to="body">
-      <div v-if="showPlugins" class="plugin-overlay" @click.self="showPlugins = false">
-        <div class="plugin-panel">
-          <PluginsPanel @close="showPlugins = false" />
-        </div>
-      </div>
-    </Teleport>
+    <!-- Plugins Panel via ModalWrapper -->
+    <ModalWrapper
+      v-if="uiStore.activeModal === 'plugins'"
+      modal-type="plugins"
+      @close="closePluginsModal"
+    />
   </div>
 </template>
 
@@ -1296,40 +1301,5 @@ onMounted(() => {
 
 .plugins-btn:active {
   transform: scale(0.94);
-}
-
-/* Full-screen overlay for plugins panel on bookshelf */
-.plugin-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  z-index: 300;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  backdrop-filter: blur(8px);
-}
-
-.plugin-panel {
-  background: var(--modal-bg);
-  color: var(--modal-text);
-  border-radius: 18px 18px 0 0;
-  width: 100%;
-  max-width: 560px;
-  height: 65vh;
-  max-height: 500px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  box-shadow: 0 -12px 48px rgba(0, 0, 0, 0.25);
-  animation: slideUp 350ms cubic-bezier(0.32, 0.72, 0, 1);
-  padding-bottom: env(safe-area-inset-bottom, 0);
-}
-
-@media (max-width: 768px) {
-  .plugin-panel {
-    border-radius: 14px 14px 0 0;
-    max-height: 60vh;
-  }
 }
 </style>

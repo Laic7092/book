@@ -125,14 +125,6 @@ function formatDate(timestamp: number): string {
 <style scoped>
 @import "../../styles/modal-shared.css";
 
-.modal-content-inner {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-  min-height: 0;
-}
-
 .bookmark-bar-fixed {
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-subtle);
@@ -163,26 +155,6 @@ function formatDate(timestamp: number): string {
 .add-bookmark-btn:hover {
   background: var(--accent-soft);
   border-color: var(--accent);
-}
-
-.modal-body {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scroll-behavior: smooth;
-  -webkit-overflow-scrolling: touch;
-  contain: layout style;
-  scrollbar-gutter: stable;
-  overscroll-behavior-y: contain;
-  min-height: 0;
-}
-
-.modal-body.scroll-body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
 }
 
 .no-bookmarks {
