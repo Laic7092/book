@@ -1,7 +1,7 @@
 // IndexedDB wrapper with Promise-based API
 
 const DB_NAME = "reader-db";
-const DB_VERSION = 7;
+const DB_VERSION = 8;
 
 export const STORES = {
   BOOKS: "books",
@@ -11,6 +11,7 @@ export const STORES = {
   RESOURCES: "resources",
   STATS: "stats",
   ANNOTATIONS: "annotations",
+  ZIPS: "zips",
 } as const;
 
 export type StoreName = (typeof STORES)[keyof typeof STORES];
@@ -107,6 +108,11 @@ export async function openDB(): Promise<IDBDatabase> {
         annotationsStore.createIndex("chapterId", "chapterId", { unique: false });
         annotationsStore.createIndex("book_chapter", ["bookId", "chapterId"], { unique: false });
         annotationsStore.createIndex("createdAt", "createdAt", { unique: false });
+      }
+
+      // v8: Raw zip storage for lazy EPUB extraction
+      if (!db.objectStoreNames.contains(STORES.ZIPS)) {
+        db.createObjectStore(STORES.ZIPS, { keyPath: "bookId" });
       }
     };
   });

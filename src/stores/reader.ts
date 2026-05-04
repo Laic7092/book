@@ -38,6 +38,76 @@ function getParserForFile(file: File): BookParser | null {
   return null;
 }
 
+const CSS_URL_PATTERN = /url\(['"]?([^'")\s]+)['"]?\)/gi;
+
+/**
+ * Collect all resource paths referenced in a chapter's HTML document.
+ */
+function collectResourcePaths(doc: Document): string[] {
+  const paths = new Set<string>();
+
+  doc.querySelectorAll("img[src]").forEach((el) => {
+    const src = el.getAttribute("src");
+    if (src) paths.add(src);
+  });
+
+  doc.querySelectorAll("image").forEach((el) => {
+    const href = el.getAttribute("xlink:href");
+    if (href) paths.add(href);
+  });
+
+  doc.querySelectorAll("link[rel='stylesheet'][href]").forEach((el) => {
+    const href = el.getAttribute("href");
+    if (href) paths.add(href);
+  });
+
+  // Inline style url() references
+  doc.querySelectorAll("*[style]").forEach((el) => {
+    const style = el.getAttribute("style");
+    if (style) {
+      for (const [, url] of style.matchAll(CSS_URL_PATTERN)) {
+        paths.add(url);
+      }
+    }
+  });
+
+  // Embedded <style> element url() references
+  doc.querySelectorAll("style").forEach((el) => {
+    const css = el.textContent;
+    if (css) {
+      for (const [, url] of css.matchAll(CSS_URL_PATTERN)) {
+        paths.add(url);
+      }
+    }
+  });
+
+  return Array.from(paths);
+}
+
+/**
+ * Lazily resolve missing resource URLs from stored zip data.
+ * Mutates resourceUrls in-place with newly resolved blob URLs.
+ */
+async function resolveMissingResources(
+  bookId: string,
+  paths: string[],
+  resourceUrls: Map<string, string>,
+): Promise<void> {
+  const missingPaths = paths.filter((p) => !resourceUrls.has(p));
+  if (missingPaths.length === 0) return;
+
+  const results = await Promise.all(
+    missingPaths.map(async (path) => ({
+      path,
+      url: await resourcesStore.getResourceUrl(bookId, path),
+    })),
+  );
+
+  for (const { path, url } of results) {
+    if (url) resourceUrls.set(path, url);
+  }
+}
+
 export interface ReaderState {
   currentBook: Book | null;
   currentChapter: Chapter | null;
@@ -140,8 +210,8 @@ export const useReaderStore = defineStore("reader", {
         this.currentBook = book;
         this.chapters = chapters;
 
-        // Load resource URLs for this book
-        this.resourceUrls = await resourcesStore.getResourceUrls(bookId);
+        // Initialize empty resource URL map — resources are lazily resolved per-chapter
+        this.resourceUrls = new Map();
 
         // Update last read timestamp
         await booksStore.updateLastRead(bookId);
@@ -279,8 +349,8 @@ export const useReaderStore = defineStore("reader", {
     },
 
     /**
-     * Get current chapter content with resource URLs rewritten
-     * 返回 HTML 内容和解析后的资源元素列表
+     * Get current chapter content with resource URLs rewritten.
+     * Lazily resolves missing resources from stored zip as needed.
      */
     async getCurrentChapterContent(): Promise<{
       html: string;
@@ -298,11 +368,18 @@ export const useReaderStore = defineStore("reader", {
         return null;
       }
 
-      // Parse to extract body HTML consistently
+      // Parse content
       const parser = new DOMParser();
       const doc = parser.parseFromString(content, "text/html");
 
-      // Rewrite resource URLs if available
+      // Collect referenced resource paths and lazy-resolve missing ones
+      const resourcePaths = collectResourcePaths(doc);
+      if (resourcePaths.length > 0) {
+        if (!this.resourceUrls) this.resourceUrls = new Map();
+        await resolveMissingResources(this.currentBook.id, resourcePaths, this.resourceUrls);
+      }
+
+      // Rewrite resource paths if any resources are available
       if (this.resourceUrls && this.resourceUrls.size > 0) {
         const { rewriteResourcePaths } = await import("../utils/resource-urls");
         const rewrittenDoc = rewriteResourcePaths(content, this.resourceUrls);

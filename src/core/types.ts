@@ -83,6 +83,8 @@ export interface ParsedBook {
   chapters: Chapter[];
   content: Map<string, string>; // chapterId -> content
   resources?: Map<string, ArrayBuffer>; // resourceId -> data (original path -> ArrayBuffer)
+  /** Raw file data for lazy extraction (stored in IndexedDB for cross-session access) */
+  rawData?: ArrayBuffer;
 }
 
 export interface Resource {

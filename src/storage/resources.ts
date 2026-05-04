@@ -2,6 +2,27 @@
 
 import type { Resource } from "../core/types";
 import { STORES, dbPut, dbDelete, dbGet, dbGetAllFromIndex } from "./db";
+import { getZip } from "./zips";
+import { EpubParser } from "../parsers/epub-parser";
+
+function getMimeTypeFromExtension(path: string): string {
+  const ext = path.split(".").pop()?.toLowerCase();
+  const mimeTypes: Record<string, string> = {
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    svg: "image/svg+xml",
+    webp: "image/webp",
+    bmp: "image/bmp",
+    css: "text/css",
+    woff: "font/woff",
+    woff2: "font/woff2",
+    ttf: "font/ttf",
+    otf: "font/otf",
+  };
+  return mimeTypes[ext || ""] || "application/octet-stream";
+}
 
 /**
  * Save a resource to the database
@@ -74,13 +95,29 @@ function sanitizeCssFonts(data: ArrayBuffer): ArrayBuffer {
 }
 
 /**
- * Get a single resource as a Blob URL
+ * Get a single resource as a Blob URL. Falls back to lazy extraction from zip.
  */
 export async function getResourceUrl(bookId: string, resourceId: string): Promise<string | null> {
   const resource = await dbGet<Resource>(STORES.RESOURCES, [bookId, resourceId]);
-  if (!resource) return null;
-  const blob = new Blob([resource.data], { type: resource.mimeType });
-  return URL.createObjectURL(blob);
+
+  if (resource) {
+    const blob = new Blob([resource.data], { type: resource.mimeType });
+    return URL.createObjectURL(blob);
+  }
+
+  // Try lazy extraction from stored zip
+  const zipData = await getZip(bookId);
+  if (!zipData) return null;
+
+  try {
+    const data = await EpubParser.extractResource(zipData, resourceId);
+    const mimeType = getMimeTypeFromExtension(resourceId);
+    await saveResource(bookId, resourceId, data, mimeType);
+    const blob = new Blob([data], { type: mimeType });
+    return URL.createObjectURL(blob);
+  } catch {
+    return null;
+  }
 }
 
 /**

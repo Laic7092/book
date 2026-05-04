@@ -1,6 +1,7 @@
-// EPUB file parser implementation using JSZip
+// EPUB file parser implementation using @zip.js/zip.js for streaming extraction
 
-import JSZip from "jszip";
+import { ZipReader, TextWriter, Uint8ArrayReader } from "@zip.js/zip.js";
+import type { Entry, FileEntry } from "@zip.js/zip.js";
 import { BaseBookParser, generateId, parseXML, cleanHtml } from "./base";
 import type { BookParser, ParsedBook, Chapter } from "../core/types";
 import { ErrorCode, createReaderError } from "../core/errors";
@@ -26,31 +27,14 @@ interface ManifestItem {
   properties?: string;
 }
 
+interface ZipContext {
+  reader: ZipReader<unknown>;
+  entries: Entry[];
+  pathMap: Map<string, FileEntry>;
+}
+
 export class EpubParser extends BaseBookParser implements BookParser {
   private static readonly SUPPORTED_MIME_TYPES = ["application/epub+zip", "application/x-epub+zip"];
-  private static readonly RESOURCE_MIME_TYPES = new Set([
-    // Images
-    "image/jpeg",
-    "image/jpg",
-    "image/png",
-    "image/gif",
-    "image/svg+xml",
-    "image/webp",
-    "image/bmp",
-    // CSS
-    "text/css",
-    // Fonts
-    "font/woff",
-    "font/woff2",
-    "font/ttf",
-    "font/otf",
-    "application/font-woff",
-    "application/font-woff2",
-    "application/vnd.ms-opentype",
-    "application/x-font-ttf",
-    "application/x-font-woff",
-    "application/x-font-woff2",
-  ]);
 
   supportsFormat(mimeType: string): boolean {
     return EpubParser.SUPPORTED_MIME_TYPES.includes(mimeType);
@@ -59,10 +43,12 @@ export class EpubParser extends BaseBookParser implements BookParser {
   /**
    * Build a case-insensitive path lookup map from zip entries
    */
-  private buildPathMap(zip: JSZip): Map<string, string> {
-    const map = new Map<string, string>();
-    for (const path of Object.keys(zip.files)) {
-      map.set(path.toLowerCase(), path);
+  private static buildEntryMap(entries: Entry[]): Map<string, FileEntry> {
+    const map = new Map<string, FileEntry>();
+    for (const entry of entries) {
+      if (!entry.directory) {
+        map.set(entry.filename.toLowerCase(), entry);
+      }
     }
     return map;
   }
@@ -84,147 +70,196 @@ export class EpubParser extends BaseBookParser implements BookParser {
     return stack.join("/");
   }
 
+  /**
+   * Phase 1: Parse metadata only. Returns ParsedBook with empty content/resources (except cover).
+   * The raw zip ArrayBuffer is stored in rawData for lazy extraction.
+   */
   async parse(file: File): Promise<ParsedBook> {
     const arrayBuffer = await this.readAsArrayBuffer(file);
-    const zip = await JSZip.loadAsync(arrayBuffer);
+    const zipReader = new ZipReader(new Uint8ArrayReader(new Uint8Array(arrayBuffer)));
 
-    // Build case-insensitive path map once
-    const pathMap = this.buildPathMap(zip);
+    try {
+      const entries = await zipReader.getEntries();
+      const pathMap = EpubParser.buildEntryMap(entries);
+      const ctx: ZipContext = { reader: zipReader, entries, pathMap };
 
-    // Read container.xml to find content.opf
-    const containerXml = await this.readZipEntry(zip, "META-INF/container.xml", pathMap);
-    if (!containerXml) {
-      throw createReaderError("Invalid EPUB: Missing container.xml", ErrorCode.PARSE_FAILED);
-    }
-
-    const containerDoc = parseXML(containerXml);
-    const rawOpfPath =
-      containerDoc.querySelector("rootfile")?.getAttribute("full-path") || "OEBPS/content.opf";
-
-    // Read content.opf for metadata and spine
-    const opfDir = rawOpfPath.substring(0, rawOpfPath.lastIndexOf("/") + 1);
-    const opfXml = await this.readZipEntry(zip, rawOpfPath, pathMap);
-    if (!opfXml) {
-      throw createReaderError("Invalid EPUB: Missing content.opf", ErrorCode.PARSE_FAILED);
-    }
-
-    const opfDoc = parseXML(opfXml);
-
-    // Extract metadata
-    const metadata = this.extractMetadata(opfDoc);
-
-    // Extract spine (reading order)
-    const spineItems = this.extractSpine(opfDoc);
-
-    // Extract manifest for resource lookup
-    const manifest = this.extractManifest(opfDoc);
-
-    // Extract NCX or Nav document for TOC
-    const navItems = await this.extractToc(zip, opfDoc, opfDir, pathMap);
-
-    // Extract all resources (images, CSS, fonts) in parallel
-    const resources = await this.extractResources(zip, opfDir, manifest, pathMap);
-
-    // Map spine items to chapters
-    const bookId = generateId("book");
-    const chapters: Chapter[] = [];
-    const content = new Map<string, string>();
-
-    // Use NCX/nav for titles if available, but always use spine order
-    const tocMap = new Map(navItems.map((item) => [item.href, item]));
-
-    let order = 0;
-    for (const item of spineItems) {
-      const fullPath = EpubParser.resolvePath(opfDir, item.href);
-      const tocItem = tocMap.get(item.href) || tocMap.get(fullPath);
-
-      if (tocItem) {
-        chapters.push({
-          id: tocItem.id,
-          bookId,
-          title: tocItem.title,
-          href: item.href,
-          order,
-          inToc: true,
-        });
-      } else {
-        const chapterId = generateId("ch");
-        chapters.push({
-          id: chapterId,
-          bookId,
-          title: item.id || `Chapter ${order + 1}`,
-          href: item.href,
-          order,
-          inToc: false,
-        });
+      // Read container.xml
+      const containerXml = await this.readZipEntry(ctx, "META-INF/container.xml");
+      if (!containerXml) {
+        throw createReaderError("Invalid EPUB: Missing container.xml", ErrorCode.PARSE_FAILED);
       }
-      order++;
-    }
 
-    // Read and process chapter content in parallel
-    const chapterReadPromises: Promise<void>[] = [];
-    for (const chapter of chapters) {
-      if (chapter.href) {
-        const fullPath = EpubParser.resolvePath(opfDir, chapter.href);
-        const promise = this.readZipEntry(zip, fullPath, pathMap).then((htmlContent) => {
-          if (htmlContent) {
-            const cleanedContent = cleanHtml(htmlContent);
-            content.set(chapter.id, cleanedContent);
-          } else {
-            console.warn(`EPUB parser: chapter content empty or unreadable: ${fullPath}`);
-            content.set(chapter.id, "");
-          }
-        });
-        chapterReadPromises.push(promise);
+      const containerDoc = parseXML(containerXml);
+      const rawOpfPath =
+        containerDoc.querySelector("rootfile")?.getAttribute("full-path") || "OEBPS/content.opf";
+
+      // Read content.opf
+      const opfDir = rawOpfPath.substring(0, rawOpfPath.lastIndexOf("/") + 1);
+      const opfXml = await this.readZipEntry(ctx, rawOpfPath);
+      if (!opfXml) {
+        throw createReaderError("Invalid EPUB: Missing content.opf", ErrorCode.PARSE_FAILED);
       }
+
+      const opfDoc = parseXML(opfXml);
+
+      // Extract metadata
+      const metadata = this.extractMetadata(opfDoc);
+
+      // Extract spine
+      const spineItems = this.extractSpine(opfDoc);
+
+      // Extract TOC (nav/NCX)
+      const navItems = await this.extractToc(ctx, opfDoc, opfDir);
+
+      // Build chapters (metadata only, no content)
+      const bookId = generateId("book");
+      const chapters: Chapter[] = [];
+      const tocMap = new Map(navItems.map((item) => [item.href, item]));
+
+      let order = 0;
+      for (const item of spineItems) {
+        const fullPath = EpubParser.resolvePath(opfDir, item.href);
+        const tocItem = tocMap.get(item.href) || tocMap.get(fullPath);
+
+        if (tocItem) {
+          chapters.push({
+            id: tocItem.id,
+            bookId,
+            title: tocItem.title,
+            href: fullPath,
+            order,
+            inToc: true,
+          });
+        } else {
+          const chapterId = generateId("ch");
+          chapters.push({
+            id: chapterId,
+            bookId,
+            title: item.id || `Chapter ${order + 1}`,
+            href: fullPath,
+            order,
+            inToc: false,
+          });
+        }
+        order++;
+      }
+
+      // Extract cover image eagerly (for bookshelf display)
+      const resources = new Map<string, ArrayBuffer>();
+      if (metadata.coverHref) {
+        const coverFullPath = EpubParser.resolvePath(opfDir, metadata.coverHref);
+        const coverData = await this.readZipEntryBinary(ctx, coverFullPath);
+        if (coverData) {
+          resources.set(metadata.coverHref, coverData);
+        }
+      }
+
+      const book = {
+        id: bookId,
+        title: metadata.title,
+        author: metadata.creator,
+        coverUrl: metadata.coverHref,
+        format: "epub" as const,
+        fileSize: file.size,
+        addedAt: Date.now(),
+      };
+
+      return {
+        book,
+        chapters,
+        content: new Map(),
+        resources,
+        rawData: arrayBuffer,
+      };
+    } finally {
+      await zipReader.close();
     }
-    await Promise.all(chapterReadPromises);
-
-    const book = {
-      id: bookId,
-      title: metadata.title,
-      author: metadata.creator,
-      coverUrl: metadata.coverHref,
-      format: "epub" as const,
-      fileSize: file.size,
-      addedAt: Date.now(),
-    };
-
-    return {
-      book,
-      chapters,
-      content,
-      resources,
-    };
   }
 
-  private async readZipEntry(
-    zip: JSZip,
-    path: string,
-    pathMap?: Map<string, string>,
-  ): Promise<string | null> {
+  /**
+   * Find an entry by path, trying exact match then basename fallback.
+   */
+  private static findEntry(pathMap: Map<string, FileEntry>, path: string): FileEntry | undefined {
+    const decodedPath = decodeURIComponent(path);
+    const direct = pathMap.get(decodedPath.toLowerCase());
+    if (direct) return direct;
+
+    // Basename fallback for paths that differ across OPF dirs
+    const basename = decodedPath.split("/").pop()?.toLowerCase();
+    if (!basename) return undefined;
+
+    for (const [key, entry] of pathMap) {
+      if (key.endsWith("/" + basename) || key === basename) {
+        return entry;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Phase 2: Extract a single chapter's HTML content from raw zip data.
+   * Used by the storage layer for lazy extraction.
+   */
+  static async extractChapterContent(rawData: ArrayBuffer, chapterHref: string): Promise<string> {
+    const zipReader = new ZipReader(new Uint8ArrayReader(new Uint8Array(rawData)));
     try {
-      const decodedPath = decodeURIComponent(path);
-      const resolvedPath = pathMap?.get(decodedPath.toLowerCase()) || decodedPath;
-      const entry = zip.file(resolvedPath);
+      const entries = await zipReader.getEntries();
+      const pathMap = EpubParser.buildEntryMap(entries);
+      const entry = EpubParser.findEntry(pathMap, chapterHref);
+
+      if (!entry) {
+        throw createReaderError(
+          `Chapter not found in EPUB: ${chapterHref}`,
+          ErrorCode.CHAPTER_NOT_FOUND,
+        );
+      }
+
+      const html = await entry.getData(new TextWriter());
+      return cleanHtml(html);
+    } finally {
+      await zipReader.close();
+    }
+  }
+
+  /**
+   * Phase 2: Extract a single resource's binary data from raw zip data.
+   * Used by the storage layer for lazy resource extraction.
+   */
+  static async extractResource(rawData: ArrayBuffer, resourceHref: string): Promise<ArrayBuffer> {
+    const zipReader = new ZipReader(new Uint8ArrayReader(new Uint8Array(rawData)));
+    try {
+      const entries = await zipReader.getEntries();
+      const pathMap = EpubParser.buildEntryMap(entries);
+      const entry = EpubParser.findEntry(pathMap, resourceHref);
+
+      if (!entry) {
+        throw createReaderError(
+          `Resource not found in EPUB: ${resourceHref}`,
+          ErrorCode.PARSE_FAILED,
+        );
+      }
+
+      return await entry.arrayBuffer();
+    } finally {
+      await zipReader.close();
+    }
+  }
+
+  private async readZipEntry(ctx: ZipContext, path: string): Promise<string | null> {
+    try {
+      const entry = EpubParser.findEntry(ctx.pathMap, path);
       if (!entry) return null;
-      return await entry.async("text");
+      return await entry.getData(new TextWriter());
     } catch {
       return null;
     }
   }
 
-  private async readZipEntryBinary(
-    zip: JSZip,
-    path: string,
-    pathMap?: Map<string, string>,
-  ): Promise<ArrayBuffer | null> {
+  private async readZipEntryBinary(ctx: ZipContext, path: string): Promise<ArrayBuffer | null> {
     try {
-      const decodedPath = decodeURIComponent(path);
-      const resolvedPath = pathMap?.get(decodedPath.toLowerCase()) || decodedPath;
-      const entry = zip.file(resolvedPath);
+      const entry = EpubParser.findEntry(ctx.pathMap, path);
       if (!entry) return null;
-      return await entry.async("arraybuffer");
+      return await entry.arrayBuffer();
     } catch {
       return null;
     }
@@ -303,42 +338,10 @@ export class EpubParser extends BaseBookParser implements BookParser {
     return result;
   }
 
-  private async extractResources(
-    zip: JSZip,
-    opfDir: string,
-    manifest: Map<string, ManifestItem>,
-    pathMap: Map<string, string>,
-  ): Promise<Map<string, ArrayBuffer>> {
-    const resources = new Map<string, ArrayBuffer>();
-
-    const readPromises: Promise<void>[] = [];
-    for (const [, item] of manifest) {
-      if (!this.isResourceMimeType(item.mediaType)) {
-        continue;
-      }
-
-      const fullPath = EpubParser.resolvePath(opfDir, item.href);
-      const promise = this.readZipEntryBinary(zip, fullPath, pathMap).then((data) => {
-        if (data) {
-          resources.set(item.href, data);
-        }
-      });
-      readPromises.push(promise);
-    }
-
-    await Promise.all(readPromises);
-    return resources;
-  }
-
-  private isResourceMimeType(mediaType: string): boolean {
-    return EpubParser.RESOURCE_MIME_TYPES.has(mediaType.toLowerCase());
-  }
-
   private async extractToc(
-    zip: JSZip,
+    ctx: ZipContext,
     opfDoc: Document,
     opfDir: string,
-    pathMap: Map<string, string>,
   ): Promise<EpubNavItem[]> {
     // Try EPUB 3 navigation document first
     const navItem = opfDoc.querySelector('manifest item[properties*="nav"]');
@@ -346,7 +349,7 @@ export class EpubParser extends BaseBookParser implements BookParser {
       const navHref = navItem.getAttribute("href");
       if (navHref) {
         const fullPath = EpubParser.resolvePath(opfDir, navHref);
-        const navContent = await this.readZipEntry(zip, fullPath, pathMap);
+        const navContent = await this.readZipEntry(ctx, fullPath);
         if (navContent) {
           return this.parseNavDocument(navContent);
         }
@@ -359,7 +362,7 @@ export class EpubParser extends BaseBookParser implements BookParser {
       const ncxHref = ncxItem.getAttribute("href");
       if (ncxHref) {
         const fullPath = EpubParser.resolvePath(opfDir, ncxHref);
-        const ncxContent = await this.readZipEntry(zip, fullPath, pathMap);
+        const ncxContent = await this.readZipEntry(ctx, fullPath);
         if (ncxContent) {
           return this.parseNcx(ncxContent);
         }

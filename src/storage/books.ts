@@ -3,6 +3,11 @@
 import type { Book, ParsedBook } from "../core/types";
 import { STORES, dbPut, dbGet, dbGetAll, dbTransaction } from "./db";
 import { saveResource } from "./resources";
+import { saveZip, getZip } from "./zips";
+import { EpubParser } from "../parsers/epub-parser";
+
+/** In-flight dedup: prevents concurrent extraction of the same chapter */
+const extractionInProgress = new Map<string, Promise<string>>();
 
 /**
  * Save a parsed book to the database
@@ -38,11 +43,15 @@ export async function saveBook(parsedBook: ParsedBook): Promise<void> {
   if (parsedBook.resources) {
     const savePromises: Promise<void>[] = [];
     for (const [resourceId, data] of parsedBook.resources) {
-      // Determine MIME type from file extension
       const mimeType = getMimeTypeFromExtension(resourceId);
       savePromises.push(saveResource(parsedBook.book.id, resourceId, data, mimeType));
     }
     await Promise.all(savePromises);
+  }
+
+  // Store raw zip data for lazy extraction
+  if (parsedBook.rawData) {
+    await saveZip(parsedBook.book.id, parsedBook.rawData, parsedBook.book.fileSize);
   }
 }
 
@@ -92,7 +101,14 @@ export async function getAllBooks(): Promise<Book[]> {
  */
 export async function deleteBook(bookId: string): Promise<void> {
   await dbTransaction(
-    [STORES.BOOKS, STORES.CHAPTERS, STORES.BOOKMARKS, STORES.RESOURCES, STORES.ANNOTATIONS],
+    [
+      STORES.BOOKS,
+      STORES.CHAPTERS,
+      STORES.BOOKMARKS,
+      STORES.RESOURCES,
+      STORES.ANNOTATIONS,
+      STORES.ZIPS,
+    ],
     "readwrite",
     async (stores) => {
       // Delete book metadata
@@ -168,15 +184,87 @@ export async function updateLastRead(bookId: string): Promise<void> {
   }
 }
 
+interface StoredChapter {
+  bookId: string;
+  chapterId: string;
+  title: string;
+  content: string;
+  order: number;
+  href?: string;
+  inToc?: boolean;
+}
+
 /**
- * Get chapter content
+ * Get chapter content. If not yet extracted, extracts lazily from stored zip.
  */
 export async function getChapterContent(
   bookId: string,
   chapterId: string,
 ): Promise<string | undefined> {
-  const chapter = await dbGet<{ content: string }>(STORES.CHAPTERS, [bookId, chapterId]);
-  return chapter?.content;
+  const chapter = await dbGet<StoredChapter>(STORES.CHAPTERS, [bookId, chapterId]);
+
+  if (!chapter) return undefined;
+
+  // Content already extracted — return immediately
+  if (chapter.content) return chapter.content;
+
+  // Content not yet extracted and we have a href — lazy extract from zip
+  if (chapter.href) {
+    return lazyExtractChapterContent(bookId, chapterId, chapter.href);
+  }
+
+  // No href, no content — return empty string
+  return chapter.content;
+}
+
+/**
+ * Update chapter content after lazy extraction
+ */
+async function updateChapterContent(
+  bookId: string,
+  chapterId: string,
+  content: string,
+): Promise<void> {
+  const chapter = await dbGet<StoredChapter>(STORES.CHAPTERS, [bookId, chapterId]);
+  if (chapter) {
+    chapter.content = content;
+    await dbPut(STORES.CHAPTERS, chapter);
+  }
+}
+
+/**
+ * Lazily extract a single chapter's content from stored zip data
+ */
+async function lazyExtractChapterContent(
+  bookId: string,
+  chapterId: string,
+  href: string,
+): Promise<string> {
+  const key = `${bookId}:${chapterId}`;
+
+  // Dedup: if extraction is already in progress, return the existing promise
+  const inflight = extractionInProgress.get(key);
+  if (inflight) return inflight;
+
+  const promise = (async () => {
+    const zipData = await getZip(bookId);
+    if (!zipData) {
+      throw new Error(
+        "Chapter content not available. The book data has been cleared from local storage. Please re-import the book.",
+      );
+    }
+
+    const content = await EpubParser.extractChapterContent(zipData, href);
+    await updateChapterContent(bookId, chapterId, content);
+    return content;
+  })();
+
+  extractionInProgress.set(key, promise);
+  try {
+    return await promise;
+  } finally {
+    extractionInProgress.delete(key);
+  }
 }
 
 /**
