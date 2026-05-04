@@ -1,11 +1,13 @@
 import AnnotationsPanel from "./AnnotationsPanel.vue";
 import AnnotationOverlay from "./AnnotationOverlay.vue";
 import type { Plugin } from "../types";
+import { PLUGIN_BRAND } from "../types";
 import { useAnnotationsStore, setAnnotationsAdapter } from "./store";
 
 let store: ReturnType<typeof useAnnotationsStore> | null = null;
 
 export const annotationsPlugin: Plugin = {
+  [PLUGIN_BRAND]: true as const,
   id: "annotations",
   name: "Annotations",
   version: "1.0.0",
@@ -13,9 +15,7 @@ export const annotationsPlugin: Plugin = {
     setAnnotationsAdapter(ctx.storage);
     store = useAnnotationsStore(ctx.pinia);
 
-    ctx.events.on("book:opened", ({ bookId }: { bookId: string }) =>
-      store?.loadAnnotationsForBook(bookId),
-    );
+    ctx.events.on("book:opened", ({ bookId }) => store?.loadAnnotationsForBook(bookId));
     ctx.events.on("book:closed", () => store?.reset());
 
     ctx.ui.registerModal("annotations", AnnotationsPanel);
@@ -28,5 +28,9 @@ export const annotationsPlugin: Plugin = {
       modal: "annotations",
       order: 30,
     });
+  },
+  teardown() {
+    setAnnotationsAdapter(null);
+    store = null;
   },
 };

@@ -7,6 +7,7 @@ import "./styles/index.css";
 
 import { registerPlugin, initializePlugins, loadPluginStates } from "./plugins/registry";
 import { migrateToPluginStore } from "./storage/db";
+import { PLUGIN_BRAND } from "./plugins/types";
 import type { Plugin } from "./plugins/types";
 
 const app = createApp(App);
@@ -21,7 +22,12 @@ const modules = import.meta.glob<Record<string, unknown>>("./plugins/*/index.ts"
 
 function isPlugin(obj: unknown): obj is Plugin {
   return (
-    typeof obj === "object" && obj !== null && "id" in obj && "name" in obj && "version" in obj
+    typeof obj === "object" &&
+    obj !== null &&
+    (obj as Record<string, unknown>)[PLUGIN_BRAND] === true &&
+    "id" in obj &&
+    "name" in obj &&
+    "version" in obj
   );
 }
 

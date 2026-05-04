@@ -36,8 +36,7 @@ import { debounce } from "../utils/debounce";
 import { SWIPE_THRESHOLD, TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../utils/constants";
 import { registerReaderHost, unregisterReaderHost } from "../core/reader-host";
 import type { ReaderHost } from "../core/reader-host";
-import { getSearchApi } from "../core/search-api";
-import { getOverlayComponents, pluginStateVersion } from "../plugins/registry";
+import { getSearchApis, getOverlayComponents, pluginStateVersion } from "../plugins/registry";
 import { STORES, dbPut, dbGet } from "../storage/db";
 import { pluginEvents } from "../plugins/context";
 import { getChapterContent as fetchChapterContent } from "../storage/books";
@@ -849,7 +848,7 @@ async function navigateToSearchResult(result: SearchResult) {
       }
     }
 
-    const s = getSearchApi();
+    const s = getSearchApis()[0];
     if (s) s.hasHighlights = true;
 
     closeModal();

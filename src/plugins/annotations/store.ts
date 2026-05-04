@@ -5,7 +5,7 @@ import type { PluginStorageAdapter } from "../types";
 
 let adapter: PluginStorageAdapter | null = null;
 
-export function setAnnotationsAdapter(a: PluginStorageAdapter) {
+export function setAnnotationsAdapter(a: PluginStorageAdapter | null) {
   adapter = a;
 }
 

@@ -113,13 +113,14 @@ export const useReaderStore = defineStore("reader", {
           inToc: ch.inToc,
         }));
 
-        this.currentBook = book;
         this.currentParser = parser;
         this.chapters = chapters;
         this.resourceUrls = new Map();
 
         await booksStore.updateLastRead(bookId);
         this.currentChapter = chapters.length > 0 ? chapters[0] : null;
+
+        this.currentBook = book;
 
         // Plugins listen to this event (stats, bookmarks, annotations)
         void pluginEvents.emit("book:opened", { bookId });

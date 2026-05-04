@@ -1,10 +1,12 @@
 import BookmarksPanel from "./BookmarksPanel.vue";
 import type { Plugin } from "../types";
+import { PLUGIN_BRAND } from "../types";
 import { useBookmarksStore, setBookmarksAdapter } from "./store";
 
 let store: ReturnType<typeof useBookmarksStore> | null = null;
 
 export const bookmarksPlugin: Plugin = {
+  [PLUGIN_BRAND]: true as const,
   id: "bookmarks",
   name: "Bookmarks",
   version: "1.0.0",
@@ -12,17 +14,9 @@ export const bookmarksPlugin: Plugin = {
     setBookmarksAdapter(ctx.storage);
     store = useBookmarksStore(ctx.pinia);
 
-    ctx.events.on("book:opened", ({ bookId }: { bookId: string }) => store?.loadBookmarks(bookId));
-    ctx.events.on(
-      "bookmark:create",
-      (data: {
-        bookId: string;
-        chapterId: string;
-        cfi: string;
-        title: string;
-        contentPreview: string;
-      }) =>
-        store?.addBookmark(data.bookId, data.chapterId, data.cfi, data.title, data.contentPreview),
+    ctx.events.on("book:opened", ({ bookId }) => store?.loadBookmarks(bookId));
+    ctx.events.on("bookmark:create", (data) =>
+      store?.addBookmark(data.bookId, data.chapterId, data.cfi, data.title, data.contentPreview),
     );
 
     ctx.ui.registerModal("bookmarks", BookmarksPanel);
@@ -34,5 +28,9 @@ export const bookmarksPlugin: Plugin = {
       modal: "bookmarks",
       order: 10,
     });
+  },
+  teardown() {
+    setBookmarksAdapter(null);
+    store = null;
   },
 };

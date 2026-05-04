@@ -11,13 +11,3 @@ export interface SearchApi {
   goToPreviousMatch: () => number | undefined;
   reset: () => void;
 }
-
-let instance: SearchApi | null = null;
-
-export function registerSearchApi(api: SearchApi): void {
-  instance = api;
-}
-
-export function getSearchApi(): SearchApi | null {
-  return instance;
-}

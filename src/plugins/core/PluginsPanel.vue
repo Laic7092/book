@@ -1,21 +1,30 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import ModalHeader from "../../components/modals/ModalHeader.vue";
-import { getAllPlugins, setPluginEnabled } from "../../plugins/registry";
+import { getAllPlugins, setPluginEnabled, pluginStateVersion } from "../../plugins/registry";
 import type { Plugin } from "../../plugins/types";
 
-const allPlugins = ref(getAllPlugins());
+const allPlugins = computed(() => {
+  void pluginStateVersion.value;
+  return getAllPlugins();
+});
 
 const corePlugins = computed(() => allPlugins.value.filter((p) => p.core));
 
 const optionalPlugins = computed(() => allPlugins.value.filter((p) => !p.core));
 
-function toggle(id: string) {
+const toggling = ref<Set<string>>(new Set());
+
+async function toggle(id: string) {
   const p = allPlugins.value.find((p) => p.id === id);
-  if (!p) return;
+  if (!p || toggling.value.has(id)) return;
   const next = !isEnabled(p);
-  p.enabled = next;
-  setPluginEnabled(id, next);
+  toggling.value.add(id);
+  try {
+    await setPluginEnabled(id, next);
+  } finally {
+    toggling.value.delete(id);
+  }
 }
 
 function isEnabled(p: Plugin): boolean {
@@ -53,7 +62,7 @@ defineEmits<{ close: [] }>();
             v-for="p in optionalPlugins"
             :key="p.id"
             class="plugin-row"
-            :class="{ disabled: !isEnabled(p) }"
+            :class="{ disabled: !isEnabled(p), toggling: toggling.has(p.id) }"
           >
             <div class="plugin-info">
               <span class="plugin-name">{{ p.name }}</span>
@@ -147,6 +156,11 @@ defineEmits<{ close: [] }>();
 
 .plugin-row.disabled {
   opacity: 0.55;
+}
+
+.plugin-row.toggling {
+  pointer-events: none;
+  opacity: 0.7;
 }
 
 .core-badge {

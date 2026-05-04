@@ -3,11 +3,12 @@ import SearchPanel from "./SearchPanel.vue";
 import { useReaderSearch } from "./useReaderSearch";
 import { useReaderStore } from "../../stores/reader";
 import { useSettingsStore } from "../../stores/settings";
-import { registerSearchApi } from "../../core/search-api";
 import type { Plugin } from "../types";
+import { PLUGIN_BRAND } from "../types";
 import type { SearchApi } from "../../core/search-api";
 
 export const searchPlugin: Plugin = {
+  [PLUGIN_BRAND]: true as const,
   id: "search",
   name: "Full-Text Search",
   version: "1.0.0",
@@ -21,7 +22,11 @@ export const searchPlugin: Plugin = {
         isPaginationMode: computed(() => settingsStore.settings.scrollMode === "pagination"),
       }),
     ) as unknown as SearchApi;
-    registerSearchApi(api);
+    ctx.capabilities.register("searchApis", api);
+
+    ctx.onCleanup(() => {
+      ctx.capabilities.unregister("searchApis", api);
+    });
 
     ctx.ui.registerModal("search", SearchPanel);
     ctx.ui.registerFooterAction({
@@ -32,5 +37,8 @@ export const searchPlugin: Plugin = {
       modal: "search",
       order: 20,
     });
+  },
+  teardown() {
+    // Capabilities are auto-cleaned by onCleanup during runCleanup
   },
 };

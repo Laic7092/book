@@ -2,11 +2,11 @@
 import type { SearchResult } from "../../core/types";
 import ModalHeader from "../../components/modals/ModalHeader.vue";
 import { getReaderHost } from "../../core/reader-host";
-import { getSearchApi } from "../../core/search-api";
+import { getSearchApis } from "../registry";
 
 const emit = defineEmits<{ (e: "close"): void }>();
 
-const api = getSearchApi()!;
+const api = getSearchApis()[0]!;
 
 function handleResultClick(result: SearchResult) {
   getReaderHost()?.navigateToSearchResult(result);

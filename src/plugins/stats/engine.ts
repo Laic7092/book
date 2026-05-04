@@ -6,7 +6,7 @@ import type { PluginStorageAdapter } from "../types";
 
 let adapter: PluginStorageAdapter | null = null;
 
-export function setStatsAdapter(a: PluginStorageAdapter) {
+export function setStatsAdapter(a: PluginStorageAdapter | null) {
   adapter = a;
 }
 

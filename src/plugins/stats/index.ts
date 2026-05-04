@@ -1,21 +1,25 @@
 import StatsPanel from "./StatsPanel.vue";
 import StatsBar from "./StatsBar.vue";
+import { triggerStatsRefresh } from "./refresh";
 import * as engine from "./engine";
 import type { Plugin } from "../types";
+import { PLUGIN_BRAND } from "../types";
 import { setStatsAdapter } from "./engine";
 
 export const statsPlugin: Plugin = {
+  [PLUGIN_BRAND]: true as const,
   id: "stats",
   name: "Reading Statistics",
   version: "1.0.0",
   setup(ctx) {
     setStatsAdapter(ctx.storage);
 
-    ctx.events.on("book:opened", ({ bookId }: { bookId: string }) => engine.startSession(bookId));
-    ctx.events.on("book:closed", ({ bookId, chapterId }: { bookId: string; chapterId?: string }) =>
-      engine.endSession(bookId, chapterId),
-    );
-    ctx.events.on("book:deleted", ({ bookId }: { bookId: string }) => engine.deleteStats(bookId));
+    ctx.events.on("book:opened", ({ bookId }) => engine.startSession(bookId));
+    ctx.events.on("book:closed", ({ bookId, chapterId }) => engine.endSession(bookId, chapterId));
+    ctx.events.on("book:deleted", ({ bookId }) => {
+      engine.deleteStats(bookId);
+      triggerStatsRefresh();
+    });
 
     ctx.ui.registerBookshelfWidget(StatsBar);
     ctx.ui.registerModal("stats", StatsPanel);
@@ -27,5 +31,8 @@ export const statsPlugin: Plugin = {
       modal: "stats",
       order: 40,
     });
+  },
+  teardown() {
+    setStatsAdapter(null);
   },
 };

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, nextTick } from "vue";
-import { getFooterActions, pluginStateVersion } from "../../plugins/registry";
-import { getSearchApi } from "../../core/search-api";
+import { getFooterActions, pluginStateVersion, getSearchApis } from "../../plugins/registry";
 import { getReaderHost } from "../../core/reader-host";
 
 defineProps<{
@@ -24,7 +23,7 @@ const emit = defineEmits<{
   (e: "open-modal", modal: string): void;
 }>();
 
-const api = computed(() => getSearchApi());
+const api = computed(() => getSearchApis()[0] ?? null);
 
 const showMenu = ref(false);
 
@@ -53,7 +52,7 @@ async function openModal(modal: string) {
 }
 
 function handlePrevMatch() {
-  const s = getSearchApi();
+  const s = getSearchApis()[0];
   const idx = s?.goToPreviousMatch();
   if (idx !== undefined && s?.searchResults) {
     getReaderHost()?.navigateToSearchResult(s.searchResults[idx]);
@@ -61,7 +60,7 @@ function handlePrevMatch() {
 }
 
 function handleNextMatch() {
-  const s = getSearchApi();
+  const s = getSearchApis()[0];
   const idx = s?.goToNextMatch();
   if (idx !== undefined && s?.searchResults) {
     getReaderHost()?.navigateToSearchResult(s.searchResults[idx]);

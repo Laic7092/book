@@ -1,7 +1,33 @@
 import type { Component, App } from "vue";
 import type { Pinia } from "pinia";
 import type { BookParser } from "../core/types";
-import type { EventBus } from "./context";
+import type { SearchApi } from "../core/search-api";
+
+/** Map of event names to their payload types. */
+export interface PluginEventMap {
+  "book:opened": { bookId: string };
+  "book:closed": { bookId: string; chapterId?: string };
+  "book:deleted": { bookId: string };
+  "bookmark:create": {
+    bookId: string;
+    chapterId: string;
+    cfi: string;
+    title: string;
+    contentPreview: string;
+  };
+  [key: string]: unknown;
+}
+
+/** Brand property required on every Plugin for identity verification. */
+export const PLUGIN_BRAND = "__plugin" as const;
+
+export type EventHandler<T> = (payload: T) => unknown;
+
+/** Typed event bus interface. */
+export interface IEventBus<T extends Record<string, unknown>> {
+  on<K extends keyof T>(event: K, handler: EventHandler<T[K]>): () => void;
+  emit<K extends keyof T>(event: K, payload: T[K]): Promise<void>;
+}
 
 /**
  * Footer toolbar action declared by a plugin.
@@ -40,7 +66,14 @@ export interface PluginContext {
   pinia: Pinia;
   app: App<Element>;
   ui: UISlots;
-  events: EventBus;
+  events: IEventBus<PluginEventMap>;
+  /** Register/unregister runtime capabilities. */
+  capabilities: {
+    register<K extends keyof CapabilityMap>(key: K, value: CapabilityMap[K][number]): void;
+    unregister<K extends keyof CapabilityMap>(key: K, value: CapabilityMap[K][number]): void;
+  };
+  /** Register a cleanup callback called when the plugin is disabled/removed. */
+  onCleanup(fn: () => void | Promise<void>): void;
 }
 
 export interface PluginBootstrap {
@@ -50,26 +83,31 @@ export interface PluginBootstrap {
 
 // ── Capability map ──
 
-/**
- * Registry of capabilities plugins can provide.
- * Only "parsers" remains — everything else moved to parser methods or events.
- */
 export interface CapabilityMap {
   parsers: BookParser[];
+  searchApis: SearchApi[];
 }
 
 // ── Plugin interface ──
 
 export interface Plugin {
+  /** Brand for duck-typing. Key is the string "__plugin". */
+  [PLUGIN_BRAND]?: true;
   id: string;
   name: string;
   version: string;
   enabled?: boolean;
   core?: boolean;
 
+  /** Plugin IDs this plugin depends on. Dependencies are initialized first. */
+  dependsOn?: string[];
+
   /** Capabilities provided to the core. */
   provide?: Partial<CapabilityMap>;
 
   /** Called after registration, before mount. Use ctx.ui / ctx.storage / ctx.events. */
   setup?: (context: PluginContext) => void | Promise<void>;
+
+  /** Called when the plugin is disabled. Clean up registrations, state, timers. */
+  teardown?: (context: PluginContext) => void | Promise<void>;
 }

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, onMounted, onUnmounted } from "vue";
 import { getSummaryStats } from "./engine";
 import { formatDuration } from "../../utils/time";
-import { pluginEvents } from "../context";
+import { setStatsRefreshHandler } from "./refresh";
 
 interface SummaryStats {
   totalBooks: number;
@@ -19,8 +19,11 @@ async function load() {
   stats.value = await getSummaryStats().catch(() => null);
 }
 
-onMounted(load);
-pluginEvents.on("book:deleted", load);
+onMounted(() => {
+  load();
+  setStatsRefreshHandler(load);
+});
+onUnmounted(() => setStatsRefreshHandler(() => {}));
 </script>
 
 <template>
