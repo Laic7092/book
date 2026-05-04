@@ -36,8 +36,49 @@ interface ZipContext {
 export class EpubParser extends BaseBookParser implements BookParser {
   private static readonly SUPPORTED_MIME_TYPES = ["application/epub+zip", "application/x-epub+zip"];
 
+  readonly format = "epub" as const;
+
   supportsFormat(mimeType: string): boolean {
     return EpubParser.SUPPORTED_MIME_TYPES.includes(mimeType);
+  }
+
+  // ── Format-specific lifecycle (called by core storage layer) ──
+
+  async saveResources(bookId: string, resources: Map<string, ArrayBuffer>): Promise<void> {
+    const { saveResource } = await import("./resources");
+    const { getMimeTypeFromExtension } = await import("./resources");
+    for (const [resourceId, data] of resources) {
+      await saveResource(bookId, resourceId, data, getMimeTypeFromExtension(resourceId));
+    }
+  }
+
+  async saveRawData(bookId: string, rawData: ArrayBuffer, fileSize: number): Promise<void> {
+    const { saveZip } = await import("./zips");
+    await saveZip(bookId, rawData, fileSize);
+  }
+
+  async loadChapterContent(
+    bookId: string,
+    chapter: { id: string; href?: string },
+  ): Promise<string | undefined> {
+    const { getZip } = await import("./zips");
+    const zipData = await getZip(bookId);
+    if (!zipData) return undefined;
+    if (!chapter.href) return undefined;
+    return EpubParser.extractChapterContent(zipData, chapter.href);
+  }
+
+  async resolveResourceUrl(bookId: string, path: string): Promise<string | null> {
+    const { getResourceUrl } = await import("./resources");
+    return getResourceUrl(bookId, path, (rawData, resourceId) =>
+      EpubParser.extractResource(rawData, resourceId),
+    );
+  }
+
+  revokeResourceUrls(urls: Map<string, string>): void {
+    for (const [, url] of urls) {
+      URL.revokeObjectURL(url);
+    }
   }
 
   /**

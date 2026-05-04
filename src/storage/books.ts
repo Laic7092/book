@@ -2,7 +2,7 @@
 
 import type { Book, ParsedBook } from "../core/types";
 import { STORES, dbPut, dbGet, dbGetAll, dbTransaction } from "./db";
-import { getLazyExtractChapter, getResourceSaver, getZipStore } from "../plugins/registry";
+import type { BookParser } from "../core/types";
 
 /** In-flight dedup: prevents concurrent extraction of the same chapter */
 const extractionInProgress = new Map<string, Promise<string>>();
@@ -10,7 +10,7 @@ const extractionInProgress = new Map<string, Promise<string>>();
 /**
  * Save a parsed book to the database
  */
-export async function saveBook(parsedBook: ParsedBook): Promise<void> {
+export async function saveBook(parsedBook: ParsedBook, parser: BookParser): Promise<void> {
   const storeNames = parsedBook.resources?.size
     ? [STORES.BOOKS, STORES.CHAPTERS, STORES.RESOURCES]
     : [STORES.BOOKS, STORES.CHAPTERS];
@@ -19,10 +19,8 @@ export async function saveBook(parsedBook: ParsedBook): Promise<void> {
     const booksStore = stores.get(STORES.BOOKS)!;
     const chaptersStore = stores.get(STORES.CHAPTERS)!;
 
-    // Save book metadata
     booksStore.put(parsedBook.book);
 
-    // Save chapter contents, titles, and order
     for (const chapter of parsedBook.chapters) {
       const content = parsedBook.content.get(chapter.id) || "";
       chaptersStore.put({
@@ -37,44 +35,15 @@ export async function saveBook(parsedBook: ParsedBook): Promise<void> {
     }
   });
 
-  // Save resources separately (after the transaction completes)
-  if (parsedBook.resources) {
-    const savePromises: Promise<void>[] = [];
-    for (const [resourceId, data] of parsedBook.resources) {
-      const mimeType = getMimeTypeFromExtension(resourceId);
-      savePromises.push(
-        getResourceSaver()!.saveResource(parsedBook.book.id, resourceId, data, mimeType),
-      );
-    }
-    await Promise.all(savePromises);
+  // Format-specific resource storage
+  if (parsedBook.resources && parsedBook.resources.size > 0) {
+    await parser.saveResources?.(parsedBook.book.id, parsedBook.resources);
   }
 
-  // Store raw zip data for lazy extraction
+  // Format-specific raw data storage (for lazy extraction)
   if (parsedBook.rawData) {
-    await getZipStore()!.saveZip(parsedBook.book.id, parsedBook.rawData, parsedBook.book.fileSize);
+    await parser.saveRawData?.(parsedBook.book.id, parsedBook.rawData, parsedBook.book.fileSize);
   }
-}
-
-/**
- * Get MIME type from file extension
- */
-function getMimeTypeFromExtension(path: string): string {
-  const ext = path.split(".").pop()?.toLowerCase();
-  const mimeTypes: Record<string, string> = {
-    jpg: "image/jpeg",
-    jpeg: "image/jpeg",
-    png: "image/png",
-    gif: "image/gif",
-    svg: "image/svg+xml",
-    webp: "image/webp",
-    bmp: "image/bmp",
-    css: "text/css",
-    woff: "font/woff",
-    woff2: "font/woff2",
-    ttf: "font/ttf",
-    otf: "font/otf",
-  };
-  return mimeTypes[ext || ""] || "application/octet-stream";
 }
 
 /**
@@ -128,7 +97,7 @@ export async function deleteBook(bookId: string): Promise<void> {
         request.onerror = () => reject(request.error);
       });
 
-      // Delete bookmarks for this book
+      // Delete bookmarks for this book (legacy store)
       const bookmarksStore = stores.get(STORES.BOOKMARKS)!;
       const bookmarksIndex = bookmarksStore.index("bookId");
 
@@ -156,7 +125,7 @@ export async function deleteBook(bookId: string): Promise<void> {
         request.onerror = () => reject(request.error);
       });
 
-      // Delete annotations for this book
+      // Delete annotations for this book (legacy store)
       const annotationsStore = stores.get(STORES.ANNOTATIONS)!;
       const annotationsIndex = annotationsStore.index("bookId");
 
@@ -171,6 +140,34 @@ export async function deleteBook(bookId: string): Promise<void> {
       });
     },
   );
+
+  // Also clean up plugin_store entries for this book
+  await dbTransaction([STORES.PLUGIN_STORE], "readwrite", async (stores) => {
+    const ps = stores.get(STORES.PLUGIN_STORE)!;
+    const idx = ps.index("pluginId");
+
+    for (const pluginId of ["bookmarks", "annotations", "stats"]) {
+      await new Promise<void>((resolve, reject) => {
+        const req = idx.getAll(IDBKeyRange.only(pluginId));
+        req.onsuccess = () => {
+          for (const record of req.result as Array<{
+            pluginId: string;
+            key: string;
+            value: { bookId?: string };
+          }>) {
+            if (record.value?.bookId === bookId) {
+              ps.delete([pluginId, record.key]);
+            }
+          }
+          resolve();
+        };
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    // Also clean up core progress entry
+    ps.delete(["__core__", `__progress__${bookId}`]);
+  });
 }
 
 /**
@@ -200,20 +197,18 @@ interface StoredChapter {
 export async function getChapterContent(
   bookId: string,
   chapterId: string,
+  parser?: BookParser,
 ): Promise<string | undefined> {
   const chapter = await dbGet<StoredChapter>(STORES.CHAPTERS, [bookId, chapterId]);
 
   if (!chapter) return undefined;
 
-  // Content already extracted — return immediately
   if (chapter.content) return chapter.content;
 
-  // Content not yet extracted and we have a href — lazy extract from zip
-  if (chapter.href) {
-    return lazyExtractChapterContent(bookId, chapterId, chapter.href);
+  if (chapter.href && parser?.loadChapterContent) {
+    return lazyExtractChapterContent(bookId, chapterId, chapter.href, parser);
   }
 
-  // No href, no content — return empty string
   return chapter.content;
 }
 
@@ -239,24 +234,23 @@ async function lazyExtractChapterContent(
   bookId: string,
   chapterId: string,
   href: string,
+  parser: BookParser,
 ): Promise<string> {
   const key = `${bookId}:${chapterId}`;
 
-  // Dedup: if extraction is already in progress, return the existing promise
   const inflight = extractionInProgress.get(key);
   if (inflight) return inflight;
 
   const promise = (async () => {
-    const zipData = await getZipStore()?.getZip(bookId);
-    if (!zipData) {
+    const content = await parser.loadChapterContent!(bookId, {
+      id: chapterId,
+      href,
+    });
+    if (!content) {
       throw new Error(
         "Chapter content not available. The book data has been cleared from local storage. Please re-import the book.",
       );
     }
-
-    const extractChapter = getLazyExtractChapter();
-    if (!extractChapter) throw new Error("No lazy chapter extractor registered");
-    const content = await extractChapter(zipData, href);
     await updateChapterContent(bookId, chapterId, content);
     return content;
   })();

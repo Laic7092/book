@@ -7,9 +7,8 @@
 export function formatDuration(ms: number): string {
   if (ms < 0) ms = 0;
 
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
+  const totalMinutes = Math.round(ms / 60000);
+  const hours = Math.floor(totalMinutes / 60);
   const days = Math.floor(hours / 24);
 
   if (days > 0) {
@@ -18,22 +17,14 @@ export function formatDuration(ms: number): string {
   }
 
   if (hours > 0) {
-    const remainingMinutes = minutes % 60;
+    const remainingMinutes = totalMinutes % 60;
     if (remainingMinutes > 0) {
       return `${hours}h ${remainingMinutes}m`;
     }
     return `${hours}h`;
   }
 
-  if (minutes > 0) {
-    const remainingSeconds = seconds % 60;
-    if (remainingSeconds > 0) {
-      return `${minutes}m ${remainingSeconds}s`;
-    }
-    return `${minutes}m`;
-  }
-
-  return `${seconds}s`;
+  return `${Math.max(totalMinutes, 1)}m`;
 }
 
 /**
@@ -43,9 +34,8 @@ export function formatDuration(ms: number): string {
 export function formatDurationLong(ms: number): string {
   if (ms < 0) ms = 0;
 
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
+  const totalMinutes = Math.round(ms / 60000);
+  const hours = Math.floor(totalMinutes / 60);
   const days = Math.floor(hours / 24);
 
   const parts: string[] = [];
@@ -58,16 +48,12 @@ export function formatDurationLong(ms: number): string {
     parts.push(`${hours} ${hours === 1 ? "hour" : "hours"}`);
   }
 
-  if (minutes > 0 && hours === 0) {
-    parts.push(`${minutes} ${minutes === 1 ? "minute" : "minutes"}`);
-  }
-
-  if (seconds > 0 && minutes === 0 && hours === 0) {
-    parts.push(`${seconds} ${seconds === 1 ? "second" : "seconds"}`);
+  if (totalMinutes > 0 && hours === 0) {
+    parts.push(`${totalMinutes} ${totalMinutes === 1 ? "minute" : "minutes"}`);
   }
 
   if (parts.length === 0) {
-    return "0 seconds";
+    return "0 minutes";
   }
 
   return parts.join(" ");

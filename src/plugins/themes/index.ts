@@ -6,5 +6,7 @@ export const themesPlugin: Plugin = {
   name: "Themes",
   version: "1.0.0",
   core: true,
-  modalComponents: { settings: ReaderSettings },
+  setup(ctx) {
+    ctx.ui.registerModal("settings", ReaderSettings);
+  },
 };

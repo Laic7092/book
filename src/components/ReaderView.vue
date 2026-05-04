@@ -39,6 +39,7 @@ import type { ReaderHost } from "../core/reader-host";
 import { getSearchApi } from "../core/search-api";
 import { getOverlayComponents, pluginStateVersion } from "../plugins/registry";
 import { STORES, dbPut, dbGet } from "../storage/db";
+import { pluginEvents } from "../plugins/context";
 import { getChapterContent as fetchChapterContent } from "../storage/books";
 
 const props = defineProps<{
@@ -174,26 +175,12 @@ async function saveReadingProgress(
     readingProgress: Math.round(readingProgressVal),
     pageIndex,
   };
-  const existing = await dbGet<Bookmark>(STORES.BOOKMARKS, id);
-  if (existing) {
-    await dbPut(STORES.BOOKMARKS, {
-      ...existing,
-      chapterId,
-      cfi: "",
-      note: JSON.stringify(progressData),
-    });
-  } else {
-    await dbPut(STORES.BOOKMARKS, {
-      id,
-      bookId: props.book.id,
-      chapterId,
-      cfi: "",
-      title: "",
-      contentPreview: "",
-      createdAt: Date.now(),
-      note: JSON.stringify(progressData),
-    });
-  }
+  await dbPut(STORES.PLUGIN_STORE, {
+    pluginId: "__core__",
+    key: id,
+    value: { chapterId, progressData },
+    createdAt: Date.now(),
+  });
 }
 
 async function loadProgress(): Promise<{
@@ -204,16 +191,20 @@ async function loadProgress(): Promise<{
   pageIndex: number;
 } | null> {
   const id = `__progress__${props.book.id}`;
-  const bookmark = await dbGet<Bookmark & { note?: string }>(STORES.BOOKMARKS, id);
-  if (!bookmark?.note) return null;
+  const record = await dbGet<{
+    value: {
+      chapterId: string;
+      progressData: { chapterProgress: number; readingProgress: number; pageIndex: number };
+    };
+  }>(STORES.PLUGIN_STORE, ["__core__", id]);
+  if (!record?.value) return null;
   try {
-    const data = JSON.parse(bookmark.note);
     return {
-      chapterId: bookmark.chapterId,
-      cfi: bookmark.cfi,
-      chapterProgress: data.chapterProgress || 0,
-      readingProgress: data.readingProgress || 0,
-      pageIndex: data.pageIndex || 0,
+      chapterId: record.value.chapterId,
+      cfi: "",
+      chapterProgress: record.value.progressData.chapterProgress || 0,
+      readingProgress: record.value.progressData.readingProgress || 0,
+      pageIndex: record.value.progressData.pageIndex || 0,
     };
   } catch {
     return null;
@@ -927,17 +918,13 @@ const addBookmark = async () => {
     preview = extractPreviewAround(plainText, Math.max(0, offsetInArticle));
   }
 
-  // Save bookmark directly to IndexedDB
-  const bookmark: Bookmark = {
-    id: `bm_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+  void pluginEvents.emit("bookmark:create", {
     bookId: props.book.id,
     chapterId: chapter.id,
     cfi,
     title: chapter.title,
     contentPreview: preview,
-    createdAt: Date.now(),
-  };
-  await dbPut(STORES.BOOKMARKS, bookmark);
+  });
   closeModal();
 };
 

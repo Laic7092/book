@@ -1,32 +1,20 @@
 // Reader Store - Manages book reading state and operations
 
 import { defineStore } from "pinia";
-import type { Book, Chapter, ParsedBook } from "../core/types";
+import type { Book, Chapter, ParsedBook, BookParser } from "../core/types";
 import { ErrorCode, createReaderError } from "../core/errors";
-import type { BookParser } from "../core/types";
-import {
-  getParsers,
-  dispatchOnBookOpen,
-  dispatchOnBookClose,
-  getResourceResolver,
-  getSessionTracker,
-} from "../plugins/registry";
+import { getParsers, getParserForFormat } from "../plugins/registry";
+import { pluginEvents } from "../plugins/context";
 import * as booksStore from "../storage/books";
 import { assertValidBookFile, validateBookId } from "../utils/validation";
 
-/**
- * Get appropriate parser for a file
- */
 function getParserForFile(file: File): BookParser | null {
   const parsers = getParsers();
 
   for (const parser of parsers) {
-    if (parser.supportsFormat(file.type)) {
-      return parser;
-    }
+    if (parser.supportsFormat(file.type)) return parser;
   }
 
-  // Fallback: try parsers based on file extension
   const ext = file.name.split(".").pop()?.toLowerCase();
   for (const parser of parsers) {
     if (
@@ -41,11 +29,250 @@ function getParserForFile(file: File): BookParser | null {
   return null;
 }
 
+export interface ReaderState {
+  currentBook: Book | null;
+  currentChapter: Chapter | null;
+  currentParser: BookParser | null;
+  chapters: Chapter[];
+  isLoading: boolean;
+  error: string | null;
+  resourceUrls: Map<string, string> | undefined;
+  readingProgress: number;
+  chapterProgress: number;
+}
+
+export const useReaderStore = defineStore("reader", {
+  state: (): ReaderState => ({
+    currentBook: null,
+    currentChapter: null,
+    currentParser: null,
+    chapters: [],
+    isLoading: false,
+    error: null,
+    resourceUrls: undefined,
+    readingProgress: 0,
+    chapterProgress: 0,
+  }),
+
+  getters: {
+    isBookOpen: (state) => state.currentBook !== null,
+  },
+
+  actions: {
+    async loadBook(file: File): Promise<{ book: Book; chapters: Chapter[] }> {
+      assertValidBookFile(file);
+      this.isLoading = true;
+      this.error = null;
+
+      try {
+        const parser = getParserForFile(file);
+        if (!parser) {
+          throw createReaderError(
+            `Unsupported file format: ${file.type || file.name}`,
+            ErrorCode.UNSUPPORTED_FORMAT,
+          );
+        }
+
+        const parsedBook: ParsedBook = await parser.parse(file);
+        await booksStore.saveBook(parsedBook, parser);
+
+        return { book: parsedBook.book, chapters: parsedBook.chapters };
+      } catch (error) {
+        this.error = error instanceof Error ? error.message : "Failed to load book";
+        throw error;
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
+    async openBook(bookId: string): Promise<{ book: Book; chapters: Chapter[] }> {
+      validateBookId(bookId);
+      this.isLoading = true;
+      this.error = null;
+
+      if (this.resourceUrls) {
+        this.currentParser?.revokeResourceUrls?.(this.resourceUrls);
+        this.resourceUrls = undefined;
+      }
+
+      try {
+        const book = await booksStore.getBook(bookId);
+        if (!book) {
+          throw createReaderError("Book not found", ErrorCode.BOOK_NOT_FOUND);
+        }
+
+        const parser = getParserForFormat(book.format);
+        const chaptersData = await booksStore.getChapters(bookId);
+
+        const chapters: Chapter[] = chaptersData.map((ch) => ({
+          id: ch.id,
+          bookId,
+          title: ch.title,
+          order: ch.order,
+          href: ch.href,
+          inToc: ch.inToc,
+        }));
+
+        this.currentBook = book;
+        this.currentParser = parser;
+        this.chapters = chapters;
+        this.resourceUrls = new Map();
+
+        await booksStore.updateLastRead(bookId);
+        this.currentChapter = chapters.length > 0 ? chapters[0] : null;
+
+        // Plugins listen to this event (stats, bookmarks, annotations)
+        void pluginEvents.emit("book:opened", { bookId });
+
+        return { book, chapters };
+      } catch (error) {
+        this.error = error instanceof Error ? error.message : "Failed to open book";
+        throw error;
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
+    async goToChapter(chapterId: string): Promise<string> {
+      if (!this.currentBook) {
+        throw createReaderError("No book loaded", ErrorCode.NO_BOOK_LOADED);
+      }
+
+      const chapter = this.chapters.find((c) => c.id === chapterId);
+      if (!chapter) {
+        throw createReaderError("Chapter not found", ErrorCode.CHAPTER_NOT_FOUND);
+      }
+
+      const content = await booksStore.getChapterContent(
+        this.currentBook.id,
+        chapterId,
+        this.currentParser ?? undefined,
+      );
+
+      if (content === undefined) {
+        throw createReaderError("Chapter content not found", ErrorCode.CHAPTER_CONTENT_NOT_FOUND);
+      }
+
+      this.currentChapter = chapter;
+      this.chapterProgress = 0;
+      this.readingProgress = 0;
+
+      return content;
+    },
+
+    async nextChapter(): Promise<string | null> {
+      if (!this.currentChapter || !this.currentBook) return null;
+
+      const currentIndex = this.chapters.findIndex((c) => c.id === this.currentChapter!.id);
+      const nextChapter = this.chapters[currentIndex + 1];
+      if (nextChapter) return this.goToChapter(nextChapter.id);
+      return null;
+    },
+
+    async prevChapter(): Promise<string | null> {
+      if (!this.currentChapter || !this.currentBook) return null;
+
+      const currentIndex = this.chapters.findIndex((c) => c.id === this.currentChapter!.id);
+      const prevChapter = this.chapters[currentIndex - 1];
+      if (prevChapter) return this.goToChapter(prevChapter.id);
+      return null;
+    },
+
+    updateProgress(reading: number, chapter: number): void {
+      this.readingProgress = reading;
+      this.chapterProgress = chapter;
+    },
+
+    async closeBook(): Promise<void> {
+      const bookId = this.currentBook?.id;
+      const chapterId = this.currentChapter?.id;
+      const urls = this.resourceUrls;
+      const parser = this.currentParser;
+
+      // Reset UI immediately
+      this.currentBook = null;
+      this.currentChapter = null;
+      this.currentParser = null;
+      this.chapters = [];
+      this.resourceUrls = undefined;
+      this.readingProgress = 0;
+      this.chapterProgress = 0;
+
+      // Plugins listen to this event
+      if (bookId) {
+        void pluginEvents.emit("book:closed", { bookId, chapterId });
+      }
+
+      // Background cleanup
+      if (urls) {
+        parser?.revokeResourceUrls?.(urls);
+      }
+    },
+
+    reset() {
+      if (this.resourceUrls) {
+        this.currentParser?.revokeResourceUrls?.(this.resourceUrls);
+      }
+      this.$reset();
+    },
+
+    getCurrentChapter() {
+      return this.currentChapter;
+    },
+
+    getCurrentBook() {
+      return this.currentBook;
+    },
+
+    async getCurrentChapterContent(): Promise<{
+      html: string;
+      resources: HTMLElement[];
+    } | null> {
+      if (!this.currentBook || !this.currentChapter) return null;
+
+      const content = await booksStore.getChapterContent(
+        this.currentBook.id,
+        this.currentChapter.id,
+        this.currentParser ?? undefined,
+      );
+      if (!content) return null;
+
+      const doc = new DOMParser().parseFromString(content, "text/html");
+
+      // Collect resource paths and resolve via parser
+      const resourcePaths = collectResourcePaths(doc);
+      if (resourcePaths.length > 0 && this.currentParser?.resolveResourceUrl) {
+        if (!this.resourceUrls) this.resourceUrls = new Map();
+        await resolveMissingResources(
+          this.currentBook.id,
+          resourcePaths,
+          this.resourceUrls,
+          this.currentParser,
+        );
+      }
+
+      if (this.resourceUrls && this.resourceUrls.size > 0) {
+        const { rewriteResourcePaths } = await import("../utils/resource-urls");
+        const rewrittenDoc = rewriteResourcePaths(content, this.resourceUrls);
+
+        const resources: HTMLElement[] = [];
+        const headElements = Array.from(rewrittenDoc.head.children);
+        for (const element of headElements) {
+          resources.push(element.cloneNode(true) as HTMLElement);
+        }
+
+        return { html: rewrittenDoc.body.innerHTML, resources };
+      }
+
+      return { html: doc.body.innerHTML, resources: [] };
+    },
+  },
+});
+
+// ── Resource resolution helpers ──
+
 const CSS_URL_PATTERN = /url\(['"]?([^'")\s]+)['"]?\)/gi;
 
-/**
- * Collect all resource paths referenced in a chapter's HTML document.
- */
 function collectResourcePaths(doc: Document): string[] {
   const paths = new Set<string>();
 
@@ -64,7 +291,6 @@ function collectResourcePaths(doc: Document): string[] {
     if (href) paths.add(href);
   });
 
-  // Inline style url() references
   doc.querySelectorAll("*[style]").forEach((el) => {
     const style = el.getAttribute("style");
     if (style) {
@@ -74,7 +300,6 @@ function collectResourcePaths(doc: Document): string[] {
     }
   });
 
-  // Embedded <style> element url() references
   doc.querySelectorAll("style").forEach((el) => {
     const css = el.textContent;
     if (css) {
@@ -87,14 +312,11 @@ function collectResourcePaths(doc: Document): string[] {
   return Array.from(paths);
 }
 
-/**
- * Lazily resolve missing resource URLs from stored zip data.
- * Mutates resourceUrls in-place with newly resolved blob URLs.
- */
 async function resolveMissingResources(
   bookId: string,
   paths: string[],
   resourceUrls: Map<string, string>,
+  parser: BookParser,
 ): Promise<void> {
   const missingPaths = paths.filter((p) => !resourceUrls.has(p));
   if (missingPaths.length === 0) return;
@@ -102,7 +324,7 @@ async function resolveMissingResources(
   const results = await Promise.all(
     missingPaths.map(async (path) => ({
       path,
-      url: await getResourceResolver()?.getResourceUrl(bookId, path),
+      url: await parser.resolveResourceUrl?.(bookId, path),
     })),
   );
 
@@ -110,304 +332,3 @@ async function resolveMissingResources(
     if (url) resourceUrls.set(path, url);
   }
 }
-
-export interface ReaderState {
-  currentBook: Book | null;
-  currentChapter: Chapter | null;
-  chapters: Chapter[];
-  isLoading: boolean;
-  error: string | null;
-  resourceUrls: Map<string, string> | undefined;
-  readingProgress: number;
-  chapterProgress: number;
-}
-
-export const useReaderStore = defineStore("reader", {
-  state: (): ReaderState => ({
-    currentBook: null,
-    currentChapter: null,
-    chapters: [],
-    isLoading: false,
-    error: null,
-    resourceUrls: undefined,
-    readingProgress: 0,
-    chapterProgress: 0,
-  }),
-
-  getters: {
-    isBookOpen: (state) => {
-      return state.currentBook !== null;
-    },
-  },
-
-  actions: {
-    /**
-     * Load a book from file (parse and save to storage, but don't open)
-     */
-    async loadBook(file: File): Promise<{ book: Book; chapters: Chapter[] }> {
-      assertValidBookFile(file);
-      this.isLoading = true;
-      this.error = null;
-
-      try {
-        const parser = getParserForFile(file);
-
-        if (!parser) {
-          throw createReaderError(
-            `Unsupported file format: ${file.type || file.name}`,
-            ErrorCode.UNSUPPORTED_FORMAT,
-          );
-        }
-
-        const parsedBook: ParsedBook = await parser.parse(file);
-
-        // Save to storage
-        await booksStore.saveBook(parsedBook);
-
-        // Don't set currentBook here - just parse and save
-        // The book will be opened when user clicks on it
-        return {
-          book: parsedBook.book,
-          chapters: parsedBook.chapters,
-        };
-      } catch (error) {
-        this.error = error instanceof Error ? error.message : "Failed to load book";
-        throw error;
-      } finally {
-        this.isLoading = false;
-      }
-    },
-
-    /**
-     * Open a book from storage by ID
-     */
-    async openBook(bookId: string): Promise<{ book: Book; chapters: Chapter[] }> {
-      validateBookId(bookId);
-      this.isLoading = true;
-      this.error = null;
-
-      // Revoke previous blob URLs before loading new book
-      if (this.resourceUrls) {
-        getResourceResolver()?.revokeResourceUrls(this.resourceUrls);
-        this.resourceUrls = undefined;
-      }
-
-      try {
-        const book = await booksStore.getBook(bookId);
-        if (!book) {
-          throw createReaderError("Book not found", ErrorCode.BOOK_NOT_FOUND);
-        }
-
-        // Get chapters with titles from storage
-        const chaptersData = await booksStore.getChapters(bookId);
-
-        const chapters: Chapter[] = chaptersData.map((ch) => ({
-          id: ch.id,
-          bookId,
-          title: ch.title,
-          order: ch.order,
-          href: ch.href,
-          inToc: ch.inToc,
-        }));
-
-        this.currentBook = book;
-        this.chapters = chapters;
-
-        // Notify plugins
-        void dispatchOnBookOpen(bookId);
-
-        // Initialize empty resource URL map — resources are lazily resolved per-chapter
-        this.resourceUrls = new Map();
-
-        // Update last read timestamp
-        await booksStore.updateLastRead(bookId);
-
-        // Start reading session
-        await getSessionTracker()?.startSession(bookId);
-
-        this.currentChapter = chapters.length > 0 ? chapters[0] : null;
-
-        return { book, chapters };
-      } catch (error) {
-        this.error = error instanceof Error ? error.message : "Failed to open book";
-        throw error;
-      } finally {
-        this.isLoading = false;
-      }
-    },
-
-    /**
-     * Navigate to a chapter
-     */
-    async goToChapter(chapterId: string): Promise<string> {
-      if (!this.currentBook) {
-        throw createReaderError("No book loaded", ErrorCode.NO_BOOK_LOADED);
-      }
-
-      const chapter = this.chapters.find((c) => c.id === chapterId);
-      if (!chapter) {
-        throw createReaderError("Chapter not found", ErrorCode.CHAPTER_NOT_FOUND);
-      }
-
-      const content = await booksStore.getChapterContent(this.currentBook.id, chapterId);
-
-      if (content === undefined) {
-        throw createReaderError("Chapter content not found", ErrorCode.CHAPTER_CONTENT_NOT_FOUND);
-      }
-
-      this.currentChapter = chapter;
-      this.chapterProgress = 0;
-      this.readingProgress = 0;
-
-      return content;
-    },
-
-    /**
-     * Go to next chapter
-     */
-    async nextChapter(): Promise<string | null> {
-      if (!this.currentChapter || !this.currentBook) {
-        return null;
-      }
-
-      const currentIndex = this.chapters.findIndex((c) => c.id === this.currentChapter!.id);
-      const nextChapter = this.chapters[currentIndex + 1];
-
-      if (nextChapter) {
-        return this.goToChapter(nextChapter.id);
-      }
-
-      return null;
-    },
-
-    /**
-     * Go to previous chapter
-     */
-    async prevChapter(): Promise<string | null> {
-      if (!this.currentChapter || !this.currentBook) {
-        return null;
-      }
-
-      const currentIndex = this.chapters.findIndex((c) => c.id === this.currentChapter!.id);
-      const prevChapter = this.chapters[currentIndex - 1];
-
-      if (prevChapter) {
-        return this.goToChapter(prevChapter.id);
-      }
-
-      return null;
-    },
-
-    /**
-     * Update progress state (memory only)
-     */
-    updateProgress(reading: number, chapter: number): void {
-      this.readingProgress = reading;
-      this.chapterProgress = chapter;
-    },
-
-    /**
-     * Close current book
-     */
-    async closeBook(): Promise<void> {
-      // End reading session if a book is open
-      if (this.currentBook) {
-        const chapterId = this.currentChapter?.id;
-        await getSessionTracker()?.endSession(this.currentBook.id, chapterId);
-      }
-
-      // Revoke blob URLs to free memory
-      if (this.resourceUrls) {
-        getResourceResolver()?.revokeResourceUrls(this.resourceUrls);
-      }
-
-      this.currentBook = null;
-      this.currentChapter = null;
-      this.chapters = [];
-      this.resourceUrls = undefined;
-      this.readingProgress = 0;
-      this.chapterProgress = 0;
-
-      void dispatchOnBookClose();
-    },
-
-    /**
-     * Reset store to initial state
-     */
-    reset() {
-      // Revoke blob URLs before resetting to prevent memory leak
-      if (this.resourceUrls) {
-        getResourceResolver()?.revokeResourceUrls(this.resourceUrls);
-      }
-      this.$reset();
-    },
-
-    /**
-     * Get current chapter
-     */
-    getCurrentChapter() {
-      return this.currentChapter;
-    },
-
-    /**
-     * Get current book
-     */
-    getCurrentBook() {
-      return this.currentBook;
-    },
-
-    /**
-     * Get current chapter content with resource URLs rewritten.
-     * Lazily resolves missing resources from stored zip as needed.
-     */
-    async getCurrentChapterContent(): Promise<{
-      html: string;
-      resources: HTMLElement[];
-    } | null> {
-      if (!this.currentBook || !this.currentChapter) {
-        return null;
-      }
-
-      const content = await booksStore.getChapterContent(
-        this.currentBook.id,
-        this.currentChapter.id,
-      );
-      if (!content) {
-        return null;
-      }
-
-      // Parse content
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(content, "text/html");
-
-      // Collect referenced resource paths and lazy-resolve missing ones
-      const resourcePaths = collectResourcePaths(doc);
-      if (resourcePaths.length > 0) {
-        if (!this.resourceUrls) this.resourceUrls = new Map();
-        await resolveMissingResources(this.currentBook.id, resourcePaths, this.resourceUrls);
-      }
-
-      // Rewrite resource paths if any resources are available
-      if (this.resourceUrls && this.resourceUrls.size > 0) {
-        const { rewriteResourcePaths } = await import("../utils/resource-urls");
-        const rewrittenDoc = rewriteResourcePaths(content, this.resourceUrls);
-
-        const resources: HTMLElement[] = [];
-        const headElements = Array.from(rewrittenDoc.head.children);
-        for (const element of headElements) {
-          resources.push(element.cloneNode(true) as HTMLElement);
-        }
-
-        return {
-          html: rewrittenDoc.body.innerHTML,
-          resources,
-        };
-      }
-
-      return {
-        html: doc.body.innerHTML,
-        resources: [],
-      };
-    },
-  },
-});

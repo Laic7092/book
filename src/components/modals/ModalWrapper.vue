@@ -1,14 +1,9 @@
 <script setup lang="ts">
 import type { Chapter } from "../../core/types";
 import TableOfContents from "./TableOfContents.vue";
-import { computed, watch } from "vue";
+import { computed } from "vue";
 import { useSettingsStore } from "../../stores/settings";
-import {
-  getModalComponents,
-  pluginStateVersion,
-  dispatchOnModalOpen,
-  dispatchOnModalClose,
-} from "../../plugins/registry";
+import { getModalComponents, pluginStateVersion } from "../../plugins/registry";
 
 const settingsStore = useSettingsStore();
 const themeClass = computed(() => `theme-${settingsStore.settings.theme}`);
@@ -27,16 +22,6 @@ const emit = defineEmits<{
   (e: "close"): void;
   (e: "select-chapter", chapterId: string): void;
 }>();
-
-let prevModal: string | null = null;
-watch(
-  () => props.modalType,
-  (curr) => {
-    if (prevModal && prevModal !== "toc") dispatchOnModalClose(prevModal);
-    if (curr && curr !== "toc") dispatchOnModalOpen(curr);
-    prevModal = curr;
-  },
-);
 
 function handleClose() {
   emit("close");

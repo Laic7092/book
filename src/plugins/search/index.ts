@@ -11,18 +11,7 @@ export const searchPlugin: Plugin = {
   id: "search",
   name: "Full-Text Search",
   version: "1.0.0",
-  modalComponents: { search: SearchPanel },
-  footerActions: [
-    {
-      id: "search",
-      position: "menu",
-      label: "Search",
-      icon: '<circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />',
-      modal: "search",
-      order: 20,
-    },
-  ],
-  onInit() {
+  setup(ctx) {
     const readerStore = useReaderStore();
     const settingsStore = useSettingsStore();
     const api = reactive(
@@ -33,5 +22,15 @@ export const searchPlugin: Plugin = {
       }),
     ) as unknown as SearchApi;
     registerSearchApi(api);
+
+    ctx.ui.registerModal("search", SearchPanel);
+    ctx.ui.registerFooterAction({
+      id: "search",
+      position: "menu",
+      label: "Search",
+      icon: '<circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />',
+      modal: "search",
+      order: 20,
+    });
   },
 };

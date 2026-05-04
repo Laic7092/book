@@ -6,5 +6,7 @@ export const corePlugin: Plugin = {
   name: "Core",
   version: "1.0.0",
   core: true,
-  modalComponents: { plugins: PluginsPanel },
+  setup(ctx) {
+    ctx.ui.registerModal("plugins", PluginsPanel);
+  },
 };

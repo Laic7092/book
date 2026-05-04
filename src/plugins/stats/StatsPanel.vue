@@ -4,7 +4,7 @@ import type { BookReadingStats } from "../../core/types";
 import { formatDuration, formatRelativeTime, formatHour } from "../../utils/time";
 import ModalHeader from "../../components/modals/ModalHeader.vue";
 import { getReaderHost } from "../../core/reader-host";
-import { getStats } from "./storage";
+import { getStats } from "./engine";
 
 const stats = ref<BookReadingStats | null>(null);
 const host = getReaderHost();

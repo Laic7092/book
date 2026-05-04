@@ -3,9 +3,8 @@
 import type { Resource } from "../../core/types";
 import { STORES, dbPut, dbDelete, dbGet, dbGetAllFromIndex } from "../../storage/db";
 import { getZip } from "./zips";
-import { getLazyExtractResource } from "../registry";
 
-function getMimeTypeFromExtension(path: string): string {
+export function getMimeTypeFromExtension(path: string): string {
   const ext = path.split(".").pop()?.toLowerCase();
   const mimeTypes: Record<string, string> = {
     jpg: "image/jpeg",
@@ -97,7 +96,11 @@ function sanitizeCssFonts(data: ArrayBuffer): ArrayBuffer {
 /**
  * Get a single resource as a Blob URL. Falls back to lazy extraction from zip.
  */
-export async function getResourceUrl(bookId: string, resourceId: string): Promise<string | null> {
+export async function getResourceUrl(
+  bookId: string,
+  resourceId: string,
+  lazyExtract?: (rawData: ArrayBuffer, resourceId: string) => Promise<ArrayBuffer>,
+): Promise<string | null> {
   const resource = await dbGet<Resource>(STORES.RESOURCES, [bookId, resourceId]);
 
   if (resource) {
@@ -105,14 +108,13 @@ export async function getResourceUrl(bookId: string, resourceId: string): Promis
     return URL.createObjectURL(blob);
   }
 
-  // Try lazy extraction from stored zip
+  if (!lazyExtract) return null;
+
   const zipData = await getZip(bookId);
   if (!zipData) return null;
 
   try {
-    const extractResource = getLazyExtractResource();
-    if (!extractResource) return null;
-    const data = await extractResource(zipData, resourceId);
+    const data = await lazyExtract(zipData, resourceId);
     const mimeType = getMimeTypeFromExtension(resourceId);
     await saveResource(bookId, resourceId, data, mimeType);
     const blob = new Blob([data], { type: mimeType });

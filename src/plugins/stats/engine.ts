@@ -1,67 +1,64 @@
-// Reading statistics storage module
+// Reading statistics computation engine.
+// Depends on PluginStorageAdapter (injected via setStatsAdapter) for data access.
 
 import type { ReadingSession, BookReadingStats } from "../../core/types";
-import { STORES, dbPut, dbGet, dbDelete, dbGetAllFromIndex } from "../../storage/db";
+import type { PluginStorageAdapter } from "../types";
 
-const SESSIONS_DB_KEY = "__reading_sessions__";
+let adapter: PluginStorageAdapter | null = null;
 
-/**
- * Get all sessions from storage
- */
+export function setStatsAdapter(a: PluginStorageAdapter) {
+  adapter = a;
+}
+
+function useAdapter() {
+  return adapter!;
+}
+
+const SESSIONS_KEY = "sessions";
+
+function statsKey(bookId: string) {
+  return `stats:${bookId}`;
+}
+
+// ── Session management ──
+
 async function getSessions(): Promise<ReadingSession[]> {
-  const data = await dbGet<{ bookId: string; sessions: ReadingSession[] }>(
-    STORES.STATS,
-    SESSIONS_DB_KEY as any,
-  );
+  const data = await useAdapter().get<{ sessions: ReadingSession[] }>(SESSIONS_KEY);
   return data?.sessions || [];
 }
 
-/**
- * Save sessions to storage
- */
 async function saveSessions(sessions: ReadingSession[]): Promise<void> {
-  await dbPut(STORES.STATS, { bookId: SESSIONS_DB_KEY, sessions });
+  await useAdapter().put(SESSIONS_KEY, { sessions });
 }
 
-/**
- * Start a new reading session for a book
- */
 export async function startSession(bookId: string): Promise<void> {
   const sessions = await getSessions();
 
-  // Close any unclosed sessions for this book
   sessions.forEach((session) => {
     if (session.bookId === bookId && !session.endTime) {
       session.endTime = Date.now();
     }
   });
 
-  const newSession: ReadingSession = {
+  sessions.push({
     bookId,
     startTime: Date.now(),
     chaptersRead: [],
     wordsRead: 0,
-  };
+  });
 
-  sessions.push(newSession);
   await saveSessions(sessions);
 }
 
-/**
- * End a reading session and update statistics
- */
 export async function endSession(
   bookId: string,
   chapterId?: string,
   wordsRead?: number,
 ): Promise<BookReadingStats> {
   const sessions = await getSessions();
+  const idx = sessions.findIndex((s) => s.bookId === bookId && !s.endTime);
 
-  // Find the most recent unclosed session for this book
-  const sessionIndex = sessions.findIndex((s) => s.bookId === bookId && !s.endTime);
-
-  if (sessionIndex === -1) {
-    // No active session, return current stats or empty stats
+  if (idx === -1) {
     const existingStats = await getStats(bookId);
     return (
       existingStats || {
@@ -80,107 +77,69 @@ export async function endSession(
     );
   }
 
-  const session = sessions[sessionIndex];
+  const session = sessions[idx];
   session.endTime = Date.now();
 
   if (chapterId && !session.chaptersRead.includes(chapterId)) {
     session.chaptersRead.push(chapterId);
   }
-
   if (wordsRead) {
     session.wordsRead = (session.wordsRead || 0) + wordsRead;
   }
 
-  sessions[sessionIndex] = session;
+  sessions[idx] = session;
   await saveSessions(sessions);
 
-  // Update and return stats
-  const stats = await updateStats(bookId);
-  return stats;
+  return updateStats(bookId);
 }
 
-/**
- * Record that a chapter was read in the current session
- */
 export async function recordChapterRead(bookId: string, chapterId: string): Promise<void> {
   const sessions = await getSessions();
-
-  const activeSession = sessions.find((s) => s.bookId === bookId && !s.endTime);
-
-  if (activeSession && !activeSession.chaptersRead.includes(chapterId)) {
-    activeSession.chaptersRead.push(chapterId);
+  const active = sessions.find((s) => s.bookId === bookId && !s.endTime);
+  if (active && !active.chaptersRead.includes(chapterId)) {
+    active.chaptersRead.push(chapterId);
     await saveSessions(sessions);
   }
 }
 
-/**
- * Record words read in the current session
- */
 export async function recordWordsRead(bookId: string, words: number): Promise<void> {
   const sessions = await getSessions();
-
-  const activeSession = sessions.find((s) => s.bookId === bookId && !s.endTime);
-
-  if (activeSession) {
-    activeSession.wordsRead = (activeSession.wordsRead || 0) + words;
+  const active = sessions.find((s) => s.bookId === bookId && !s.endTime);
+  if (active) {
+    active.wordsRead = (active.wordsRead || 0) + words;
     await saveSessions(sessions);
   }
 }
 
-/**
- * Get reading statistics for a book
- */
+// ── Stats queries ──
+
 export async function getStats(bookId: string): Promise<BookReadingStats | undefined> {
-  return dbGet<BookReadingStats>(STORES.STATS, bookId as any);
+  return useAdapter().get<BookReadingStats>(statsKey(bookId));
 }
 
-/**
- * Get statistics for all books
- */
 export async function getAllStats(): Promise<BookReadingStats[]> {
-  return dbGetAllFromIndex<BookReadingStats>(STORES.STATS, "lastReadAt");
+  const all = await useAdapter().getAll<{ value: BookReadingStats }>();
+  return all.filter((r) => "totalSessions" in r).map((r) => r as unknown as BookReadingStats);
 }
 
-/**
- * Update statistics for a book based on sessions
- */
 export async function updateStats(bookId: string): Promise<BookReadingStats> {
   const sessions = await getSessions();
   const bookSessions = sessions.filter((s) => s.bookId === bookId && s.endTime);
 
-  // Calculate total reading time from completed sessions
-  const totalReadingTime = bookSessions.reduce(
-    (sum, session) => sum + (session.endTime! - session.startTime),
-    0,
-  );
-
-  // Calculate total words read
-  const totalWordsRead = bookSessions.reduce((sum, session) => sum + (session.wordsRead || 0), 0);
-
-  // Get unique chapters read
+  const totalReadingTime = bookSessions.reduce((sum, s) => sum + (s.endTime! - s.startTime), 0);
+  const totalWordsRead = bookSessions.reduce((sum, s) => sum + (s.wordsRead || 0), 0);
   const allChaptersRead = new Set<string>();
-  bookSessions.forEach((session) => {
-    session.chaptersRead.forEach((chapterId) => {
-      allChaptersRead.add(chapterId);
-    });
-  });
+  bookSessions.forEach((s) => s.chaptersRead.forEach((c) => allChaptersRead.add(c)));
 
-  // Calculate active hours
   const activeHoursSet = new Set<number>();
-  bookSessions.forEach((session) => {
-    const startHour = new Date(session.startTime).getHours();
-    activeHoursSet.add(startHour);
-  });
-
+  bookSessions.forEach((s) => activeHoursSet.add(new Date(s.startTime).getHours()));
   const activeHours = Array.from(activeHoursSet).sort((a, b) => a - b);
 
-  // Get last active date
   const lastSession = bookSessions[bookSessions.length - 1];
   const lastActiveDate = lastSession
     ? new Date(lastSession.startTime).toISOString().split("T")[0]
     : new Date().toISOString().split("T")[0];
 
-  // Calculate reading speed (words per minute)
   const totalReadingTimeMinutes = totalReadingTime / 60000;
   const readingSpeed =
     totalReadingTimeMinutes > 0 ? Math.round(totalWordsRead / totalReadingTimeMinutes) : 0;
@@ -200,13 +159,10 @@ export async function updateStats(bookId: string): Promise<BookReadingStats> {
     lastReadAt: lastSession?.endTime,
   };
 
-  await dbPut(STORES.STATS, stats);
+  await useAdapter().put(statsKey(bookId), stats);
   return stats;
 }
 
-/**
- * Get summary statistics for all books
- */
 export async function getSummaryStats(): Promise<{
   totalBooks: number;
   totalReadingTime: number;
@@ -216,17 +172,13 @@ export async function getSummaryStats(): Promise<{
   thisWeekReadingTime: number;
 }> {
   const allStats = await getAllStats();
-
   const now = Date.now();
   const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
 
   let thisWeekReadingTime = 0;
-
   allStats.forEach((stats) => {
-    // Count sessions from this week
     if (stats.lastReadAt && stats.lastReadAt > weekAgo) {
-      // Estimate this week's reading time based on average
-      const sessionsThisWeek = Math.ceil(stats.totalSessions / 4); // Rough estimate
+      const sessionsThisWeek = Math.ceil(stats.totalSessions / 4);
       thisWeekReadingTime += stats.averageSessionTime * sessionsThisWeek;
     }
   });
@@ -236,18 +188,14 @@ export async function getSummaryStats(): Promise<{
     totalReadingTime: allStats.reduce((sum, s) => sum + s.totalReadingTime, 0),
     totalSessions: allStats.reduce((sum, s) => sum + s.totalSessions, 0),
     booksInProgress: allStats.filter((s) => s.chaptersCompleted > 0).length,
-    completedBooks: 0, // Would need total chapter count to determine
+    completedBooks: 0,
     thisWeekReadingTime,
   };
 }
 
-/**
- * Delete statistics for a book
- */
 export async function deleteStats(bookId: string): Promise<void> {
-  await dbDelete(STORES.STATS, bookId as any);
+  await useAdapter().delete(statsKey(bookId));
 
-  // Also remove associated sessions
   const sessions = await getSessions();
   const filtered = sessions.filter((s) => s.bookId !== bookId);
   await saveSessions(filtered);

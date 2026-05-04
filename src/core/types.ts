@@ -98,6 +98,26 @@ export interface Resource {
 export interface BookParser {
   parse(file: File): Promise<ParsedBook>;
   supportsFormat(mimeType: string): boolean;
+
+  /**
+   * Format identifier (matches Book.format).
+   * Used to find the right parser for a stored book.
+   */
+  format: "txt" | "epub";
+
+  /** Store format-specific resources. Called during book import. */
+  saveResources?(bookId: string, resources: Map<string, ArrayBuffer>): Promise<void>;
+  /** Store raw file data for lazy content extraction. */
+  saveRawData?(bookId: string, rawData: ArrayBuffer, fileSize: number): Promise<void>;
+  /** Load chapter content lazily from raw data. */
+  loadChapterContent?(
+    bookId: string,
+    chapter: { id: string; href?: string },
+  ): Promise<string | undefined>;
+  /** Resolve a resource path to a blob URL. */
+  resolveResourceUrl?(bookId: string, path: string): Promise<string | null>;
+  /** Revoke all blob URLs in the given map. */
+  revokeResourceUrls?(urls: Map<string, string>): void;
 }
 
 /**

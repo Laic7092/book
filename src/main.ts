@@ -5,36 +5,50 @@ import { createPinia } from "pinia";
 import App from "./App.vue";
 import "./styles/index.css";
 
-import { registerPlugin, loadPluginStates, dispatchOnInit } from "./plugins/registry";
-import { txtParserPlugin } from "./plugins/txt-parser";
-import { epubPlugin } from "./plugins/epub";
-import { annotationsPlugin } from "./plugins/annotations";
-import { bookmarksPlugin } from "./plugins/bookmarks";
-import { searchPlugin } from "./plugins/search";
-import { statsPlugin } from "./plugins/stats";
-import { themesPlugin } from "./plugins/themes";
-import { typographyPlugin } from "./plugins/typography";
-import { corePlugin } from "./plugins/core";
-
-registerPlugin(txtParserPlugin);
-registerPlugin(typographyPlugin);
-registerPlugin(corePlugin);
-registerPlugin(epubPlugin);
-registerPlugin(annotationsPlugin);
-registerPlugin(bookmarksPlugin);
-registerPlugin(searchPlugin);
-registerPlugin(statsPlugin);
-registerPlugin(themesPlugin);
+import { registerPlugin, initializePlugins, loadPluginStates } from "./plugins/registry";
+import { migrateToPluginStore } from "./storage/db";
+import type { Plugin } from "./plugins/types";
 
 const app = createApp(App);
 const pinia = createPinia();
-
 app.use(pinia);
 
-// Restore persisted plugin enabled/disabled states from IndexedDB
+// v9 one-time migration: copy legacy store data into plugin_store
+await migrateToPluginStore();
+
+// Phase 1: auto-discover and register all plugins
+const modules = import.meta.glob<Record<string, unknown>>("./plugins/*/index.ts", { eager: true });
+
+function isPlugin(obj: unknown): obj is Plugin {
+  return (
+    typeof obj === "object" && obj !== null && "id" in obj && "name" in obj && "version" in obj
+  );
+}
+
+const allPlugins: Plugin[] = [];
+
+for (const [, mod] of Object.entries(modules)) {
+  for (const exportValue of Object.values(mod)) {
+    if (isPlugin(exportValue)) {
+      allPlugins.push(exportValue);
+    }
+  }
+}
+
+// Sort: core plugins first, then alphabetically by id
+allPlugins.sort((a, b) => {
+  if (a.core !== b.core) return a.core ? -1 : 1;
+  return a.id.localeCompare(b.id);
+});
+
+for (const p of allPlugins) {
+  registerPlugin(p);
+}
+
+// Phase 2: restore persisted enabled/disabled states
 await loadPluginStates();
 
-// Plugins may need Pinia stores, so init after pinia is installed
-await dispatchOnInit();
+// Phase 3: initialize (setup() called only for enabled plugins)
+await initializePlugins({ app, pinia });
 
 app.mount("#app");

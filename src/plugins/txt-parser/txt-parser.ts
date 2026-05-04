@@ -82,6 +82,8 @@ export class TxtParser extends BaseBookParser implements BookParser {
     "application/octet-stream",
   ];
 
+  readonly format = "txt" as const;
+
   supportsFormat(mimeType: string): boolean {
     return TxtParser.SUPPORTED_MIME_TYPES.includes(mimeType);
   }

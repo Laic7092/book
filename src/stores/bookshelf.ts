@@ -3,7 +3,8 @@
 import { defineStore } from "pinia";
 import type { Book } from "../core/types";
 import { dbGetAll, STORES } from "../storage/db";
-import { getResourceResolver, getStatsProvider } from "../plugins/registry";
+import { getParserForFormat } from "../plugins/registry";
+import { pluginEvents } from "../plugins/context";
 import * as booksStore from "../storage/books";
 import { assertValidBookFile } from "../utils/validation";
 
@@ -13,14 +14,6 @@ export interface BookshelfState {
   isUploading: boolean;
   searchQuery: string;
   coverUrls: Map<string, string>;
-  summaryStats: {
-    totalBooks: number;
-    totalReadingTime: number;
-    totalSessions: number;
-    booksInProgress: number;
-    completedBooks: number;
-    thisWeekReadingTime: number;
-  } | null;
 }
 
 export const useBookshelfStore = defineStore("bookshelf", {
@@ -30,7 +23,6 @@ export const useBookshelfStore = defineStore("bookshelf", {
     isUploading: false,
     searchQuery: "",
     coverUrls: new Map(),
-    summaryStats: null,
   }),
 
   getters: {
@@ -46,19 +38,15 @@ export const useBookshelfStore = defineStore("bookshelf", {
   },
 
   actions: {
-    /**
-     * Load all books from library
-     */
     async loadBooks() {
       this.isLoading = true;
       try {
         this.books = await dbGetAll<Book>(STORES.BOOKS);
-        this.summaryStats = (await getStatsProvider()?.getSummaryStats()) ?? null;
 
-        // Resolve cover blob URLs for EPUB books that have a cover
         for (const book of this.books) {
           if (book.coverUrl && !this.coverUrls.has(book.id)) {
-            const url = await getResourceResolver()?.getResourceUrl(book.id, book.coverUrl);
+            const parser = getParserForFormat(book.format);
+            const url = await parser?.resolveResourceUrl?.(book.id, book.coverUrl);
             if (url) {
               this.coverUrls.set(book.id, url);
             }
@@ -69,9 +57,6 @@ export const useBookshelfStore = defineStore("bookshelf", {
       }
     },
 
-    /**
-     * Add a book from file upload
-     */
     async addBookFromFile(file: File) {
       assertValidBookFile(file);
       this.isUploading = true;
@@ -86,9 +71,6 @@ export const useBookshelfStore = defineStore("bookshelf", {
       }
     },
 
-    /**
-     * Delete a book
-     */
     async deleteBook(bookId: string) {
       const { useReaderStore } = await import("./reader");
       const readerStore = useReaderStore();
@@ -96,28 +78,18 @@ export const useBookshelfStore = defineStore("bookshelf", {
         await readerStore.closeBook();
       }
       await booksStore.deleteBook(bookId);
-      await getStatsProvider()?.deleteStats(bookId);
+      void pluginEvents.emit("book:deleted", { bookId });
+
       const coverUrl = this.coverUrls.get(bookId);
       if (coverUrl) {
         URL.revokeObjectURL(coverUrl);
         this.coverUrls.delete(bookId);
       }
       this.books = this.books.filter((b) => b.id !== bookId);
-      this.summaryStats = (await getStatsProvider()?.getSummaryStats()) ?? null;
     },
 
-    /**
-     * Update search query
-     */
     setSearchQuery(query: string) {
       this.searchQuery = query;
-    },
-
-    /**
-     * Refresh summary statistics
-     */
-    async refreshStats() {
-      this.summaryStats = (await getStatsProvider()?.getSummaryStats()) ?? null;
     },
   },
 });

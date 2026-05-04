@@ -252,6 +252,7 @@ export function cleanHtml(html: string): string {
  * Provides common functionality for format-specific parsers
  */
 export abstract class BaseBookParser implements BookParser {
+  abstract readonly format: BookParser["format"];
   abstract parse(file: File): Promise<ParsedBook>;
   abstract supportsFormat(mimeType: string): boolean;
 

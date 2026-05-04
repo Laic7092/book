@@ -25,19 +25,15 @@ async function handleBookSelect(book: Book) {
   }
 }
 
-async function handleCloseReader() {
-  uiStore.setTransitioning(true);
-  await readerStore.closeBook();
-  setTimeout(() => {
-    uiStore.setTransitioning(false);
-  }, 300);
+function handleCloseReader() {
+  readerStore.closeBook();
 }
 </script>
 
 <template>
-  <Transition name="page" mode="out-in">
-    <Bookshelf v-if="!readerStore.currentBook" @book:select="handleBookSelect" />
-    <ReaderView v-else :book="readerStore.currentBook" @close="handleCloseReader" />
+  <Transition name="page">
+    <Bookshelf v-if="!readerStore.currentBook" key="bookshelf" @book:select="handleBookSelect" />
+    <ReaderView v-else key="reader" :book="readerStore.currentBook" @close="handleCloseReader" />
   </Transition>
 </template>
 
@@ -109,7 +105,7 @@ async function handleCloseReader() {
   --transition-base: 280ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-slow: 480ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-spring: 520ms cubic-bezier(0.34, 1.56, 0.64, 1);
-  --transition-page: 600ms cubic-bezier(0.65, 0, 0.35, 1);
+  --transition-page: 350ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 html,
@@ -170,22 +166,32 @@ body.theme-sepia {
   pointer-events: none;
 }
 
-/* Page Transitions - editorial page turn effect */
+/* Page Transitions — simultaneous enter/leave, no gap */
 .page-enter-active,
 .page-leave-active {
   transition: all var(--transition-page);
 }
 
+.page-enter-active {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+}
+
+.page-leave-active {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+}
+
 .page-enter-from {
   opacity: 0;
-  transform: translateX(24px) scale(0.98);
-  filter: blur(2px);
+  transform: translateX(-24px);
 }
 
 .page-leave-to {
   opacity: 0;
-  transform: translateX(-24px) scale(1.02);
-  filter: blur(2px);
+  transform: translateX(80px);
 }
 
 /* Animation keyframes */

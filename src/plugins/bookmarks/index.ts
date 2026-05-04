@@ -1,6 +1,6 @@
-import { useBookmarksStore } from "./store";
 import BookmarksPanel from "./BookmarksPanel.vue";
 import type { Plugin } from "../types";
+import { useBookmarksStore, setBookmarksAdapter } from "./store";
 
 let store: ReturnType<typeof useBookmarksStore> | null = null;
 
@@ -8,26 +8,31 @@ export const bookmarksPlugin: Plugin = {
   id: "bookmarks",
   name: "Bookmarks",
   version: "1.0.0",
-  modalComponents: { bookmarks: BookmarksPanel },
-  footerActions: [
-    {
+  setup(ctx) {
+    setBookmarksAdapter(ctx.storage);
+    store = useBookmarksStore(ctx.pinia);
+
+    ctx.events.on("book:opened", ({ bookId }: { bookId: string }) => store?.loadBookmarks(bookId));
+    ctx.events.on(
+      "bookmark:create",
+      (data: {
+        bookId: string;
+        chapterId: string;
+        cfi: string;
+        title: string;
+        contentPreview: string;
+      }) =>
+        store?.addBookmark(data.bookId, data.chapterId, data.cfi, data.title, data.contentPreview),
+    );
+
+    ctx.ui.registerModal("bookmarks", BookmarksPanel);
+    ctx.ui.registerFooterAction({
       id: "bookmarks",
       position: "bar",
       label: "Bookmarks",
       icon: '<path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />',
       modal: "bookmarks",
       order: 10,
-    },
-  ],
-  onInit() {
-    store = useBookmarksStore();
-  },
-  async onBookOpen(bookId: string) {
-    if (store) await store.loadBookmarks(bookId);
-  },
-  onModalOpen(modalName: string) {
-    if (modalName === "bookmarks" && store?.currentBookId) {
-      void store.loadBookmarks(store.currentBookId);
-    }
+    });
   },
 };

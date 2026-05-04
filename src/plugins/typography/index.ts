@@ -6,5 +6,7 @@ export const typographyPlugin: Plugin = {
   name: "Typography",
   version: "1.0.0",
   core: true,
-  modalComponents: { typographySettings: TypographySettings },
+  setup(ctx) {
+    ctx.ui.registerModal("typographySettings", TypographySettings);
+  },
 };

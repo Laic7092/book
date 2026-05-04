@@ -1,7 +1,7 @@
 // IndexedDB wrapper with Promise-based API
 
 const DB_NAME = "reader-db";
-const DB_VERSION = 8;
+const DB_VERSION = 9;
 
 export const STORES = {
   BOOKS: "books",
@@ -12,6 +12,8 @@ export const STORES = {
   STATS: "stats",
   ANNOTATIONS: "annotations",
   ZIPS: "zips",
+  /** v9: isolated per-plugin key-value storage. Compound key: [pluginId, key]. */
+  PLUGIN_STORE: "plugin_store",
 } as const;
 
 export type StoreName = (typeof STORES)[keyof typeof STORES];
@@ -114,6 +116,15 @@ export async function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORES.ZIPS)) {
         db.createObjectStore(STORES.ZIPS, { keyPath: "bookId" });
       }
+
+      // v9: Isolated plugin key-value store
+      if (!db.objectStoreNames.contains("plugin_store")) {
+        const ps = db.createObjectStore("plugin_store", {
+          keyPath: ["pluginId", "key"],
+        });
+        ps.createIndex("pluginId", "pluginId", { unique: false });
+        ps.createIndex("createdAt", "createdAt", { unique: false });
+      }
     };
   });
 
@@ -212,4 +223,68 @@ export async function dbGetAllFromIndex<T>(
 
 export async function initSettings(settings: { key: string; value: unknown }): Promise<void> {
   await dbPut(STORES.SETTINGS, settings);
+}
+
+// ── v9 plugin_store data migration ──
+
+const MIGRATION_V9_KEY = "__migration_v9_done__";
+
+async function isMigrationV9Done(): Promise<boolean> {
+  const record = await dbGet<{ value: boolean }>(STORES.SETTINGS, MIGRATION_V9_KEY);
+  return record?.value === true;
+}
+
+async function markMigrationV9Done(): Promise<void> {
+  await dbPut(STORES.SETTINGS, { key: MIGRATION_V9_KEY, value: true });
+}
+
+/** Migrate data from legacy shared stores into plugin_store. */
+export async function migrateToPluginStore(): Promise<void> {
+  if (await isMigrationV9Done()) return;
+
+  const db = await openDB();
+
+  // ── bookmarks → plugin_store (pluginId: "bookmarks") ──
+  if (db.objectStoreNames.contains(STORES.BOOKMARKS)) {
+    const bookmarks = await dbGetAll<Record<string, unknown>>(STORES.BOOKMARKS);
+    for (const bm of bookmarks) {
+      await dbPut(STORES.PLUGIN_STORE, {
+        pluginId: "bookmarks",
+        key: bm.id as string,
+        value: bm,
+        createdAt: (bm.createdAt as number) || Date.now(),
+      });
+    }
+  }
+
+  // ── annotations → plugin_store (pluginId: "annotations") ──
+  if (db.objectStoreNames.contains(STORES.ANNOTATIONS)) {
+    const annotations = await dbGetAll<Record<string, unknown>>(STORES.ANNOTATIONS);
+    for (const ann of annotations) {
+      await dbPut(STORES.PLUGIN_STORE, {
+        pluginId: "annotations",
+        key: ann.id as string,
+        value: ann,
+        createdAt: (ann.createdAt as number) || Date.now(),
+      });
+    }
+  }
+
+  // ── stats → plugin_store (pluginId: "stats") ──
+  if (db.objectStoreNames.contains(STORES.STATS)) {
+    const stats = await dbGetAll<Record<string, unknown>>(STORES.STATS);
+    for (const s of stats) {
+      // The sessions record has bookId = "__reading_sessions__"
+      const bid = s.bookId as string;
+      const key = bid === "__reading_sessions__" ? "sessions" : `stats:${bid}`;
+      await dbPut(STORES.PLUGIN_STORE, {
+        pluginId: "stats",
+        key,
+        value: s,
+        createdAt: Date.now(),
+      });
+    }
+  }
+
+  await markMigrationV9Done();
 }

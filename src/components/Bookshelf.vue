@@ -3,11 +3,11 @@ import { computed, onMounted, ref } from "vue";
 import { useBookshelfStore } from "../stores/bookshelf";
 import { useUIStore } from "../stores/ui";
 import { getBookGradient, getInitial } from "../utils/colors";
-import { formatDuration } from "../utils/time";
 import { formatBookToast } from "../utils/toast";
 import { validateBookFile } from "../utils/validation";
 import type { Book } from "../core/types";
 import { ModalWrapper } from "./modals";
+import { getBookshelfWidgets, pluginStateVersion } from "../plugins/registry";
 
 const emit = defineEmits<{
   (e: "book:select", book: Book): void;
@@ -23,6 +23,11 @@ function closePluginsModal() {
 
 const searchFocused = ref(false);
 const viewMode = ref<"card" | "list">("card");
+
+const bookshelfWidgets = computed(() => {
+  void pluginStateVersion.value;
+  return getBookshelfWidgets();
+});
 const sortBy = ref<"recent" | "title-asc" | "title-desc" | "author-asc" | "added">("recent");
 const showMenu = ref(false);
 
@@ -405,35 +410,8 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Stats Bar -->
-      <div
-        v-if="bookshelfStore.summaryStats && bookshelfStore.summaryStats.totalBooks > 0"
-        class="stats-bar"
-      >
-        <div class="stat-item">
-          <span class="stat-value">{{
-            formatDuration(bookshelfStore.summaryStats.totalReadingTime)
-          }}</span>
-          <span class="stat-label">Total read</span>
-        </div>
-        <!-- <span class="stat-sep"></span>
-        <div class="stat-item">
-          <span class="stat-value">{{ bookshelfStore.summaryStats.booksInProgress }}</span>
-          <span class="stat-label">In progress</span>
-        </div> -->
-        <span class="stat-sep"></span>
-        <div class="stat-item">
-          <span class="stat-value">{{
-            formatDuration(bookshelfStore.summaryStats.thisWeekReadingTime)
-          }}</span>
-          <span class="stat-label">This week</span>
-        </div>
-        <!-- <span class="stat-sep"></span>
-        <div class="stat-item">
-          <span class="stat-value">{{ bookshelfStore.summaryStats.completedBooks }}</span>
-          <span class="stat-label">Finished</span>
-        </div> -->
-      </div>
+      <!-- Plugin widgets (e.g. stats bar) -->
+      <component v-for="(comp, i) in bookshelfWidgets" :key="i" :is="comp" />
     </header>
 
     <!-- Content Area -->
@@ -849,42 +827,6 @@ onMounted(() => {
   font-size: 11px;
   font-weight: 600;
   font-family: var(--font-ui);
-}
-
-/* ----- Stats bar ----- */
-.stats-bar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-top: 12px;
-  padding-left: 30px; /* align with content below the mark */
-}
-
-.stat-item {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
-}
-
-.stat-value {
-  font-size: 12px;
-  font-weight: 550;
-  color: var(--text-primary);
-  font-family: var(--font-ui);
-}
-
-.stat-label {
-  font-size: 11px;
-  color: var(--text-muted);
-  font-family: var(--font-ui);
-}
-
-.stat-sep {
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: var(--border-color);
-  flex-shrink: 0;
 }
 
 /* ----- Search ----- */

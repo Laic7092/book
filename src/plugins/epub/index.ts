@@ -1,6 +1,4 @@
 import { EpubParser } from "./epub-parser";
-import * as resources from "./resources";
-import * as zips from "./zips";
 import type { Plugin } from "../types";
 
 export const epubPlugin: Plugin = {
@@ -8,18 +6,7 @@ export const epubPlugin: Plugin = {
   name: "EPUB Parser",
   version: "1.0.0",
   core: true,
-  parsers: [new EpubParser()],
-  lazyExtractChapter: (zipData, href) => EpubParser.extractChapterContent(zipData, href),
-  lazyExtractResource: (zipData, resourceId) => EpubParser.extractResource(zipData, resourceId),
-  resourceResolver: {
-    getResourceUrl: resources.getResourceUrl,
-    revokeResourceUrls: resources.revokeResourceUrls,
-  },
-  resourceSaver: {
-    saveResource: resources.saveResource,
-  },
-  zipStore: {
-    saveZip: zips.saveZip,
-    getZip: zips.getZip,
+  provide: {
+    parsers: [new EpubParser()],
   },
 };
