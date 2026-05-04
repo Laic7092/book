@@ -250,7 +250,7 @@ onMounted(() => {
             <button
               class="btn-menu"
               :class="{ open: showMenu }"
-              @click="toggleMenu"
+              @click.stop="toggleMenu"
               aria-label="Options"
             >
               <svg
@@ -267,9 +267,7 @@ onMounted(() => {
                 <circle cx="12" cy="19" r="1.5" fill="currentColor" />
               </svg>
             </button>
-            <Teleport to="body">
-              <div v-if="showMenu" class="menu-backdrop" @click="closeMenu"></div>
-            </Teleport>
+            <div v-if="showMenu" class="menu-backdrop" @click.stop="closeMenu"></div>
             <transition name="menu-pop">
               <div v-if="showMenu" class="menu-popover" @click.stop>
                 <div class="menu-section">
@@ -1036,7 +1034,7 @@ onMounted(() => {
 .menu-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: -1;
 }
 
 .menu-popover {
