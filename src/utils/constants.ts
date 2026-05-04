@@ -5,8 +5,6 @@
 // Reader layout constants
 export const READER_HEADER_HEIGHT = 60;
 export const READER_FOOTER_HEIGHT = 60;
-export const READER_SAFE_TOP = "max(12px, env(safe-area-inset-top, 12px))";
-export const READER_SAFE_BOTTOM = "max(10px, env(safe-area-inset-bottom, 10px))";
 
 // Touch gesture constants
 export const SWIPE_THRESHOLD = 50;

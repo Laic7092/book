@@ -1221,7 +1221,7 @@ onUnmounted(() => {
 
 .search-back-btn {
   position: fixed;
-  bottom: max(100px, env(safe-area-inset-bottom, 0) + 80px);
+  bottom: calc(80px + env(safe-area-inset-bottom, 20px));
   left: max(16px, env(safe-area-inset-left, 0));
   z-index: 102;
   width: 44px;
@@ -1251,10 +1251,8 @@ onUnmounted(() => {
   transform: scale(0.92);
 }
 
-@supports (padding: max(0px)) {
-  .reader-view-container {
-    padding-left: max(0px, env(safe-area-inset-left, 0));
-    padding-right: max(0px, env(safe-area-inset-right, 0));
-  }
+.reader-view-container {
+  padding-left: env(safe-area-inset-left, 0);
+  padding-right: env(safe-area-inset-right, 0);
 }
 </style>

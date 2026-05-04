@@ -255,8 +255,6 @@ function handleNextMatch() {
 .reader-footer {
   position: fixed;
   bottom: 0;
-  left: env(safe-area-inset-left, 0);
-  right: env(safe-area-inset-right, 0);
   background: var(--header-bg);
   border-top: 1px solid var(--border-subtle);
   z-index: 100;

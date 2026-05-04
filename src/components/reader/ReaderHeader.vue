@@ -186,13 +186,4 @@ const emit = defineEmits<{
     font-size: 12px;
   }
 }
-
-/* Safe area insets */
-@supports (padding: max(0px)) {
-  .reader-header {
-    padding-left: max(16px, env(safe-area-inset-left, 0));
-    padding-right: max(16px, env(safe-area-inset-right, 0));
-    padding-top: max(12px, env(safe-area-inset-top, 0));
-  }
-}
 </style>
