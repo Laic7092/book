@@ -11,7 +11,6 @@ import {
 } from "../utils/constants";
 
 // Chapter detection pattern configuration
-const MAX_INTRO_LENGTH = 100; // Maximum length for intro section before first chapter
 const MARKER_DEDUPLICATION_THRESHOLD = 30; // Minimum distance between chapter markers
 const MARKER_TITLE_MIN_LENGTH = 2; // Minimum chapter title length
 const MARKER_TITLE_MAX_LENGTH = 100; // Maximum chapter title length
@@ -251,18 +250,30 @@ export class TxtParser extends BaseBookParser implements BookParser {
       order: number;
     }> = [];
 
-    // If first marker is not at start, add intro as chapter 0
-    if (markers.length === 0 || markers[0].start > MAX_INTRO_LENGTH) {
-      const introEnd = markers.length > 0 ? markers[0].start : content.length;
-      const intro = content.slice(0, introEnd).trim();
+    // Capture content before the first marker as intro (front matter)
+    if (markers.length > 0 && markers[0].start > 0) {
+      const intro = content.slice(0, markers[0].start).trim();
       if (intro) {
         const id = generateId("ch");
         chapterRanges.push({
           id,
           title: bookTitle,
           start: 0,
-          end: introEnd,
+          end: markers[0].start,
           order: chapterRanges.length,
+        });
+      }
+    } else if (markers.length === 0) {
+      // No markers at all — entire content is one chapter
+      const intro = content.trim();
+      if (intro) {
+        const id = generateId("ch");
+        chapterRanges.push({
+          id,
+          title: bookTitle,
+          start: 0,
+          end: content.length,
+          order: 0,
         });
       }
     }
@@ -429,6 +440,6 @@ export class TxtParser extends BaseBookParser implements BookParser {
 
     const body = paragraphs.join("");
 
-    return `<html><body><h2 class="chapter-heading">${title || "Chapter"}</h2>${body}<body/></html>`;
+    return `<html><body><h2 class="chapter-heading">${title || "Chapter"}</h2>${body}</body></html>`;
   }
 }
