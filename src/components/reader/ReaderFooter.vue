@@ -71,11 +71,6 @@ function handleNextMatch() {
 
 <template>
   <footer class="reader-footer" :class="{ visible: showControls }">
-    <!-- Menu Backdrop -->
-    <Transition name="fade">
-      <div v-if="showMenu" class="menu-backdrop" @click.stop="closeMenu" />
-    </Transition>
-
     <!-- Menu Popover -->
     <Transition name="menu">
       <div v-if="showMenu" class="menu-popover" @click.stop>
@@ -388,13 +383,6 @@ function handleNextMatch() {
   border: 1px solid var(--accent);
   color: var(--accent);
   white-space: nowrap;
-}
-
-/* Menu */
-.menu-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
 }
 
 .menu-popover {
