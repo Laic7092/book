@@ -416,11 +416,11 @@ onMounted(() => {
           }}</span>
           <span class="stat-label">Total read</span>
         </div>
-        <span class="stat-sep"></span>
+        <!-- <span class="stat-sep"></span>
         <div class="stat-item">
           <span class="stat-value">{{ bookshelfStore.summaryStats.booksInProgress }}</span>
           <span class="stat-label">In progress</span>
-        </div>
+        </div> -->
         <span class="stat-sep"></span>
         <div class="stat-item">
           <span class="stat-value">{{
@@ -428,11 +428,11 @@ onMounted(() => {
           }}</span>
           <span class="stat-label">This week</span>
         </div>
-        <span class="stat-sep"></span>
+        <!-- <span class="stat-sep"></span>
         <div class="stat-item">
           <span class="stat-value">{{ bookshelfStore.summaryStats.completedBooks }}</span>
           <span class="stat-label">Finished</span>
-        </div>
+        </div> -->
       </div>
     </header>
 
@@ -492,7 +492,7 @@ onMounted(() => {
           >
             <path d="M12 5v14M5 12h14" />
           </svg>
-          <span>Add your first book</span>
+          Add your first book
           <input
             type="file"
             accept=".txt,.epub"
