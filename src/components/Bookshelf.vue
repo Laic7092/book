@@ -267,7 +267,6 @@ onMounted(() => {
                 <circle cx="12" cy="19" r="1.5" fill="currentColor" />
               </svg>
             </button>
-            <div v-if="showMenu" class="menu-backdrop" @click.stop="closeMenu"></div>
             <transition name="menu-pop">
               <div v-if="showMenu" class="menu-popover" @click.stop>
                 <div class="menu-section">
@@ -1030,12 +1029,6 @@ onMounted(() => {
 /* ==========================================
    MENU POPOVER
    ========================================== */
-
-.menu-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-}
 
 .menu-popover {
   position: fixed;
