@@ -6,13 +6,6 @@ import { useSettingsStore } from "../../stores/settings";
 import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
 import type { SearchApi } from "../../core/search-api";
-import type { ReaderHost } from "../../core/reader-host";
-
-let _readerHost: (() => ReaderHost | null) | null = null;
-
-export function getSearchReaderHost(): ReaderHost | null {
-  return _readerHost?.() ?? null;
-}
 
 export const searchPlugin: Plugin = {
   [PLUGIN_BRAND]: true as const,
@@ -20,7 +13,6 @@ export const searchPlugin: Plugin = {
   name: "Full-Text Search",
   version: "1.0.0",
   setup(ctx) {
-    _readerHost = ctx.readerHost;
     const readerStore = useReaderStore();
     const settingsStore = useSettingsStore();
     const api = reactive(
@@ -46,9 +38,5 @@ export const searchPlugin: Plugin = {
       modal: "search",
       order: 20,
     });
-  },
-  teardown() {
-    _readerHost = null;
-    // Capabilities are auto-cleaned by onCleanup during runCleanup
   },
 };

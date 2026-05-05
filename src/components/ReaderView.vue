@@ -21,14 +21,7 @@ import {
 } from "../components/reader";
 import { ModalWrapper } from "../components/modals";
 import type { SearchResult, Chapter, Book } from "../core/types";
-import {
-  generateCfiFromCharOffset,
-  generateCfiFromRange,
-  navigateToCfi,
-  resolveCfiToElement,
-  resolveCfiRange,
-  getSpineIndex,
-} from "../utils/epub-cfi";
+import { navigateToCfi, resolveCfiToElement, getSpineIndex } from "../utils/epub-cfi";
 import { rewriteResourcePaths } from "../reader-engine/resource-urls";
 import { debounce } from "../utils/debounce";
 import { SWIPE_THRESHOLD, TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../config/constants";
@@ -62,14 +55,12 @@ const isTransitioning = ref(false);
 const isRestoring = ref(false);
 const currentChapterResources = ref<HTMLElement[]>([]);
 
-// Search jump state — saved before first search navigation for "go back"
-interface SearchJumpState {
-  previousChapterId: string;
-  previousPage: number;
-}
-const searchJumpState = ref<SearchJumpState | null>(null);
-
 // Overlay components from enabled plugins
+const searchApi = computed(() => {
+  void pluginStateVersion.value;
+  return getSearchApis()[0] ?? null;
+});
+
 const overlayComponents = computed(() => {
   void pluginStateVersion.value;
   return getOverlayComponents();
@@ -272,7 +263,8 @@ const host: ReaderHost = {
     await navigateToCfiLocation(cfi, chapterId);
   },
   async navigateToSearchResult(result: SearchResult) {
-    await navigateToSearchResult(result);
+    const api = getSearchApis()[0];
+    if (api) await api.navigateToResult(result);
   },
   getCurrentChapter() {
     return readerStore.currentChapter ?? null;
@@ -746,189 +738,6 @@ async function handleChaptersChanged() {
   refreshScrollObserver();
 }
 
-// ── Search navigation ──
-
-async function handleSearchGoBack() {
-  if (!searchJumpState.value) return;
-  const { previousChapterId, previousPage } = searchJumpState.value;
-  searchJumpState.value = null;
-  if (previousChapterId !== readerStore.currentChapter?.id) {
-    await handleSelectChapter(previousChapterId, previousPage);
-  } else if (isPaginationMode.value) {
-    pagination.goToPage(previousPage);
-  }
-}
-
-let clearTempSearchHighlight: (() => void) | null = null;
-
-function applySearchHighlight(
-  doc: Document,
-  container: Element,
-  position: number,
-  textLength: number,
-  spineIndex: number,
-) {
-  clearTempSearchHighlight?.();
-  clearTempSearchHighlight = null;
-
-  const startCfi = generateCfiFromCharOffset(spineIndex, container, position);
-  const endCfi = generateCfiFromCharOffset(spineIndex, container, position + textLength);
-  if (!startCfi || !endCfi) return;
-
-  const range = resolveCfiRange(startCfi, endCfi, doc.body);
-  if (!range || range.collapsed) return;
-
-  const marks: HTMLElement[] = [];
-
-  const textNodes: Text[] = [];
-  if (
-    range.startContainer === range.endContainer &&
-    range.startContainer.nodeType === Node.TEXT_NODE
-  ) {
-    textNodes.push(range.startContainer as Text);
-  } else {
-    const walker = doc.createTreeWalker(range.commonAncestorContainer, NodeFilter.SHOW_TEXT, {
-      acceptNode: (node) =>
-        range.intersectsNode(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT,
-    });
-    let node: Text | null;
-    while ((node = walker.nextNode() as Text | null)) {
-      if (node.textContent && node.textContent.length > 0) {
-        textNodes.push(node);
-      }
-    }
-  }
-
-  for (const textNode of textNodes) {
-    let startOffset = 0;
-    let endOffset = (textNode.textContent || "").length;
-
-    if (textNode === range.startContainer) startOffset = range.startOffset;
-    if (textNode === range.endContainer) endOffset = range.endOffset;
-    if (startOffset >= endOffset) continue;
-
-    textNode.splitText(endOffset);
-    const selectedNode = startOffset > 0 ? textNode.splitText(startOffset) : textNode;
-
-    if (selectedNode.textContent && selectedNode.textContent.length > 0) {
-      const mark = doc.createElement("mark");
-      mark.style.backgroundColor = "rgba(251, 191, 36, 0.45)";
-      mark.style.borderRadius = "2px";
-      mark.style.transition = "background-color 1.5s ease";
-      selectedNode.parentNode!.insertBefore(mark, selectedNode);
-      mark.appendChild(selectedNode);
-      marks.push(mark);
-    }
-  }
-
-  if (marks.length > 0) {
-    clearTempSearchHighlight = () => {
-      for (const mark of marks) {
-        const parent = mark.parentNode;
-        if (parent) {
-          while (mark.firstChild) {
-            parent.insertBefore(mark.firstChild, mark);
-          }
-          mark.remove();
-        }
-      }
-    };
-
-    setTimeout(() => {
-      for (const mark of marks) {
-        mark.style.backgroundColor = "transparent";
-      }
-    }, 1500);
-
-    setTimeout(() => {
-      clearTempSearchHighlight?.();
-      clearTempSearchHighlight = null;
-    }, 3000);
-  }
-}
-
-async function navigateToSearchResult(result: SearchResult) {
-  if (!result) return;
-
-  const targetChapter = readerStore.chapters.find((c) => c.id === result.chapterId);
-  if (!targetChapter) return;
-
-  if (!searchJumpState.value && readerStore.currentChapter) {
-    searchJumpState.value = {
-      previousChapterId: readerStore.currentChapter.id,
-      previousPage: isPaginationMode.value ? pagination.currentPage.value : 0,
-    };
-  }
-
-  const sameChapter = targetChapter.id === readerStore.currentChapter?.id;
-
-  isTransitioning.value = true;
-
-  try {
-    if (isPaginationMode.value) {
-      if (!sameChapter) {
-        await handleSelectChapter(targetChapter.id, 0, false);
-      } else {
-        closeModal();
-      }
-
-      await waitForPaginationReady();
-
-      const doc = readerContentRef.value?.getDocument?.();
-      if (doc?.body) {
-        applySearchHighlight(
-          doc,
-          doc.body,
-          result.position,
-          result.text.length,
-          targetChapter.order,
-        );
-        const mark = doc.body.querySelector("mark");
-        if (mark) {
-          const bodyRect = doc.body.getBoundingClientRect();
-          const markRect = mark.getBoundingClientRect();
-          pagination.goToPage(pagination.getPageAtOffset(markRect.left - bodyRect.left));
-        }
-      }
-    } else {
-      if (!sameChapter) {
-        await chapterLoader.loadChapter(result.chapterId);
-        await nextTick();
-      } else {
-        closeModal();
-      }
-
-      const article = readerContentRef.value?.getArticle?.();
-      if (article) {
-        const root =
-          (article.querySelector(
-            `[data-chapter-id="${targetChapter.id}"]`,
-          ) as HTMLElement | null) || article;
-        applySearchHighlight(
-          article.ownerDocument,
-          root,
-          result.position,
-          result.text.length,
-          targetChapter.order,
-        );
-
-        await nextTick();
-        const mark = root.querySelector("mark");
-        if (mark) {
-          mark.scrollIntoView({ behavior: "smooth", block: "center" });
-        }
-      }
-    }
-
-    const s = getSearchApis()[0];
-    if (s) s.hasHighlights = true;
-
-    closeModal();
-  } finally {
-    isTransitioning.value = false;
-  }
-}
-
 // ── CFI navigation ──
 
 async function navigateToCfiLocation(cfi: string, chapterId: string) {
@@ -1094,8 +903,6 @@ onMounted(async () => {
 onUnmounted(() => {
   gestureCleanup?.();
   gestureCleanup = null;
-  clearTempSearchHighlight?.();
-  clearTempSearchHighlight = null;
   scrollCleanup?.();
   scrollCleanup = null;
   cleanupFns.forEach((fn) => fn());
@@ -1159,9 +966,9 @@ onUnmounted(() => {
     <!-- Search go-back button -->
     <Transition name="fade">
       <button
-        v-if="searchJumpState"
+        v-if="searchApi?.hasJumpState"
         class="search-back-btn"
-        @click.stop="handleSearchGoBack"
+        @click.stop="searchApi?.goBackFromResult()"
         aria-label="Go back to previous position"
       >
         <svg

@@ -2,14 +2,13 @@
 import type { SearchResult } from "../../core/types";
 import ModalHeader from "../../components/modals/ModalHeader.vue";
 import { getSearchApis } from "../registry";
-import { getSearchReaderHost } from "./index";
 
 const emit = defineEmits<{ (e: "close"): void }>();
 
 const api = getSearchApis()[0]!;
 
 function handleResultClick(result: SearchResult) {
-  getSearchReaderHost()?.navigateToSearchResult(result);
+  api.navigateToResult(result);
 }
 
 let searchDebounceTimer: number | null = null;

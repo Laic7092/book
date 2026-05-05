@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, nextTick } from "vue";
 import { getFooterActions, pluginStateVersion, getSearchApis } from "../../plugins/registry";
-import { getReaderHost } from "../../core/reader-host";
 
 defineProps<{
   showControls: boolean;
@@ -55,7 +54,7 @@ function handlePrevMatch() {
   const s = getSearchApis()[0];
   const idx = s?.goToPreviousMatch();
   if (idx !== undefined && s?.searchResults) {
-    getReaderHost()?.navigateToSearchResult(s.searchResults[idx]);
+    s.navigateToResult(s.searchResults[idx]);
   }
 }
 
@@ -63,7 +62,7 @@ function handleNextMatch() {
   const s = getSearchApis()[0];
   const idx = s?.goToNextMatch();
   if (idx !== undefined && s?.searchResults) {
-    getReaderHost()?.navigateToSearchResult(s.searchResults[idx]);
+    s.navigateToResult(s.searchResults[idx]);
   }
 }
 </script>
