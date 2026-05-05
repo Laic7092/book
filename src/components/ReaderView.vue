@@ -33,7 +33,6 @@ import {
   applyContentTransformers,
 } from "../plugins/registry";
 import { pluginEvents } from "../plugins/context";
-import { STORES, dbPut, dbGet } from "../storage/db";
 import { getChapterContent as fetchChapterContent } from "../storage/books";
 import { navigate } from "../router";
 
@@ -185,64 +184,6 @@ watch(
   },
   { immediate: true },
 );
-
-// ── Progress persistence (inline, no plugin dependency) ──
-
-async function saveReadingProgress(
-  chapterProgressVal: number,
-  readingProgressVal: number,
-  pageIndex: number,
-) {
-  if (isRestoring.value) return;
-  const chapterId = readerStore.currentChapter?.id;
-  if (!chapterId) return;
-
-  const id = `__progress__${props.book.id}`;
-  const progressData = {
-    chapterProgress: Math.round(chapterProgressVal),
-    readingProgress: Math.round(readingProgressVal),
-    pageIndex,
-  };
-  await dbPut(STORES.PLUGIN_STORE, {
-    pluginId: "__core__",
-    key: id,
-    value: { chapterId, progressData },
-    createdAt: Date.now(),
-  });
-}
-
-async function loadProgress(): Promise<{
-  chapterId: string;
-  cfi: string;
-  chapterProgress: number;
-  readingProgress: number;
-  pageIndex: number;
-} | null> {
-  const id = `__progress__${props.book.id}`;
-  const record = await dbGet<{
-    value: {
-      chapterId: string;
-      progressData: { chapterProgress: number; readingProgress: number; pageIndex: number };
-    };
-  }>(STORES.PLUGIN_STORE, ["__core__", id]);
-  if (!record?.value) return null;
-  try {
-    return {
-      chapterId: record.value.chapterId,
-      cfi: "",
-      chapterProgress: record.value.progressData.chapterProgress || 0,
-      readingProgress: record.value.progressData.readingProgress || 0,
-      pageIndex: record.value.progressData.pageIndex || 0,
-    };
-  } catch {
-    return null;
-  }
-}
-
-const debouncedSaveScroll = debounce((chapterProgressVal: number, readingProgressVal: number) => {
-  if (isRestoring.value) return;
-  saveReadingProgress(chapterProgressVal, readingProgressVal, 0);
-}, 1000);
 
 // ── ReaderHost implementation ──
 
@@ -459,11 +400,6 @@ function setupScrollHandler(doc: Document) {
             previousChapterId: prevChapterId,
           });
         }
-      }
-
-      const curId = readerStore.currentChapter?.id;
-      if (curId) {
-        debouncedSaveScroll(chapterProgressVal, percent);
       }
     });
   };
@@ -889,8 +825,6 @@ watch(
 // Watch for page changes in pagination mode to auto-save + emit event
 watch([() => pagination.currentPage.value, () => pagination.totalPages.value], ([page, total]) => {
   if (!isPaginationMode.value) return;
-  const cp = total <= 1 ? 100 : ((page + 1) / total) * 100;
-  saveReadingProgress(cp, readingProgress.value, page);
   const chapterId = readerStore.currentChapter?.id;
   const bookId = readerStore.currentBook?.id;
   if (chapterId && bookId) {
@@ -928,36 +862,33 @@ onMounted(async () => {
 
   uiStore.showControls = true;
 
-  // Restore reading progress
   isRestoring.value = true;
   try {
-    const progress = await loadProgress();
-    const restoreChapterId = progress?.chapterId || readerStore.currentChapter?.id;
-    const restorePage = progress?.pageIndex || 0;
-
-    if (isPaginationMode.value && restoreChapterId) {
-      await handleSelectChapter(restoreChapterId, restorePage);
+    if (isPaginationMode.value && readerStore.currentChapter) {
+      const content = await readerStore.getCurrentChapterContent();
+      let html = content?.html || "";
+      if (html && readerStore.currentBook) {
+        html = await applyContentTransformers(html, {
+          bookId: readerStore.currentBook.id,
+          chapterId: readerStore.currentChapter.id,
+        });
+      }
+      const resources = content?.resources || [];
+      currentChapterResources.value = resources;
+      await pagination.paginate(readerStore.currentChapter.id, { html, resources });
     } else {
-      if (restoreChapterId && restoreChapterId !== readerStore.currentChapter?.id) {
-        await handleSelectChapter(restoreChapterId);
-      } else {
-        await chapterLoader.loadCurrentAndAdjacent(2);
-      }
-      if (progress?.chapterProgress && restoreChapterId) {
-        setTimeout(() => {
-          readerContentRef.value?.restoreScrollPosition?.(
-            restoreChapterId!,
-            progress.chapterProgress,
-          );
-        }, 200);
-      }
+      await chapterLoader.loadCurrentAndAdjacent(2);
     }
   } finally {
     isRestoring.value = false;
   }
+
+  void pluginEvents.emit("reader:mounted", { bookId: props.book.id });
 });
 
 onUnmounted(() => {
+  void pluginEvents.emit("reader:unmounted", { bookId: props.book.id });
+
   gestureCleanup?.();
   gestureCleanup = null;
   scrollCleanup?.();

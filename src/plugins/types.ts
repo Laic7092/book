@@ -27,6 +27,8 @@ export interface PluginEventMap {
   "page:changed": { bookId: string; chapterId: string; page: number; totalPages: number };
   "settings:changed": { changes: Partial<ReaderSettings> };
   "content:loaded": { bookId: string; chapterId: string };
+  "reader:mounted": { bookId: string };
+  "reader:unmounted": { bookId: string };
   [key: string]: unknown;
 }
 
