@@ -24,7 +24,7 @@ let noteText = ref("");
     <div
       v-if="visible"
       class="selection-toolbar"
-      :style="{ top: `${Math.max(8, position.top)}px`, left: `${position.left}px` }"
+      :style="{ top: `${position.top}px`, left: `${position.left}px` }"
     >
       <template v-if="!showNoteInput">
         <div class="toolbar-row">

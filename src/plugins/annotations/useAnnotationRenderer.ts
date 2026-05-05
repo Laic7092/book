@@ -151,6 +151,18 @@ export function useAnnotationRenderer(getDocument: () => Document | null | undef
 
     let debounceTimer: ReturnType<typeof setTimeout>;
 
+    function toPageRect(iframeRect: DOMRect) {
+      const iframe = doc!.defaultView?.frameElement as HTMLElement | null;
+      if (!iframe) return iframeRect;
+      const containerRect = iframe.getBoundingClientRect();
+      return {
+        top: containerRect.top + iframeRect.top,
+        left: containerRect.left + iframeRect.left,
+        bottom: containerRect.top + iframeRect.bottom,
+        right: containerRect.left + iframeRect.right,
+      };
+    }
+
     function emitSelection() {
       const sel = doc!.getSelection();
       if (!sel || sel.isCollapsed || !sel.toString().trim()) {
@@ -164,7 +176,12 @@ export function useAnnotationRenderer(getDocument: () => Document | null | undef
         return;
       }
       handlers.onSelectionChange({
-        rect: { top: rect.top, left: rect.left, bottom: rect.bottom, right: rect.right },
+        rect: toPageRect({
+          top: rect.top,
+          left: rect.left,
+          bottom: rect.bottom,
+          right: rect.right,
+        } as DOMRect),
         text: sel.toString(),
       });
     }
@@ -188,8 +205,9 @@ export function useAnnotationRenderer(getDocument: () => Document | null | undef
       const annotationEl = target.closest("[data-annotation-id]");
       if (!annotationEl) return;
       const id = annotationEl.getAttribute("data-annotation-id")!;
-      const rect = annotationEl.getBoundingClientRect();
-      handlers.onAnnotationClick(id, rect);
+      const rawRect = annotationEl.getBoundingClientRect();
+      const pageRect = toPageRect(rawRect);
+      handlers.onAnnotationClick(id, pageRect as DOMRect);
       e.stopPropagation();
       e.preventDefault();
     }

@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, onUnmounted, ref, watch } from "vue";
 import type { Annotation } from "../../core/types";
 import { HIGHLIGHT_COLORS } from "../../config/colors";
+
+const POPOVER_WIDTH = 280;
+const POPOVER_GAP = 4;
+const EDGE_PADDING = 12;
 
 const props = defineProps<{
   visible: boolean;
@@ -19,6 +23,65 @@ const emit = defineEmits<{
 const editing = ref(false);
 const noteText = ref("");
 const showColors = ref(false);
+
+const popoverEl = ref<HTMLElement | null>(null);
+const actualHeight = ref(0);
+const placeBelow = ref(true);
+
+let resizeObserver: ResizeObserver | null = null;
+
+function updateLayout() {
+  const p = props.position;
+  if (!p || actualHeight.value === 0) return;
+  const vh = window.innerHeight;
+  const spaceBelow = vh - (p.top + p.height + POPOVER_GAP);
+  placeBelow.value = spaceBelow >= actualHeight.value + EDGE_PADDING;
+}
+
+watch(
+  () => [props.position.top, props.position.height, actualHeight.value],
+  () => updateLayout(),
+);
+
+watch(popoverEl, (el) => {
+  resizeObserver?.disconnect();
+  if (el) {
+    resizeObserver = new ResizeObserver((entries) => {
+      const h = entries[0]?.contentRect.height ?? 0;
+      if (h > 0) actualHeight.value = h;
+    });
+    resizeObserver.observe(el);
+  }
+});
+
+onUnmounted(() => {
+  resizeObserver?.disconnect();
+});
+
+const popoverStyle = computed(() => {
+  const p = props.position;
+  const vw = window.innerWidth;
+
+  const topVal = placeBelow.value ? p.top + p.height + POPOVER_GAP : p.top - POPOVER_GAP;
+
+  const clampedTop = Math.max(EDGE_PADDING, topVal);
+  const left = Math.max(EDGE_PADDING, Math.min(vw - POPOVER_WIDTH - EDGE_PADDING, p.left));
+  const maxH = placeBelow.value
+    ? window.innerHeight - clampedTop - EDGE_PADDING
+    : clampedTop - EDGE_PADDING;
+
+  const style: Record<string, string> = {
+    top: `${clampedTop}px`,
+    left: `${left}px`,
+    maxHeight: `${Math.max(100, maxH)}px`,
+  };
+
+  if (!placeBelow.value) {
+    style.transform = "translateY(-100%)";
+  }
+
+  return style;
+});
 
 function startEdit() {
   noteText.value = props.annotation?.note || "";
@@ -42,10 +105,8 @@ function formatDate(ts: number) {
     <div
       v-if="visible && annotation"
       class="annotation-popover"
-      :style="{
-        top: `${Math.max(8, position.top + position.height + 4)}px`,
-        left: `${position.left}px`,
-      }"
+      ref="popoverEl"
+      :style="popoverStyle"
     >
       <div class="popover-header">
         <span
@@ -154,6 +215,8 @@ function formatDate(ts: number) {
   border-radius: 10px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
   padding: 12px;
+  overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .popover-header {
