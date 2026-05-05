@@ -20,6 +20,7 @@ const props = defineProps<{
     iframeWidth: number;
   }) => void;
   onChaptersChanged?: () => void;
+  onIframeReady?: () => void;
 }>();
 
 const containerRef = ref<HTMLElement | null>(null);
@@ -111,6 +112,7 @@ onMounted(() => {
           .join("");
         updateContent(combinedContent);
       }
+      props.onIframeReady?.();
     }
 
     if (containerRef.value) {
@@ -139,21 +141,10 @@ watch(
     const body = doc.body;
     body.classList.toggle("vertical-content", !isPagination);
 
-    const styleEl = doc.getElementById("pagination-style");
     if (!isPagination) {
+      const styleEl = doc.getElementById("pagination-style");
       if (styleEl) styleEl.textContent = "";
       body.style.transform = "";
-    }
-
-    if (!isPagination && props.loadedChapters && props.loadedChapters.length > 0) {
-      const combined = props.loadedChapters
-        .map(
-          (ch) =>
-            `<div data-chapter-id="${ch.chapterId}" class="chapter-container">${ch.content}</div>`,
-        )
-        .join("");
-      updateContent(combined);
-      props.onChaptersChanged?.();
     }
   },
 );
@@ -178,55 +169,53 @@ watch(
   },
 );
 
-watch(
-  () => props.loadedChapters,
-  (newChapters) => {
-    if (props.isPaginationMode || !newChapters || !isReady.value) return;
-    const doc = getDocument();
-    if (!doc?.body) return;
+function syncChapters(chapters: Array<{ chapterId: string; title: string; content: string }>) {
+  if (props.isPaginationMode || !isReady.value) return;
+  const doc = getDocument();
+  if (!doc?.body) return;
 
-    const hasContainers = doc.querySelectorAll("[data-chapter-id]").length > 0;
-    if (hasContainers) {
-      const currentIds = new Map(newChapters.map((ch) => [ch.chapterId, ch]));
+  const hasContainers = doc.querySelectorAll("[data-chapter-id]").length > 0;
+  if (hasContainers) {
+    const currentIds = new Map(chapters.map((ch) => [ch.chapterId, ch]));
 
-      const existing = doc.querySelectorAll("[data-chapter-id]");
-      existing.forEach((el) => {
-        const id = el.getAttribute("data-chapter-id");
-        if (id && !currentIds.has(id)) {
-          el.remove();
-        }
-      });
-
-      for (const ch of newChapters) {
-        if (doc.querySelector(`[data-chapter-id="${ch.chapterId}"]`)) continue;
-
-        const html = `<div data-chapter-id="${ch.chapterId}" class="chapter-container">${ch.content}</div>`;
-
-        const next = newChapters
-          .filter((c) => (c as any).order > (ch as any).order)
-          .find((c) => doc.querySelector(`[data-chapter-id="${c.chapterId}"]`));
-
-        if (next) {
-          const ref = doc.querySelector(`[data-chapter-id="${next.chapterId}"]`);
-          ref?.insertAdjacentHTML("beforebegin", html);
-        } else {
-          doc.body.insertAdjacentHTML("beforeend", html);
-        }
+    const existing = doc.querySelectorAll("[data-chapter-id]");
+    existing.forEach((el) => {
+      const id = el.getAttribute("data-chapter-id");
+      if (id && !currentIds.has(id)) {
+        el.remove();
       }
-    } else {
-      const combined = newChapters
-        .map(
-          (ch) =>
-            `<div data-chapter-id="${ch.chapterId}" class="chapter-container">${ch.content}</div>`,
-        )
-        .join("");
-      updateContent(combined);
-    }
+    });
 
-    props.onChaptersChanged?.();
-  },
-  { deep: true },
-);
+    for (const ch of chapters) {
+      if (doc.querySelector(`[data-chapter-id="${ch.chapterId}"]`)) continue;
+
+      const html = `<div data-chapter-id="${ch.chapterId}" class="chapter-container">${ch.content}</div>`;
+
+      const next = chapters
+        .filter((c) => (c as any).order > (ch as any).order)
+        .find((c) => doc.querySelector(`[data-chapter-id="${c.chapterId}"]`));
+
+      if (next) {
+        const ref = doc.querySelector(`[data-chapter-id="${next.chapterId}"]`);
+        ref?.insertAdjacentHTML("beforebegin", html);
+      } else {
+        doc.body.insertAdjacentHTML("beforeend", html);
+      }
+    }
+  } else {
+    const combined = chapters
+      .map(
+        (ch) =>
+          `<div data-chapter-id="${ch.chapterId}" class="chapter-container">${ch.content}</div>`,
+      )
+      .join("");
+    updateContent(combined);
+  }
+
+  props.onChaptersChanged?.();
+}
+
+watch(() => props.loadedChapters, syncChapters);
 
 watch(
   () => [
@@ -266,15 +255,11 @@ watch(
   },
 );
 
-watch(
-  () => props.epubResources,
-  (newResources) => {
-    if (isReady.value && newResources) {
-      updateEpubResources(newResources);
-    }
-  },
-  { deep: true },
-);
+function syncEpubResources(resources: HTMLElement[]) {
+  if (isReady.value) {
+    updateEpubResources(resources);
+  }
+}
 
 onUnmounted(() => {
   if (columnMeasureTimer) {
@@ -295,6 +280,8 @@ defineExpose({
   getDocument,
   scrollToChapter,
   restoreScrollPosition,
+  syncEpubResources,
+  syncChapters,
 });
 </script>
 

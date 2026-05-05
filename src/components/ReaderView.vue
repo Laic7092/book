@@ -512,6 +512,7 @@ const handleSelectChapter = async (
       const resources = content?.resources || [];
       await pagination.paginate(chapterId, { html, targetPage, resources });
       currentChapterResources.value = resources;
+      readerContentRef.value?.syncEpubResources?.(resources);
     } else {
       await chapterLoader.loadCurrentAndAdjacent(2);
       await nextTick();
@@ -786,11 +787,6 @@ const updateThemeClass = () => {
 };
 
 // Scroll mode: load surrounding chapters on chapter change
-watch(currentChapterIndex, (newIdx, oldIdx) => {
-  if (isPaginationMode.value || newIdx === oldIdx || isRestoring.value) return;
-  chapterLoader.loadCurrentAndAdjacent(2);
-});
-
 // Watch for scroll mode changes
 watch(
   () => settingsStore.settings.scrollMode,
@@ -808,6 +804,7 @@ watch(
       }
       const resources = content?.resources || [];
       currentChapterResources.value = resources;
+      readerContentRef.value?.syncEpubResources?.(resources);
       await pagination.paginate(readerStore.currentChapter.id, { html, resources });
     }
   },
@@ -832,29 +829,23 @@ watch([() => pagination.currentPage.value, () => pagination.totalPages.value], (
   }
 });
 
-// Watch for iframe ready → set up direct gesture + scroll handlers
-watch(
-  () => readerContentRef.value?.isReady,
-  (ready) => {
-    if (!ready) return;
-    const doc = readerContentRef.value?.getDocument?.();
-    if (!doc) return;
+function handleIframeReady() {
+  const doc = readerContentRef.value?.getDocument?.();
+  if (!doc) return;
 
-    setupDirectHandlers(doc);
-    setupScrollHandler(doc);
+  setupDirectHandlers(doc);
+  setupScrollHandler(doc);
 
-    // Fire ready callbacks (plugins hook in here)
-    for (const cb of iframeReadyCallbacks) {
-      cb();
-    }
-    // Emit content:loaded for initial render
-    const chapterId = readerStore.currentChapter?.id;
-    const bookId = readerStore.currentBook?.id;
-    if (chapterId && bookId) {
-      void pluginEvents.emit("content:loaded", { bookId, chapterId });
-    }
-  },
-);
+  for (const cb of iframeReadyCallbacks) {
+    cb();
+  }
+
+  const chapterId = readerStore.currentChapter?.id;
+  const bookId = readerStore.currentBook?.id;
+  if (chapterId && bookId) {
+    void pluginEvents.emit("content:loaded", { bookId, chapterId });
+  }
+}
 
 // Lifecycle
 onMounted(async () => {
@@ -875,6 +866,7 @@ onMounted(async () => {
       }
       const resources = content?.resources || [];
       currentChapterResources.value = resources;
+      readerContentRef.value?.syncEpubResources?.(resources);
       await pagination.paginate(readerStore.currentChapter.id, { html, resources });
     } else {
       await chapterLoader.loadCurrentAndAdjacent(2);
@@ -927,6 +919,7 @@ onUnmounted(() => {
       :on-link-click="handleInternalLinkClick"
       :on-column-layout="handleColumnLayout"
       :on-chapters-changed="handleChaptersChanged"
+      :on-iframe-ready="handleIframeReady"
     />
 
     <ReaderFooter
