@@ -34,6 +34,8 @@ export interface ReaderHost {
   getTotalPages(): number;
   /** Jump to a page within the current chapter (pagination mode only). */
   goToPage(page: number): void;
+  /** Push a position to the navigation history stack. Call after non-linear navigation. */
+  pushToHistory(chapterId: string, page: number): void;
   getCurrentChapterRawHtml(): string;
 
   // ── Content pipeline ──

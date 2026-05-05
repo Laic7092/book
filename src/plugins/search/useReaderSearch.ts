@@ -263,9 +263,12 @@ export function useReaderSearch(options: UseReaderSearchOptions) {
     const mark = container.querySelector("mark");
     if (mark) {
       if (host.isPaginationMode.value) {
-        host.goToPage(findPageFromMark(host, mark));
+        const page = findPageFromMark(host, mark);
+        host.goToPage(page);
+        host.pushToHistory(targetChapter.id, page);
       } else {
         mark.scrollIntoView({ behavior: "smooth", block: "center" });
+        host.pushToHistory(targetChapter.id, 0);
       }
     }
 

@@ -11,7 +11,7 @@ import {
 import { useReaderStore } from "../stores/reader";
 import { useUIStore } from "../stores/ui";
 import { useSettingsStore } from "../stores/settings";
-import { usePagination, useChapterLoader } from "../composables";
+import { usePagination, useChapterLoader, useNavigationStack } from "../composables";
 import {
   ReaderHeader,
   ReaderFooter,
@@ -117,6 +117,7 @@ const totalBookProgress = computed(() => {
 });
 
 const pagination = usePagination();
+const navStack = useNavigationStack();
 
 const displayContent = computed(() => {
   if (isPaginationMode.value) {
@@ -289,6 +290,9 @@ const host: ReaderHost = {
   },
   goToPage(page: number) {
     pagination.goToPage(page);
+  },
+  pushToHistory(chapterId: string, page: number) {
+    navStack.push({ chapterId, page });
   },
   getCurrentChapterRawHtml() {
     return pagination.rawHtml.value;
@@ -676,8 +680,16 @@ function handleInternalLinkClick(href: string) {
     }
   };
 
+  const currentChapterId = readerStore.currentChapter?.id;
+
   if (!filePath) {
     scrollToAnchor();
+    if (currentChapterId) {
+      navStack.push({
+        chapterId: currentChapterId,
+        page: isPaginationMode.value ? pagination.currentPage.value : 0,
+      });
+    }
     return;
   }
 
@@ -686,23 +698,37 @@ function handleInternalLinkClick(href: string) {
 
   if (targetChapter.id === readerStore.currentChapter?.id) {
     if (isPaginationMode.value) {
-      waitForPaginationReady().then(scrollToAnchor);
+      waitForPaginationReady().then(() => {
+        scrollToAnchor();
+        navStack.push({ chapterId: targetChapter.id, page: pagination.currentPage.value });
+      });
     } else {
       scrollToAnchor();
+      navStack.push({ chapterId: targetChapter.id, page: 0 });
     }
     return;
   }
 
   handleSelectChapter(targetChapter.id).then(async () => {
-    if (!anchor) return;
+    if (!anchor) {
+      navStack.push({
+        chapterId: targetChapter.id,
+        page: isPaginationMode.value ? pagination.currentPage.value : 0,
+      });
+      return;
+    }
 
     if (isPaginationMode.value) {
       await waitForPaginationReady();
       scrollToAnchor();
+      navStack.push({ chapterId: targetChapter.id, page: pagination.currentPage.value });
     } else {
       await nextTick();
       requestAnimationFrame(() => {
-        requestAnimationFrame(scrollToAnchor);
+        requestAnimationFrame(() => {
+          scrollToAnchor();
+          navStack.push({ chapterId: targetChapter.id, page: 0 });
+        });
       });
     }
   });
@@ -729,6 +755,28 @@ function handleColumnLayout(data: {
 
 async function handleChaptersChanged() {
   refreshScrollObserver();
+}
+
+// ── Navigation history ──
+
+function handleHistoryBack() {
+  const entry = navStack.back();
+  if (!entry) return;
+  if (entry.chapterId === readerStore.currentChapter?.id) {
+    if (isPaginationMode.value) pagination.goToPage(entry.page);
+  } else {
+    handleSelectChapter(entry.chapterId, entry.page);
+  }
+}
+
+function handleHistoryForward() {
+  const entry = navStack.forward();
+  if (!entry) return;
+  if (entry.chapterId === readerStore.currentChapter?.id) {
+    if (isPaginationMode.value) pagination.goToPage(entry.page);
+  } else {
+    handleSelectChapter(entry.chapterId, entry.page);
+  }
 }
 
 // ── CFI navigation ──
@@ -771,6 +819,10 @@ async function navigateToCfiLocation(cfi: string, chapterId: string) {
     }
 
     closeModal();
+    navStack.push({
+      chapterId: targetChapter.id,
+      page: isPaginationMode.value ? pagination.currentPage.value : 0,
+    });
   } finally {
     isTransitioning.value = false;
   }
@@ -904,6 +956,7 @@ onUnmounted(() => {
   chapterChangeCallbacks = [];
   unregisterReaderHost();
   pagination.cleanup();
+  navStack.reset();
 });
 </script>
 
@@ -956,6 +1009,46 @@ onUnmounted(() => {
       :show="uiStore.showControls && isPaginationMode && pagination.isReady.value"
     />
 
+    <!-- Navigation history back/forward -->
+    <button
+      v-show="uiStore.showControls && navStack.canGoBack.value"
+      class="history-btn history-back"
+      @click.stop="handleHistoryBack"
+      aria-label="Go back"
+    >
+      <svg
+        width="22"
+        height="22"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M19 12H5M12 19l-7-7 7-7" />
+      </svg>
+    </button>
+    <button
+      v-show="uiStore.showControls && navStack.canGoForward.value"
+      class="history-btn history-forward"
+      @click.stop="handleHistoryForward"
+      aria-label="Go forward"
+    >
+      <svg
+        width="22"
+        height="22"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M5 12h14M12 5l7 7-7 7" />
+      </svg>
+    </button>
+
     <!-- Plugin overlay components (e.g. annotation toolbar + popover, search go-back) -->
     <component v-for="(comp, name) in overlayComponents" :key="name" :is="comp" />
 
@@ -982,6 +1075,38 @@ onUnmounted(() => {
   position: relative;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+}
+
+.history-btn {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 101;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated, #fff);
+  color: var(--reader-text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+  -webkit-tap-highlight-color: transparent;
+  opacity: 0.5;
+  transition: opacity 200ms ease;
+}
+.history-btn:hover {
+  opacity: 1;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.history-back {
+  left: max(12px, env(safe-area-inset-left, 0));
+}
+.history-forward {
+  right: max(12px, env(safe-area-inset-right, 0));
 }
 
 .reader-view::-webkit-scrollbar {
