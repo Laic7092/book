@@ -1,4 +1,4 @@
-import { ref } from "vue";
+import { ref, watch } from "vue";
 import type { Annotation } from "../../core/types";
 import { getReaderHost } from "./store";
 import { useAnnotationsStore } from "./store";
@@ -10,6 +10,14 @@ export function useAnnotationUI() {
   const store = useAnnotationsStore();
 
   const renderer = useAnnotationRenderer(() => host?.getDocument() ?? null);
+
+  // Re-render highlights whenever local annotations change (covers panel delete, popover delete, etc.)
+  watch(
+    () => store.annotations,
+    () => {
+      renderer.applyToContent(store.annotations);
+    },
+  );
 
   // Toolbar state
   const showToolbar = ref(false);

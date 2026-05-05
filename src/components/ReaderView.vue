@@ -21,7 +21,7 @@ import {
 } from "../components/reader";
 import { ModalWrapper } from "../components/modals";
 import type { SearchResult, Chapter, Book } from "../core/types";
-import { navigateToCfi, resolveCfiToElement, getSpineIndex } from "../utils/epub-cfi";
+import { navigateToCfi, resolveCfi, getSpineIndex } from "../utils/epub-cfi";
 import { rewriteResourcePaths } from "../reader-engine/resource-urls";
 import { debounce } from "../utils/debounce";
 import { SWIPE_THRESHOLD, TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../config/constants";
@@ -281,6 +281,9 @@ const host: ReaderHost = {
   },
   openModal(name: string) {
     uiStore.openModal(name);
+  },
+  closeModal() {
+    uiStore.closeModal();
   },
   getCurrentPage() {
     return pagination.currentPage.value;
@@ -645,11 +648,18 @@ function waitForPaginationReady(): Promise<void> {
 function getPageForCfi(cfi: string): number | null {
   const doc = readerContentRef.value?.getDocument?.();
   if (!doc?.body) return null;
-  const element = resolveCfiToElement(cfi, doc.body);
-  if (!element) return null;
+  const target = resolveCfi(cfi, doc.body);
+  if (!target || !doc.body.contains(target.node)) return null;
+  const range = doc.createRange();
+  if (target.node.nodeType === Node.TEXT_NODE) {
+    range.setStart(target.node, Math.min(target.offset, (target.node.textContent || "").length));
+  } else {
+    range.setStart(target.node, 0);
+  }
+  range.collapse(true);
   const bodyRect = doc.body.getBoundingClientRect();
-  const elRect = element.getBoundingClientRect();
-  return pagination.getPageAtOffset(elRect.left - bodyRect.left);
+  const rangeRect = range.getBoundingClientRect();
+  return pagination.getPageAtOffset(rangeRect.left - bodyRect.left);
 }
 
 function handleInternalLinkClick(href: string) {

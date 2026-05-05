@@ -144,11 +144,7 @@ export const useReaderStore = defineStore("reader", {
         throw createReaderError("Chapter not found", ErrorCode.CHAPTER_NOT_FOUND);
       }
 
-      const content = await booksStore.getChapterContent(
-        this.currentBook.id,
-        chapterId,
-        this.currentParser ?? undefined,
-      );
+      const content = await booksStore.getChapterContent(this.currentBook.id, chapterId);
 
       if (content === undefined) {
         throw createReaderError("Chapter content not found", ErrorCode.CHAPTER_CONTENT_NOT_FOUND);
@@ -234,7 +230,6 @@ export const useReaderStore = defineStore("reader", {
       const content = await booksStore.getChapterContent(
         this.currentBook.id,
         this.currentChapter.id,
-        this.currentParser ?? undefined,
       );
       if (!content) return null;
 

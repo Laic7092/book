@@ -3,6 +3,7 @@
 import type { Book, ParsedBook } from "../core/types";
 import { STORES, dbPut, dbGet, dbGetAll, dbTransaction } from "./db";
 import type { BookParser } from "../core/types";
+import { getParserForFormat } from "../plugins/registry";
 
 /** In-flight dedup: prevents concurrent extraction of the same chapter */
 const extractionInProgress = new Map<string, Promise<string>>();
@@ -156,7 +157,6 @@ interface StoredChapter {
 export async function getChapterContent(
   bookId: string,
   chapterId: string,
-  parser?: BookParser,
 ): Promise<string | undefined> {
   const chapter = await dbGet<StoredChapter>(STORES.CHAPTERS, [bookId, chapterId]);
 
@@ -164,8 +164,12 @@ export async function getChapterContent(
 
   if (chapter.content) return chapter.content;
 
-  if (chapter.href && parser?.loadChapterContent) {
-    return lazyExtractChapterContent(bookId, chapterId, chapter.href, parser);
+  if (chapter.href) {
+    const book = await getBook(bookId);
+    const parser = book ? getParserForFormat(book.format) : null;
+    if (parser?.loadChapterContent) {
+      return lazyExtractChapterContent(bookId, chapterId, chapter.href, parser);
+    }
   }
 
   return chapter.content;

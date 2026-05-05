@@ -1,36 +1,16 @@
 // Composable for search functionality in reader
 
-import { ref, type Ref } from "vue";
-import { searchInBook, highlightMatches } from "./engine";
-import type { Chapter, SearchResult } from "../../core/types";
+import { ref } from "vue";
+import { searchInBook } from "./engine";
+import type { SearchResult } from "../../core/types";
 import type { ReaderHost } from "../../core/reader-host";
 import { generateCfiFromCharOffset, resolveCfiRange } from "../../utils/epub-cfi";
 
-interface SearchJumpState {
-  previousChapterId: string;
-  previousPage: number;
-}
-
-interface UseReaderSearchOptions {
-  bookId: Ref<string | undefined>;
-  chapters: Ref<Chapter[]>;
-  isPaginationMode: Ref<boolean>;
-  loadedChapters?: Ref<Set<string>>;
-  chapterContents?: Ref<Map<string, string>>;
-  readerHost: () => ReaderHost | null;
-}
-
-export function useReaderSearch(options: UseReaderSearchOptions) {
-  const { bookId, chapters, isPaginationMode, loadedChapters, chapterContents, readerHost } =
-    options;
-
+export function useReaderSearch(readerHost: () => ReaderHost | null) {
   const searchQuery = ref("");
   const searchResults = ref<SearchResult[]>([]);
   const hasHighlights = ref(false);
   const currentResultIndex = ref(-1);
-  const hasJumpState = ref(false);
-
-  let jumpState: SearchJumpState | null = null;
   let clearTempHighlight: (() => void) | null = null;
 
   // ── Temp highlight helpers ──
@@ -124,66 +104,41 @@ export function useReaderSearch(options: UseReaderSearchOptions) {
   // ── Search ──
 
   const doSearch = async () => {
-    if (!searchQuery.value.trim() || !bookId.value) {
+    if (!searchQuery.value.trim()) {
       searchResults.value = [];
       hasHighlights.value = false;
       return;
     }
 
     const host = readerHost();
-    searchResults.value = await searchInBook(bookId.value, searchQuery.value, chapters.value, {
+    const bookId = host?.getCurrentBookId();
+    const chapters = host?.getChapters() ?? [];
+    if (!bookId) return;
+
+    searchResults.value = await searchInBook(bookId, searchQuery.value, chapters, {
       getChapterContent: (_: string, chapterId: string) =>
         host?.getChapterContent(chapterId) ?? Promise.resolve(undefined),
     });
-
-    if (
-      !isPaginationMode.value &&
-      searchResults.value.length > 0 &&
-      loadedChapters &&
-      chapterContents
-    ) {
-      hasHighlights.value = true;
-      const newMap = new Map(chapterContents.value);
-      for (const chapter of chapters.value) {
-        if (loadedChapters.value.has(chapter.id)) {
-          const originalContent = await host?.getChapterContent(chapter.id);
-          if (originalContent) {
-            newMap.set(chapter.id, highlightMatches(originalContent, searchQuery.value));
-          }
-        }
-      }
-      chapterContents.value = newMap;
-    }
   };
 
   const clearHighlights = async () => {
     hasHighlights.value = false;
     currentResultIndex.value = -1;
+    clearTempHighlight?.();
+    clearTempHighlight = null;
 
-    if (!isPaginationMode.value && loadedChapters && chapterContents) {
-      const host = readerHost();
-      const newMap = new Map(chapterContents.value);
-      for (const chapter of chapters.value) {
-        if (loadedChapters.value.has(chapter.id)) {
-          const originalContent = await host?.getChapterContent(chapter.id);
-          if (originalContent) {
-            newMap.set(chapter.id, originalContent);
-          }
+    const host = readerHost();
+    const doc = host?.getDocument();
+    const contentEl = doc?.querySelector(".chapter-body");
+    if (contentEl) {
+      const marks = contentEl.querySelectorAll("mark");
+      marks.forEach((mark) => {
+        const parent = mark.parentNode;
+        while (mark.firstChild) {
+          parent?.insertBefore(mark.firstChild, mark);
         }
-      }
-      chapterContents.value = newMap;
-    } else {
-      const contentEl = document.querySelector(".chapter-body");
-      if (contentEl) {
-        const marks = contentEl.querySelectorAll("mark.search-mark");
-        marks.forEach((mark) => {
-          const parent = mark.parentNode;
-          while (mark.firstChild) {
-            parent?.insertBefore(mark.firstChild, mark);
-          }
-          mark.remove();
-        });
-      }
+        mark.remove();
+      });
     }
   };
 
@@ -218,19 +173,10 @@ export function useReaderSearch(options: UseReaderSearchOptions) {
     const host = readerHost();
     if (!host || !result) return;
 
-    const targetChapter = chapters.value.find((c) => c.id === result.chapterId);
+    const targetChapter = host.getChapters().find((c) => c.id === result.chapterId);
     if (!targetChapter) return;
 
-    const currentChapter = host.getCurrentChapter();
-    if (!jumpState && currentChapter) {
-      jumpState = {
-        previousChapterId: currentChapter.id,
-        previousPage: host.isPaginationMode.value ? host.getCurrentPage() : 0,
-      };
-      hasJumpState.value = true;
-    }
-
-    const sameChapter = targetChapter.id === currentChapter?.id;
+    const sameChapter = targetChapter.id === host.getCurrentChapter()?.id;
 
     if (!sameChapter) {
       await host.navigateToChapter(targetChapter.id, 0);
@@ -273,29 +219,12 @@ export function useReaderSearch(options: UseReaderSearchOptions) {
     }
 
     hasHighlights.value = true;
-  }
-
-  async function goBackFromResult() {
-    if (!jumpState) return;
-    const { previousChapterId, previousPage } = jumpState;
-    jumpState = null;
-    hasJumpState.value = false;
-
-    const host = readerHost();
-    if (!host) return;
-
-    if (previousChapterId !== host.getCurrentChapter()?.id) {
-      await host.navigateToChapter(previousChapterId, previousPage);
-    } else if (host.isPaginationMode.value) {
-      host.goToPage(previousPage);
-    }
+    host.closeModal();
   }
 
   const reset = () => {
     clearTempHighlight?.();
     clearTempHighlight = null;
-    jumpState = null;
-    hasJumpState.value = false;
     searchQuery.value = "";
     searchResults.value = [];
     hasHighlights.value = false;
@@ -307,13 +236,11 @@ export function useReaderSearch(options: UseReaderSearchOptions) {
     searchResults,
     hasHighlights,
     currentResultIndex,
-    hasJumpState,
     doSearch,
     clearHighlights,
     goToNextMatch,
     goToPreviousMatch,
     navigateToResult,
-    goBackFromResult,
     reset,
   };
 }

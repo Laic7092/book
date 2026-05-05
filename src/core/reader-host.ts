@@ -28,6 +28,7 @@ export interface ReaderHost {
 
   // ── Actions ──
   openModal(name: string): void;
+  closeModal(): void;
 
   // ── Pagination state (for plugins that compute CFI) ──
   getCurrentPage(): number;
