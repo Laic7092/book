@@ -150,7 +150,7 @@ function highlightMatch(context: string): string {
   padding: 12px 16px;
   border: 1px solid var(--border);
   border-radius: 10px;
-  font-size: 15px;
+  font-size: 16px;
   background: var(--hover-bg);
   color: var(--modal-text);
   font-family: var(--font-ui);

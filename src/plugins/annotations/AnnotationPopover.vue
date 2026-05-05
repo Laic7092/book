@@ -291,7 +291,7 @@ function formatDate(ts: number) {
   padding: 8px;
   border: 1px solid var(--border-subtle, #e5e7eb);
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 16px;
   font-family: inherit;
   color: var(--text-primary, #111827);
   background: var(--bg, #fff);

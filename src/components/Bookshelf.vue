@@ -861,7 +861,7 @@ onMounted(() => {
   padding: 8px 34px 8px 36px;
   border: 1px solid var(--border-color);
   border-radius: 10px;
-  font-size: 13px;
+  font-size: 16px;
   background: var(--bg-secondary);
   color: var(--text-primary);
   font-family: var(--font-ui);
