@@ -29,7 +29,7 @@ export function useReaderSearch(readerHost: () => ReaderHost | null) {
     const endCfi = generateCfiFromCharOffset(spineIndex, container, position + textLength);
     if (!startCfi || !endCfi) return;
 
-    const range = resolveCfiRange(startCfi, endCfi, doc.body);
+    const range = resolveCfiRange(startCfi, endCfi, container);
     if (!range || range.collapsed) return;
 
     const marks: HTMLElement[] = [];
@@ -87,17 +87,6 @@ export function useReaderSearch(readerHost: () => ReaderHost | null) {
           }
         }
       };
-
-      setTimeout(() => {
-        for (const mark of marks) {
-          mark.style.backgroundColor = "transparent";
-        }
-      }, 1500);
-
-      setTimeout(() => {
-        clearTempHighlight?.();
-        clearTempHighlight = null;
-      }, 3000);
     }
   }
 
@@ -109,6 +98,10 @@ export function useReaderSearch(readerHost: () => ReaderHost | null) {
       hasHighlights.value = false;
       return;
     }
+
+    clearTempHighlight?.();
+    clearTempHighlight = null;
+    await clearHighlights();
 
     const host = readerHost();
     const bookId = host?.getCurrentBookId();
@@ -164,8 +157,8 @@ export function useReaderSearch(readerHost: () => ReaderHost | null) {
     const markRect = mark.getBoundingClientRect();
     const offset = markRect.left - bodyRect.left;
     const total = host.getTotalPages();
-    const scrollWidth = doc.documentElement.scrollWidth;
-    const step = total > 0 ? scrollWidth / total : 0;
+    const bodyScrollWidth = doc.body.scrollWidth;
+    const step = total > 0 ? bodyScrollWidth / total : 0;
     return step > 0 ? Math.max(0, Math.min(total - 1, Math.floor(offset / step))) : 0;
   }
 
