@@ -35,14 +35,16 @@ import {
 import { pluginEvents } from "../plugins/context";
 import { STORES, dbPut, dbGet } from "../storage/db";
 import { getChapterContent as fetchChapterContent } from "../storage/books";
+import { navigate } from "../router";
 
 const props = defineProps<{
   book: Book;
 }>();
 
-const emit = defineEmits<{
-  (e: "close"): void;
-}>();
+function handleClose() {
+  uiStore.setTransitioning(true);
+  navigate("/");
+}
 
 const readerStore = useReaderStore();
 const uiStore = useUIStore();
@@ -976,7 +978,7 @@ onUnmounted(() => {
       :book-title="book.title"
       :chapter-title="readerStore.currentChapter?.title"
       :show-controls="uiStore.showControls"
-      @close="emit('close')"
+      @close="handleClose"
       @open-settings="openModal('settings')"
     />
 

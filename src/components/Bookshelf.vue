@@ -8,9 +8,9 @@ import { validateBookFile } from "../utils/validation";
 import type { Book } from "../core/types";
 import { ModalWrapper } from "./modals";
 import { getBookshelfWidgets, pluginStateVersion } from "../plugins/registry";
+import { navigate } from "../router";
 
 const emit = defineEmits<{
-  (e: "book:select", book: Book): void;
   (e: "book:delete", bookId: string): void;
 }>();
 
@@ -132,7 +132,8 @@ async function deleteBook(bookId: string) {
 }
 
 function selectBook(book: Book) {
-  emit("book:select", book);
+  uiStore.setTransitioning(true);
+  navigate("/reader/" + book.id);
 }
 
 const coverUrls = computed(() => bookshelfStore.coverUrls);

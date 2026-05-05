@@ -1,39 +1,49 @@
 <script setup lang="ts">
+import { computed, watch } from "vue";
 import Bookshelf from "./components/Bookshelf.vue";
 import ReaderView from "./components/ReaderView.vue";
 import { useReaderStore } from "./stores/reader";
 import { useUIStore } from "./stores/ui";
 import { useSettingsStore } from "./stores/settings";
-import type { Book } from "./core/types";
+import { currentRoute, navigate } from "./router";
 
 const readerStore = useReaderStore();
 const uiStore = useUIStore();
 const settingsStore = useSettingsStore();
 settingsStore.init();
 
-async function handleBookSelect(book: Book) {
-  uiStore.setTransitioning(true);
-  try {
-    await readerStore.openBook(book.id);
-  } catch (err) {
-    console.error("Failed to open book:", err);
-    uiStore.triggerToast("Failed to open book. Please try again.", true);
-  } finally {
+const showReader = computed(
+  () => currentRoute.name === "reader" && readerStore.currentBook !== null,
+);
+
+watch(
+  () => ({ name: currentRoute.name, bookId: currentRoute.params.bookId }),
+  async (current, prev) => {
+    if (current.name === "reader" && current.bookId) {
+      if (readerStore.currentBook?.id !== current.bookId) {
+        try {
+          await readerStore.openBook(current.bookId);
+        } catch (err) {
+          console.error("Failed to open book:", err);
+          uiStore.triggerToast("Failed to open book. Please try again.", true);
+          navigate("/", true);
+        }
+      }
+    } else if (prev?.name === "reader" && current.name !== "reader") {
+      readerStore.closeBook();
+    }
     setTimeout(() => {
       uiStore.setTransitioning(false);
     }, 300);
-  }
-}
-
-function handleCloseReader() {
-  readerStore.closeBook();
-}
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
   <Transition name="page">
-    <Bookshelf v-if="!readerStore.currentBook" key="bookshelf" @book:select="handleBookSelect" />
-    <ReaderView v-else key="reader" :book="readerStore.currentBook" @close="handleCloseReader" />
+    <Bookshelf v-if="!showReader" key="bookshelf" />
+    <ReaderView v-else key="reader" :book="readerStore.currentBook!" />
   </Transition>
 </template>
 
