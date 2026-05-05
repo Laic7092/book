@@ -34,7 +34,7 @@ function updateLayout() {
   const p = props.position;
   if (!p || actualHeight.value === 0) return;
   const vh = window.innerHeight;
-  const spaceBelow = vh - (p.top + p.height + POPOVER_GAP);
+  const spaceBelow = vh - (p.top + (p.height || 0) + POPOVER_GAP);
   placeBelow.value = spaceBelow >= actualHeight.value + EDGE_PADDING;
 }
 
@@ -62,7 +62,7 @@ const popoverStyle = computed(() => {
   const p = props.position;
   const vw = window.innerWidth;
 
-  const topVal = placeBelow.value ? p.top + p.height + POPOVER_GAP : p.top - POPOVER_GAP;
+  const topVal = placeBelow.value ? p.top + (p.height || 0) + POPOVER_GAP : p.top - POPOVER_GAP;
 
   const clampedTop = Math.max(EDGE_PADDING, topVal);
   const left = Math.max(EDGE_PADDING, Math.min(vw - POPOVER_WIDTH - EDGE_PADDING, p.left));

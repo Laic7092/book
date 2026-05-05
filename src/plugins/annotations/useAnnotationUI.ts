@@ -66,7 +66,7 @@ export function useAnnotationUI() {
         pendingSelection.value = { startCfi, endCfi, text: info.text };
         toolbarPos.value = {
           top: Math.max(56, info.rect.top),
-          left: info.rect.left,
+          left: (info.rect.right + info.rect.left) / 4,
         };
         showToolbar.value = true;
       },
