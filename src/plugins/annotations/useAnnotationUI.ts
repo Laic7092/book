@@ -82,14 +82,14 @@ export function useAnnotationUI() {
 
     // Load annotations for the current chapter (already loaded before onReady fired)
     const currentChapterId = host.getCurrentChapter()?.id;
-    if (currentChapterId && store.currentBookId) {
-      await store.loadAnnotationsForChapter(store.currentBookId, currentChapterId);
+    if (currentChapterId && host.getCurrentBookId()) {
+      await store.loadAnnotationsForChapter(host.getCurrentBookId()!, currentChapterId);
       applyAnnotations();
     }
 
     // Re-apply annotations when chapter changes
     host.onChapterChange(async (chapterId) => {
-      await store.loadAnnotationsForChapter(store.currentBookId || "", chapterId);
+      await store.loadAnnotationsForChapter(host.getCurrentBookId() || "", chapterId);
       applyAnnotations();
     });
   });
@@ -109,7 +109,7 @@ export function useAnnotationUI() {
     showToolbar.value = false;
     showNoteInput.value = false;
     await store.addAnnotation(
-      store.currentBookId!,
+      host.getCurrentBookId()!,
       host.getCurrentChapter()!.id,
       "highlight",
       sel.startCfi,
@@ -126,7 +126,8 @@ export function useAnnotationUI() {
     if (!sel || !host?.getCurrentChapter()) return;
     showToolbar.value = false;
     await store.addAnnotation(
-      store.currentBookId!,
+      host.getCurrentBookId()!,
+
       host.getCurrentChapter()!.id,
       "underline",
       sel.startCfi,
@@ -148,7 +149,8 @@ export function useAnnotationUI() {
     showToolbar.value = false;
     showNoteInput.value = false;
     await store.addAnnotation(
-      store.currentBookId!,
+      host.getCurrentBookId()!,
+
       host.getCurrentChapter()!.id,
       "highlight",
       sel.startCfi,

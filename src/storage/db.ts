@@ -6,11 +6,8 @@ const DB_VERSION = 9;
 export const STORES = {
   BOOKS: "books",
   CHAPTERS: "chapters",
-  BOOKMARKS: "bookmarks",
   SETTINGS: "settings",
   RESOURCES: "resources",
-  STATS: "stats",
-  ANNOTATIONS: "annotations",
   ZIPS: "zips",
   /** v9: isolated per-plugin key-value storage. Compound key: [pluginId, key]. */
   PLUGIN_STORE: "plugin_store",

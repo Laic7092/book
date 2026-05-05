@@ -5,7 +5,7 @@ import {
   SCROLL_MODE_OPTIONS,
   ANIMATION_OPTIONS,
   FONT_SIZE_PRESETS,
-} from "../../utils/settings";
+} from "../../config/settings-options";
 import { getReaderHost } from "../../core/reader-host";
 
 const host = getReaderHost()!;

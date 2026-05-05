@@ -190,13 +190,6 @@ export function generatePaginationCSS(columnWidth: number, height: number, gap: 
 // ============================================================
 
 /**
- * @deprecated 使用 generateTypographyCSS 替代
- */
-export function generateCustomTypographyCSS(settings: ReaderSettings): string {
-  return generateTypographyCSS(settings);
-}
-
-/**
  * 生成完整的样式表（主题 + 基础 + 排版）
  */
 export function generateFullCSS(settings: ReaderSettings): string {

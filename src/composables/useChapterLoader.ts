@@ -4,7 +4,7 @@ import { ref, computed, type Ref, type Reactive } from "vue";
 import type { Chapter } from "../core/types";
 import * as booksStore from "../storage/books";
 import { LRUCache } from "../utils/lru-cache";
-import { CHAPTER_CACHE_MAX_SIZE } from "../utils/constants";
+import { CHAPTER_CACHE_MAX_SIZE } from "../config/constants";
 
 interface ChapterLoaderState {
   chapters: Chapter[];

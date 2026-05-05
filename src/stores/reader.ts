@@ -253,7 +253,7 @@ export const useReaderStore = defineStore("reader", {
       }
 
       if (this.resourceUrls && this.resourceUrls.size > 0) {
-        const { rewriteResourcePaths } = await import("../utils/resource-urls");
+        const { rewriteResourcePaths } = await import("../reader-engine/resource-urls");
         const rewrittenDoc = rewriteResourcePaths(content, this.resourceUrls);
 
         const resources: HTMLElement[] = [];

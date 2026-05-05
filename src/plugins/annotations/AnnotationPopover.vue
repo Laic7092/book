@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import type { Annotation } from "../../core/types";
-import { HIGHLIGHT_COLORS } from "../../utils/colors";
+import { HIGHLIGHT_COLORS } from "../../config/colors";
 
 const props = defineProps<{
   visible: boolean;

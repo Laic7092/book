@@ -6,8 +6,8 @@ import {
   MARGIN_PRESETS,
   TEXT_ALIGN_OPTIONS,
   CONTRAST_OPTIONS,
-} from "../../utils/settings";
-import { createPreviewIframe, type PreviewIframe } from "../../utils/preview-iframe";
+} from "../../config/settings-options";
+import { createPreviewIframe, type PreviewIframe } from "./preview-iframe";
 import { getReaderHost } from "../../core/reader-host";
 
 const host = getReaderHost()!;

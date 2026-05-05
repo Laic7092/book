@@ -29,9 +29,9 @@ import {
   resolveCfiRange,
   getSpineIndex,
 } from "../utils/epub-cfi";
-import { rewriteResourcePaths } from "../utils/resource-urls";
+import { rewriteResourcePaths } from "../reader-engine/resource-urls";
 import { debounce } from "../utils/debounce";
-import { SWIPE_THRESHOLD, TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../utils/constants";
+import { SWIPE_THRESHOLD, TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../config/constants";
 import { registerReaderHost, unregisterReaderHost } from "../core/reader-host";
 import type { ReaderHost } from "../core/reader-host";
 import { getSearchApis, getOverlayComponents, pluginStateVersion } from "../plugins/registry";

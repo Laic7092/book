@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, watch, nextTick, computed } from "vue";
 import type { ReaderSettings } from "../../core/types";
 import { useIframeRenderer } from "../../composables/useIframeRenderer";
-import { generatePaginationCSS } from "../../utils/reader-styles";
+import { generatePaginationCSS } from "../../reader-engine/reader-styles";
 
 const props = defineProps<{
   content: string;

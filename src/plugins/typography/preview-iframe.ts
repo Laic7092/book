@@ -1,5 +1,9 @@
-import type { ReaderSettings } from "../core/types";
-import { generateIframeStyles, generateThemeCSS, generateTypographyCSS } from "./reader-styles";
+import type { ReaderSettings } from "../../core/types";
+import {
+  generateIframeStyles,
+  generateThemeCSS,
+  generateTypographyCSS,
+} from "../../reader-engine/reader-styles";
 
 export interface PreviewIframe {
   updateStyles(settings: ReaderSettings): void;

@@ -70,14 +70,7 @@ export async function getAllBooks(): Promise<Book[]> {
  */
 export async function deleteBook(bookId: string): Promise<void> {
   await dbTransaction(
-    [
-      STORES.BOOKS,
-      STORES.CHAPTERS,
-      STORES.BOOKMARKS,
-      STORES.RESOURCES,
-      STORES.ANNOTATIONS,
-      STORES.ZIPS,
-    ],
+    [STORES.BOOKS, STORES.CHAPTERS, STORES.RESOURCES, STORES.ZIPS],
     "readwrite",
     async (stores) => {
       // Delete book metadata
@@ -97,20 +90,6 @@ export async function deleteBook(bookId: string): Promise<void> {
         request.onerror = () => reject(request.error);
       });
 
-      // Delete bookmarks for this book (legacy store)
-      const bookmarksStore = stores.get(STORES.BOOKMARKS)!;
-      const bookmarksIndex = bookmarksStore.index("bookId");
-
-      await new Promise<void>((resolve, reject) => {
-        const request = bookmarksIndex.getAllKeys(IDBKeyRange.only(bookId));
-        request.onsuccess = () => {
-          const keys = request.result as string[];
-          keys.forEach((key) => bookmarksStore.delete(key));
-          resolve();
-        };
-        request.onerror = () => reject(request.error);
-      });
-
       // Delete resources for this book
       const resourcesStore = stores.get(STORES.RESOURCES)!;
       const resourcesIndex = resourcesStore.index("bookId");
@@ -120,20 +99,6 @@ export async function deleteBook(bookId: string): Promise<void> {
         request.onsuccess = () => {
           const keys = request.result as Array<[string, string]>;
           keys.forEach((key) => resourcesStore.delete(key));
-          resolve();
-        };
-        request.onerror = () => reject(request.error);
-      });
-
-      // Delete annotations for this book (legacy store)
-      const annotationsStore = stores.get(STORES.ANNOTATIONS)!;
-      const annotationsIndex = annotationsStore.index("bookId");
-
-      await new Promise<void>((resolve, reject) => {
-        const request = annotationsIndex.getAllKeys(IDBKeyRange.only(bookId));
-        request.onsuccess = () => {
-          const keys = request.result as string[];
-          keys.forEach((key) => annotationsStore.delete(key));
           resolve();
         };
         request.onerror = () => reject(request.error);

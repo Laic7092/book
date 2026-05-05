@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { useBookshelfStore } from "../stores/bookshelf";
 import { useUIStore } from "../stores/ui";
-import { getBookGradient, getInitial } from "../utils/colors";
+import { getBookGradient, getInitial } from "../config/colors";
 import { formatBookToast } from "../utils/toast";
 import { validateBookFile } from "../utils/validation";
 import type { Book } from "../core/types";

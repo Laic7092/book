@@ -2,7 +2,7 @@
  * Toast message utility functions.
  */
 
-import { TOAST_TITLE_MAX_LENGTH } from "./constants";
+import { TOAST_TITLE_MAX_LENGTH } from "../config/constants";
 
 /**
  * Truncate a book title for toast messages.

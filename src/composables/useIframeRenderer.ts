@@ -4,8 +4,12 @@ import {
   generateIframeStyles,
   generateThemeCSS,
   generateTypographyCSS,
-} from "../utils/reader-styles";
-import { type ResourceInfo, injectResources, clearResources } from "../utils/iframe-resources";
+} from "../reader-engine/reader-styles";
+import {
+  type ResourceInfo,
+  injectResources,
+  clearResources,
+} from "../reader-engine/iframe-resources";
 
 export interface IframeRendererOptions {
   settings: ReaderSettings;
