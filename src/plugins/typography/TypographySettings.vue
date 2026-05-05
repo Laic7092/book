@@ -8,9 +8,9 @@ import {
   CONTRAST_OPTIONS,
 } from "../../config/settings-options";
 import { createPreviewIframe, type PreviewIframe } from "./preview-iframe";
-import { getReaderHost } from "../../core/reader-host";
+import { getTypographyReaderHost } from "./index";
 
-const host = getReaderHost()!;
+const host = getTypographyReaderHost()!;
 const settings = host.getSettings();
 
 const emit = defineEmits<{

@@ -2,8 +2,10 @@ import { defineStore } from "pinia";
 import type { Annotation } from "../../core/types";
 import { ErrorCode, createReaderError } from "../../core/errors";
 import type { PluginStorageAdapter } from "../types";
+import type { ReaderHost } from "../../core/reader-host";
 
 let adapter: PluginStorageAdapter | null = null;
+let _readerHost: (() => ReaderHost | null) | null = null;
 
 export function setAnnotationsAdapter(a: PluginStorageAdapter | null) {
   adapter = a;
@@ -11,6 +13,14 @@ export function setAnnotationsAdapter(a: PluginStorageAdapter | null) {
 
 function useAdapter() {
   return adapter!;
+}
+
+export function setReaderHost(h: (() => ReaderHost | null) | null) {
+  _readerHost = h;
+}
+
+export function getReaderHost(): ReaderHost | null {
+  return _readerHost?.() ?? null;
 }
 
 function createAnnotation(

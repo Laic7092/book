@@ -3,7 +3,7 @@
 import { ref, type Ref } from "vue";
 import { searchInBook, highlightMatches } from "./engine";
 import type { Chapter, SearchResult } from "../../core/types";
-import { getReaderHost } from "../../core/reader-host";
+import type { ReaderHost } from "../../core/reader-host";
 
 interface UseReaderSearchOptions {
   bookId: Ref<string | undefined>;
@@ -11,10 +11,12 @@ interface UseReaderSearchOptions {
   isPaginationMode: Ref<boolean>;
   loadedChapters?: Ref<Set<string>>;
   chapterContents?: Ref<Map<string, string>>;
+  readerHost: () => ReaderHost | null;
 }
 
 export function useReaderSearch(options: UseReaderSearchOptions) {
-  const { bookId, chapters, isPaginationMode, loadedChapters, chapterContents } = options;
+  const { bookId, chapters, isPaginationMode, loadedChapters, chapterContents, readerHost } =
+    options;
 
   const searchQuery = ref("");
   const searchResults = ref<SearchResult[]>([]);
@@ -28,7 +30,7 @@ export function useReaderSearch(options: UseReaderSearchOptions) {
       return;
     }
 
-    const host = getReaderHost();
+    const host = readerHost();
     searchResults.value = await searchInBook(bookId.value, searchQuery.value, chapters.value, {
       getChapterContent: (_: string, chapterId: string) =>
         host?.getChapterContent(chapterId) ?? Promise.resolve(undefined),
@@ -59,7 +61,7 @@ export function useReaderSearch(options: UseReaderSearchOptions) {
     currentResultIndex.value = -1;
 
     if (!isPaginationMode.value && loadedChapters && chapterContents) {
-      const host = getReaderHost();
+      const host = readerHost();
       const newMap = new Map(chapterContents.value);
       for (const chapter of chapters.value) {
         if (loadedChapters.value.has(chapter.id)) {

@@ -1,7 +1,7 @@
 import BookmarksPanel from "./BookmarksPanel.vue";
 import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
-import { useBookmarksStore, setBookmarksAdapter } from "./store";
+import { useBookmarksStore, setBookmarksAdapter, setReaderHost } from "./store";
 
 let store: ReturnType<typeof useBookmarksStore> | null = null;
 
@@ -12,6 +12,7 @@ export const bookmarksPlugin: Plugin = {
   version: "1.0.0",
   setup(ctx) {
     setBookmarksAdapter(ctx.storage);
+    setReaderHost(ctx.readerHost);
     store = useBookmarksStore(ctx.pinia);
 
     ctx.events.on("book:opened", ({ bookId }) => store?.loadBookmarks(bookId));
@@ -28,6 +29,7 @@ export const bookmarksPlugin: Plugin = {
   },
   teardown() {
     setBookmarksAdapter(null);
+    setReaderHost(null);
     store = null;
   },
 };

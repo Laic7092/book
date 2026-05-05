@@ -3,8 +3,10 @@
 
 import type { ReadingSession, BookReadingStats } from "../../core/types";
 import type { PluginStorageAdapter } from "../types";
+import type { ReaderHost } from "../../core/reader-host";
 
 let adapter: PluginStorageAdapter | null = null;
+let _readerHost: (() => ReaderHost | null) | null = null;
 
 export function setStatsAdapter(a: PluginStorageAdapter | null) {
   adapter = a;
@@ -12,6 +14,14 @@ export function setStatsAdapter(a: PluginStorageAdapter | null) {
 
 function useAdapter() {
   return adapter!;
+}
+
+export function setReaderHost(h: (() => ReaderHost | null) | null) {
+  _readerHost = h;
+}
+
+export function getReaderHost(): ReaderHost | null {
+  return _readerHost?.() ?? null;
 }
 
 const SESSIONS_KEY = "sessions";

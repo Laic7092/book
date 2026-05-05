@@ -1,6 +1,6 @@
 import { ref } from "vue";
 import type { Annotation } from "../../core/types";
-import { getReaderHost } from "../../core/reader-host";
+import { getReaderHost } from "./store";
 import { useAnnotationsStore } from "./store";
 import { useAnnotationRenderer } from "./useAnnotationRenderer";
 import { generateCfiFromRange } from "../../utils/epub-cfi";

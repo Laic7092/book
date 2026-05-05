@@ -1,13 +1,18 @@
 import type { Component, App } from "vue";
 import type { Pinia } from "pinia";
-import type { BookParser } from "../core/types";
+import type { BookParser, ReaderSettings } from "../core/types";
 import type { SearchApi } from "../core/search-api";
+import type { ReaderHost } from "../core/reader-host";
 
 /** Map of event names to their payload types. */
 export interface PluginEventMap {
   "book:opened": { bookId: string };
   "book:closed": { bookId: string; chapterId?: string };
   "book:deleted": { bookId: string };
+  "chapter:changed": { bookId: string; chapterId: string; previousChapterId?: string };
+  "page:changed": { bookId: string; chapterId: string; page: number; totalPages: number };
+  "settings:changed": { changes: Partial<ReaderSettings> };
+  "content:loaded": { bookId: string; chapterId: string };
   [key: string]: unknown;
 }
 
@@ -53,6 +58,13 @@ export interface UISlots {
   registerBookshelfWidget(component: Component): void;
 }
 
+export interface ContentTransformer {
+  id: string;
+  /** Lower runs first. Default 100. */
+  priority: number;
+  transform(html: string, ctx: { bookId: string; chapterId: string }): string | Promise<string>;
+}
+
 export interface PluginContext {
   id: string;
   storage: PluginStorageAdapter;
@@ -67,6 +79,10 @@ export interface PluginContext {
   };
   /** Register a cleanup callback called when the plugin is disabled/removed. */
   onCleanup(fn: () => void | Promise<void>): void;
+  /** ReaderHost getter — returns null before a book is opened. */
+  readerHost: () => ReaderHost | null;
+  /** Register a content transformer applied to chapter HTML before rendering. */
+  registerContentTransformer(transformer: ContentTransformer): void;
 }
 
 export interface PluginBootstrap {

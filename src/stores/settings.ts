@@ -4,6 +4,7 @@ import { defineStore } from "pinia";
 import { toRaw } from "vue";
 import type { ReaderSettings } from "../core/types";
 import * as settingsStorage from "../storage/settings";
+import { pluginEvents } from "../plugins/context";
 
 /**
  * Default reader settings - single source of truth
@@ -66,6 +67,7 @@ export const useSettingsStore = defineStore("settings", {
     async updateSettings(updates: Partial<ReaderSettings>): Promise<ReaderSettings> {
       this.settings = { ...this.settings, ...updates };
       await settingsStorage.saveSettings(toRaw(this.settings));
+      void pluginEvents.emit("settings:changed", { changes: updates });
       return this.settings;
     },
 

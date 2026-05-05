@@ -7,9 +7,11 @@ import {
   registeredOverlays,
   registeredFooterActions,
   registeredBookshelfWidgets,
+  registeredContentTransformers,
   dynamicCapabilities,
   type TrackedContext,
 } from "./context";
+import type { ContentTransformer } from "./types";
 import type { BookParser } from "../core/types";
 import type { SearchApi } from "../core/search-api";
 
@@ -324,6 +326,14 @@ export function getSearchApis(): SearchApi[] {
   }
   return result;
 }
+
+// ── Content transformers ──
+
+export function getContentTransformers(): ContentTransformer[] {
+  return [...registeredContentTransformers.value];
+}
+
+export { applyContentTransformers } from "./context";
 
 // ── Plugin event bus (re-export for convenience) ──
 

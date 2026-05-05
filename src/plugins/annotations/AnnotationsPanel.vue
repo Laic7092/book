@@ -2,8 +2,7 @@
 import { computed, ref } from "vue";
 import type { Annotation } from "../../core/types";
 import ModalHeader from "../../components/modals/ModalHeader.vue";
-import { getReaderHost } from "../../core/reader-host";
-import { useAnnotationsStore } from "./store";
+import { getReaderHost, useAnnotationsStore } from "./store";
 
 const annotationsStore = useAnnotationsStore();
 const host = getReaderHost();

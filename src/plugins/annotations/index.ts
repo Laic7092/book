@@ -2,7 +2,7 @@ import AnnotationsPanel from "./AnnotationsPanel.vue";
 import AnnotationOverlay from "./AnnotationOverlay.vue";
 import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
-import { useAnnotationsStore, setAnnotationsAdapter } from "./store";
+import { useAnnotationsStore, setAnnotationsAdapter, setReaderHost } from "./store";
 
 let store: ReturnType<typeof useAnnotationsStore> | null = null;
 
@@ -13,6 +13,7 @@ export const annotationsPlugin: Plugin = {
   version: "1.0.0",
   setup(ctx) {
     setAnnotationsAdapter(ctx.storage);
+    setReaderHost(ctx.readerHost);
     store = useAnnotationsStore(ctx.pinia);
 
     ctx.events.on("book:opened", ({ bookId }) => store?.loadAnnotationsForBook(bookId));
@@ -31,6 +32,7 @@ export const annotationsPlugin: Plugin = {
   },
   teardown() {
     setAnnotationsAdapter(null);
+    setReaderHost(null);
     store = null;
   },
 };

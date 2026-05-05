@@ -34,7 +34,13 @@ import { debounce } from "../utils/debounce";
 import { SWIPE_THRESHOLD, TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../config/constants";
 import { registerReaderHost, unregisterReaderHost } from "../core/reader-host";
 import type { ReaderHost } from "../core/reader-host";
-import { getSearchApis, getOverlayComponents, pluginStateVersion } from "../plugins/registry";
+import {
+  getSearchApis,
+  getOverlayComponents,
+  pluginStateVersion,
+  applyContentTransformers,
+} from "../plugins/registry";
+import { pluginEvents } from "../plugins/context";
 import { STORES, dbPut, dbGet } from "../storage/db";
 import { getChapterContent as fetchChapterContent } from "../storage/books";
 
@@ -153,6 +159,44 @@ const rewrittenLoadedContent = computed(() => {
     return { ...ch, content: doc.body.innerHTML };
   });
 });
+
+// Transformed content: rewrittenLoadedContent + plugin content transformers
+const transformedLoadedContent = ref<typeof rewrittenLoadedContent.value>([]);
+let transformSeq = 0;
+
+async function refreshTransformedContent() {
+  const seq = ++transformSeq;
+  const source = rewrittenLoadedContent.value;
+  const bookId = readerStore.currentBook?.id;
+  if (!bookId) {
+    transformedLoadedContent.value = source;
+    return;
+  }
+  const result = await Promise.all(
+    source.map(async (ch) => {
+      try {
+        const html = await applyContentTransformers(ch.content, {
+          bookId,
+          chapterId: ch.chapterId,
+        });
+        return { ...ch, content: html };
+      } catch {
+        return ch;
+      }
+    }),
+  );
+  if (seq === transformSeq) {
+    transformedLoadedContent.value = result;
+  }
+}
+
+watch(
+  [rewrittenLoadedContent, pluginStateVersion, () => readerStore.currentBook?.id],
+  () => {
+    refreshTransformedContent();
+  },
+  { immediate: true },
+);
 
 // ── Progress persistence (inline, no plugin dependency) ──
 
@@ -415,6 +459,11 @@ function setupScrollHandler(doc: Document) {
           for (const cb of chapterChangeCallbacks) {
             cb(scrollCurrentChapterId);
           }
+          void pluginEvents.emit("chapter:changed", {
+            bookId: readerStore.currentBook!.id,
+            chapterId: scrollCurrentChapterId,
+            previousChapterId: prevChapterId,
+          });
         }
       }
 
@@ -516,13 +565,20 @@ const handleSelectChapter = async (
 ) => {
   isTransitioning.value = true;
   const wasShowingControls = uiStore.showControls;
+  const previousChapterId = readerStore.currentChapter?.id;
   try {
     await readerStore.goToChapter(chapterId);
     closeModal();
 
     if (isPaginationMode.value) {
       const content = await readerStore.getCurrentChapterContent();
-      const html = content?.html || "";
+      let html = content?.html || "";
+      if (html && readerStore.currentBook) {
+        html = await applyContentTransformers(html, {
+          bookId: readerStore.currentBook.id,
+          chapterId,
+        });
+      }
       const resources = content?.resources || [];
       await pagination.paginate(chapterId, { html, targetPage, resources });
       currentChapterResources.value = resources;
@@ -536,12 +592,21 @@ const handleSelectChapter = async (
     for (const cb of chapterChangeCallbacks) {
       cb(chapterId);
     }
+    void pluginEvents.emit("chapter:changed", {
+      bookId: readerStore.currentBook!.id,
+      chapterId,
+      previousChapterId,
+    });
 
     if (isPaginationMode.value) {
       if (autoClearTransition) {
         const onReady = async () => {
           isTransitioning.value = false;
           uiStore.showControls = wasShowingControls;
+          void pluginEvents.emit("content:loaded", {
+            bookId: readerStore.currentBook!.id,
+            chapterId,
+          });
         };
         if (pagination.isReady.value) {
           onReady();
@@ -561,6 +626,10 @@ const handleSelectChapter = async (
       setTimeout(() => {
         isTransitioning.value = false;
         uiStore.showControls = wasShowingControls;
+        void pluginEvents.emit("content:loaded", {
+          bookId: readerStore.currentBook!.id,
+          chapterId,
+        });
       }, 50);
     }
   } catch {
@@ -928,7 +997,13 @@ watch(
       await chapterLoader.loadCurrentAndAdjacent(2);
     } else if (newMode === "pagination" && readerStore.currentChapter) {
       const content = await readerStore.getCurrentChapterContent();
-      const html = content?.html || "";
+      let html = content?.html || "";
+      if (html && readerStore.currentBook) {
+        html = await applyContentTransformers(html, {
+          bookId: readerStore.currentBook.id,
+          chapterId: readerStore.currentChapter.id,
+        });
+      }
       const resources = content?.resources || [];
       currentChapterResources.value = resources;
       await pagination.paginate(readerStore.currentChapter.id, { html, resources });
@@ -945,11 +1020,16 @@ watch(
   { immediate: true },
 );
 
-// Watch for page changes in pagination mode to auto-save
+// Watch for page changes in pagination mode to auto-save + emit event
 watch([() => pagination.currentPage.value, () => pagination.totalPages.value], ([page, total]) => {
   if (!isPaginationMode.value) return;
   const cp = total <= 1 ? 100 : ((page + 1) / total) * 100;
   saveReadingProgress(cp, readingProgress.value, page);
+  const chapterId = readerStore.currentChapter?.id;
+  const bookId = readerStore.currentBook?.id;
+  if (chapterId && bookId) {
+    void pluginEvents.emit("page:changed", { bookId, chapterId, page, totalPages: total });
+  }
 });
 
 // Watch for iframe ready → set up direct gesture + scroll handlers
@@ -966,6 +1046,12 @@ watch(
     // Fire ready callbacks (plugins hook in here)
     for (const cb of iframeReadyCallbacks) {
       cb();
+    }
+    // Emit content:loaded for initial render
+    const chapterId = readerStore.currentChapter?.id;
+    const bookId = readerStore.currentBook?.id;
+    if (chapterId && bookId) {
+      void pluginEvents.emit("content:loaded", { bookId, chapterId });
     }
   },
 );
@@ -1040,7 +1126,7 @@ onUnmounted(() => {
       :is-pagination-mode="isPaginationMode"
       :scroll-offset="pagination.scrollOffset.value"
       :chapter-loading="chapterLoading"
-      :loaded-chapters="rewrittenLoadedContent"
+      :loaded-chapters="transformedLoadedContent"
       :epub-resources="currentChapterResources"
       :on-link-click="handleInternalLinkClick"
       :on-column-layout="handleColumnLayout"

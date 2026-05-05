@@ -2,8 +2,7 @@
 import { computed } from "vue";
 import type { Bookmark } from "../../core/types";
 import ModalHeader from "../../components/modals/ModalHeader.vue";
-import { getReaderHost } from "../../core/reader-host";
-import { useBookmarksStore } from "./store";
+import { getReaderHost, useBookmarksStore } from "./store";
 
 const bookmarksStore = useBookmarksStore();
 const host = getReaderHost();

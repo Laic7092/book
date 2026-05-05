@@ -6,9 +6,9 @@ import {
   ANIMATION_OPTIONS,
   FONT_SIZE_PRESETS,
 } from "../../config/settings-options";
-import { getReaderHost } from "../../core/reader-host";
+import { getThemesReaderHost } from "./index";
 
-const host = getReaderHost()!;
+const host = getThemesReaderHost()!;
 const settings = host.getSettings();
 
 const emit = defineEmits<{

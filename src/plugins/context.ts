@@ -11,7 +11,9 @@ import type {
   CapabilityMap,
   IEventBus,
   EventHandler,
+  ContentTransformer,
 } from "./types";
+import { getReaderHost } from "../core/reader-host";
 
 // ── PluginStorageAdapter implementation ──
 
@@ -84,6 +86,7 @@ export const registeredModals = shallowRef<Record<string, Component>>({});
 export const registeredOverlays = shallowRef<Record<string, Component>>({});
 export const registeredFooterActions = shallowRef<FooterAction[]>([]);
 export const registeredBookshelfWidgets = shallowRef<Component[]>([]);
+export const registeredContentTransformers = shallowRef<ContentTransformer[]>([]);
 
 export function createUISlots(): UISlots {
   return {
@@ -108,6 +111,33 @@ export function createUISlots(): UISlots {
       registeredBookshelfWidgets.value = [...registeredBookshelfWidgets.value, component];
     },
   };
+}
+
+export function registerContentTransformer(t: ContentTransformer): void {
+  const transformers = [...registeredContentTransformers.value, t];
+  transformers.sort((a, b) => a.priority - b.priority);
+  registeredContentTransformers.value = transformers;
+}
+
+export function unregisterContentTransformer(t: ContentTransformer): void {
+  registeredContentTransformers.value = registeredContentTransformers.value.filter(
+    (x) => x.id !== t.id,
+  );
+}
+
+export async function applyContentTransformers(
+  html: string,
+  ctx: { bookId: string; chapterId: string },
+): Promise<string> {
+  let result = html;
+  for (const t of registeredContentTransformers.value) {
+    try {
+      result = await t.transform(result, ctx);
+    } catch (err) {
+      console.error(`[ContentTransformer] "${t.id}" failed:`, err);
+    }
+  }
+  return result;
 }
 
 // ── Event emitter ──
@@ -158,6 +188,8 @@ export function createPluginContext(id: string, bootstrap: PluginBootstrap): Plu
     events: pluginEvents,
     capabilities: createCapabilitySlots(),
     onCleanup(_fn: () => void | Promise<void>) {},
+    readerHost: () => getReaderHost(),
+    registerContentTransformer,
   };
 }
 
@@ -230,6 +262,8 @@ export function createTrackedContext(id: string, bootstrap: PluginBootstrap): Tr
     },
   };
 
+  const trackedTransformers: ContentTransformer[] = [];
+
   return {
     id,
     storage: createPluginStorageAdapter(id),
@@ -240,6 +274,11 @@ export function createTrackedContext(id: string, bootstrap: PluginBootstrap): Tr
     capabilities,
     onCleanup(fn: () => void | Promise<void>) {
       cleanupFns.push(fn);
+    },
+    readerHost: () => getReaderHost(),
+    registerContentTransformer(t: ContentTransformer) {
+      registerContentTransformer(t);
+      trackedTransformers.push(t);
     },
     async runCleanup() {
       const unsubResults = await Promise.allSettled(
@@ -273,6 +312,10 @@ export function createTrackedContext(id: string, bootstrap: PluginBootstrap): Tr
         rawCaps.unregister(key as keyof CapabilityMap, value as never);
       }
       registeredCapKeys.length = 0;
+      for (const t of trackedTransformers) {
+        unregisterContentTransformer(t);
+      }
+      trackedTransformers.length = 0;
     },
   };
 }
