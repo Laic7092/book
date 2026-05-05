@@ -14,6 +14,7 @@ import type {
   ContentTransformer,
 } from "./types";
 import { getReaderHost } from "../core/reader-host";
+import { navigate as routerNavigate } from "../router";
 
 // ── PluginStorageAdapter implementation ──
 
@@ -194,6 +195,7 @@ export function createPluginContext(id: string, bootstrap: PluginBootstrap): Plu
     onCleanup(_fn: () => void | Promise<void>) {},
     readerHost: () => getReaderHost(),
     registerContentTransformer,
+    navigate: routerNavigate,
   };
 }
 
@@ -292,6 +294,7 @@ export function createTrackedContext(id: string, bootstrap: PluginBootstrap): Tr
       registerContentTransformer(t);
       trackedTransformers.push(t);
     },
+    navigate: routerNavigate,
     async runCleanup() {
       const unsubResults = await Promise.allSettled(
         eventUnsubs.map((fn) => {

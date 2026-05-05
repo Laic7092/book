@@ -98,6 +98,8 @@ export interface PluginContext {
   readerHost: () => ReaderHost | null;
   /** Register a content transformer applied to chapter HTML before rendering. */
   registerContentTransformer(transformer: ContentTransformer): void;
+  /** Navigate to a route. */
+  navigate: (url: string, replace?: boolean) => void;
 }
 
 export interface PluginBootstrap {

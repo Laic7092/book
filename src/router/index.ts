@@ -6,17 +6,16 @@ export interface Route {
 }
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, ""); // '/book'
-const BASE_PREFIX = import.meta.env.PROD ? BASE : "";
 
 function getAppPath(pathname: string): string {
-  if (BASE_PREFIX && pathname.startsWith(BASE_PREFIX)) {
-    return pathname.slice(BASE_PREFIX.length) || "/";
+  if (pathname.startsWith(BASE + "/") || pathname === BASE || pathname === BASE + "/") {
+    return pathname.slice(BASE.length) || "/";
   }
   return pathname || "/";
 }
 
 function toUrl(appPath: string): string {
-  return BASE_PREFIX + appPath;
+  return BASE + appPath;
 }
 
 function matchAppPath(appPath: string): Route {
