@@ -106,32 +106,26 @@ export async function deleteBook(bookId: string): Promise<void> {
     },
   );
 
-  // Also clean up plugin_store entries for this book
+  // Also clean up plugin_store entries for this book (any plugin)
   await dbTransaction([STORES.PLUGIN_STORE], "readwrite", async (stores) => {
     const ps = stores.get(STORES.PLUGIN_STORE)!;
-    const idx = ps.index("pluginId");
 
-    for (const pluginId of ["bookmarks", "annotations", "stats"]) {
-      await new Promise<void>((resolve, reject) => {
-        const req = idx.getAll(IDBKeyRange.only(pluginId));
-        req.onsuccess = () => {
-          for (const record of req.result as Array<{
-            pluginId: string;
-            key: string;
-            value: { bookId?: string };
-          }>) {
-            if (record.value?.bookId === bookId) {
-              ps.delete([pluginId, record.key]);
-            }
+    await new Promise<void>((resolve, reject) => {
+      const req = ps.getAll();
+      req.onsuccess = () => {
+        for (const record of req.result as Array<{
+          pluginId: string;
+          key: string;
+          value: { bookId?: string };
+        }>) {
+          if (record.value?.bookId === bookId || record.key.includes(bookId)) {
+            ps.delete([record.pluginId, record.key]);
           }
-          resolve();
-        };
-        req.onerror = () => reject(req.error);
-      });
-    }
-
-    // Also clean up core progress entry
-    ps.delete(["__core__", `__progress__${bookId}`]);
+        }
+        resolve();
+      };
+      req.onerror = () => reject(req.error);
+    });
   });
 }
 

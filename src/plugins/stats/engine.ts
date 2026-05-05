@@ -208,5 +208,9 @@ export async function deleteStats(bookId: string): Promise<void> {
 
   const sessions = await getSessions();
   const filtered = sessions.filter((s) => s.bookId !== bookId);
-  await saveSessions(filtered);
+  if (filtered.length > 0) {
+    await saveSessions(filtered);
+  } else {
+    await useAdapter().delete(SESSIONS_KEY);
+  }
 }
