@@ -6,14 +6,14 @@ import {
   registeredModals,
   registeredOverlays,
   registeredFooterActions,
+  registeredFooterContents,
   registeredBookshelfWidgets,
   registeredContentTransformers,
   dynamicCapabilities,
   type TrackedContext,
 } from "./context";
-import type { ContentTransformer } from "./types";
+import type { ContentTransformer, SearchApi } from "./types";
 import type { BookParser } from "../core/types";
-import type { SearchApi } from "../core/search-api";
 
 // ── Internal state ──
 
@@ -292,6 +292,10 @@ export function getOverlayComponents(): Record<string, Component> {
 
 export function getFooterActions(): FooterAction[] {
   return [...registeredFooterActions.value];
+}
+
+export function getFooterContents(): Component[] {
+  return [...registeredFooterContents.value];
 }
 
 export function getBookshelfWidgets(): Component[] {

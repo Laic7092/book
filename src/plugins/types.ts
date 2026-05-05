@@ -1,8 +1,24 @@
 import type { Component, App } from "vue";
 import type { Pinia } from "pinia";
-import type { BookParser, ReaderSettings } from "../core/types";
-import type { SearchApi } from "../core/search-api";
+import type { BookParser, ReaderSettings, SearchResult } from "../core/types";
 import type { ReaderHost } from "../core/reader-host";
+
+// ── Search API (defined here so core doesn't need to know about search) ──
+
+export interface SearchApi {
+  searchQuery: string;
+  searchResults: SearchResult[];
+  hasHighlights: boolean;
+  currentResultIndex: number;
+  hasJumpState: boolean;
+  doSearch: () => Promise<void>;
+  clearHighlights: () => Promise<void>;
+  goToNextMatch: () => number | undefined;
+  goToPreviousMatch: () => number | undefined;
+  navigateToResult: (result: SearchResult) => Promise<void>;
+  goBackFromResult: () => Promise<void>;
+  reset: () => void;
+}
 
 /** Map of event names to their payload types. */
 export interface PluginEventMap {
@@ -54,6 +70,7 @@ export interface UISlots {
   registerModal(name: string, component: Component): void;
   registerOverlay(name: string, component: Component): void;
   registerFooterAction(action: FooterAction): void;
+  registerFooterContent(component: Component): void;
   /** Register a widget rendered in the bookshelf (e.g. stats bar). */
   registerBookshelfWidget(component: Component): void;
 }

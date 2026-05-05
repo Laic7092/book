@@ -85,6 +85,7 @@ export function createPluginStorageAdapter(pluginId: string): PluginStorageAdapt
 export const registeredModals = shallowRef<Record<string, Component>>({});
 export const registeredOverlays = shallowRef<Record<string, Component>>({});
 export const registeredFooterActions = shallowRef<FooterAction[]>([]);
+export const registeredFooterContents = shallowRef<Component[]>([]);
 export const registeredBookshelfWidgets = shallowRef<Component[]>([]);
 export const registeredContentTransformers = shallowRef<ContentTransformer[]>([]);
 
@@ -106,6 +107,9 @@ export function createUISlots(): UISlots {
       const actions = [...registeredFooterActions.value, action];
       actions.sort((a, b) => a.order - b.order);
       registeredFooterActions.value = actions;
+    },
+    registerFooterContent(component: Component) {
+      registeredFooterContents.value = [...registeredFooterContents.value, component];
     },
     registerBookshelfWidget(component: Component) {
       registeredBookshelfWidgets.value = [...registeredBookshelfWidgets.value, component];
@@ -226,6 +230,14 @@ export function createTrackedContext(id: string, bootstrap: PluginBootstrap): Tr
       cleanupFns.push(() => {
         registeredFooterActions.value = registeredFooterActions.value.filter(
           (a) => a.id !== action.id,
+        );
+      });
+    },
+    registerFooterContent(component) {
+      rawUi.registerFooterContent(component);
+      cleanupFns.push(() => {
+        registeredFooterContents.value = registeredFooterContents.value.filter(
+          (c) => c !== component,
         );
       });
     },

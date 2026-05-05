@@ -1,5 +1,5 @@
 import type { ComputedRef } from "vue";
-import type { Chapter, SearchResult, ReaderSettings } from "./types";
+import type { Chapter, ReaderSettings } from "./types";
 
 /**
  * Host API that ReaderView exposes to plugins.
@@ -13,7 +13,6 @@ export interface ReaderHost {
   // ── Navigation ──
   navigateToChapter(chapterId: string, targetPage?: number): Promise<void>;
   navigateToCfi(cfi: string, chapterId: string): Promise<void>;
-  navigateToSearchResult(result: SearchResult): Promise<void>;
 
   // ── State queries ──
   getCurrentChapter(): Chapter | null;
@@ -33,6 +32,8 @@ export interface ReaderHost {
   // ── Pagination state (for plugins that compute CFI) ──
   getCurrentPage(): number;
   getTotalPages(): number;
+  /** Jump to a page within the current chapter (pagination mode only). */
+  goToPage(page: number): void;
   getCurrentChapterRawHtml(): string;
 
   // ── Content pipeline ──

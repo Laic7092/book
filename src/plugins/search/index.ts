@@ -1,11 +1,13 @@
 import { computed, reactive } from "vue";
 import SearchPanel from "./SearchPanel.vue";
+import SearchFooterContent from "./SearchFooterContent.vue";
+import SearchGoBackOverlay from "./SearchGoBackOverlay.vue";
 import { useReaderSearch } from "./useReaderSearch";
 import { useReaderStore } from "../../stores/reader";
 import { useSettingsStore } from "../../stores/settings";
 import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
-import type { SearchApi } from "../../core/search-api";
+import type { SearchApi } from "../types";
 
 export const searchPlugin: Plugin = {
   [PLUGIN_BRAND]: true as const,
@@ -30,6 +32,8 @@ export const searchPlugin: Plugin = {
     });
 
     ctx.ui.registerModal("search", SearchPanel);
+    ctx.ui.registerFooterContent(SearchFooterContent);
+    ctx.ui.registerOverlay("search-go-back", SearchGoBackOverlay);
     ctx.ui.registerFooterAction({
       id: "search",
       position: "menu",

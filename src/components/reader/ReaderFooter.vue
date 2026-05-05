@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, nextTick } from "vue";
-import { getFooterActions, pluginStateVersion, getSearchApis } from "../../plugins/registry";
+import { getFooterActions, pluginStateVersion, getFooterContents } from "../../plugins/registry";
 
 defineProps<{
   showControls: boolean;
@@ -22,8 +22,6 @@ const emit = defineEmits<{
   (e: "open-modal", modal: string): void;
 }>();
 
-const api = computed(() => getSearchApis()[0] ?? null);
-
 const showMenu = ref(false);
 
 const barActions = computed(() => {
@@ -35,6 +33,10 @@ const menuActions = computed(() => {
   return getFooterActions().filter((a) => a.position === "menu");
 });
 const hasMenuActions = computed(() => menuActions.value.length > 0);
+const footerContents = computed(() => {
+  void pluginStateVersion.value;
+  return getFooterContents();
+});
 
 function toggleMenu() {
   showMenu.value = !showMenu.value;
@@ -48,22 +50,6 @@ async function openModal(modal: string) {
   closeMenu();
   await nextTick();
   emit("open-modal", modal);
-}
-
-function handlePrevMatch() {
-  const s = getSearchApis()[0];
-  const idx = s?.goToPreviousMatch();
-  if (idx !== undefined && s?.searchResults) {
-    s.navigateToResult(s.searchResults[idx]);
-  }
-}
-
-function handleNextMatch() {
-  const s = getSearchApis()[0];
-  const idx = s?.goToNextMatch();
-  if (idx !== undefined && s?.searchResults) {
-    s.navigateToResult(s.searchResults[idx]);
-  }
 }
 </script>
 
@@ -92,155 +78,103 @@ function handleNextMatch() {
       </div>
     </Transition>
 
-    <!-- Search Mode -->
-    <Transition name="slide-fade" mode="out-in">
-      <div
-        v-if="api?.hasHighlights && api?.searchResults.length"
-        key="search"
-        class="footer-sections"
-      >
-        <div class="actions-section">
-          <button class="footer-btn" @click.stop="api?.clearHighlights()" aria-label="Exit search">
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        <div class="center-section">
-          <span class="search-counter"
-            >{{ (api?.currentResultIndex ?? -1) + 1 }} / {{ api?.searchResults.length ?? 0 }}</span
+    <!-- Plugin footer content (e.g. search match nav) -->
+    <component v-for="(comp, i) in footerContents" :key="i" :is="comp" />
+
+    <!-- Normal Mode -->
+    <div class="footer-sections">
+      <div class="actions-section">
+        <!-- Plugin bar actions (e.g. bookmarks) -->
+        <button
+          v-for="a in barActions"
+          :key="a.id"
+          class="footer-btn"
+          @click.stop="openModal(a.modal!)"
+          :aria-label="a.label"
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            v-html="a.icon"
+          />
+        </button>
+        <!-- Overflow menu toggle -->
+        <button
+          v-if="hasMenuActions"
+          class="footer-btn"
+          :class="{ active: showMenu }"
+          @click.stop="toggleMenu"
+          aria-label="More options"
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
           >
-        </div>
-        <div class="nav-section">
-          <button class="footer-btn" @click.stop="handlePrevMatch()" aria-label="Previous match">
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path d="M15 18l-6-6 6-6" />
-            </svg>
-          </button>
-          <button class="footer-btn" @click.stop="handleNextMatch()" aria-label="Next match">
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path d="M9 18l6-6-6-6" />
-            </svg>
-          </button>
-        </div>
+            <circle cx="12" cy="5" r="1" fill="currentColor" />
+            <circle cx="12" cy="12" r="1" fill="currentColor" />
+            <circle cx="12" cy="19" r="1" fill="currentColor" />
+          </svg>
+        </button>
       </div>
 
-      <!-- Normal Mode -->
-      <div v-else key="normal" class="footer-sections">
-        <div class="actions-section">
-          <!-- Plugin bar actions (e.g. bookmarks) -->
-          <button
-            v-for="a in barActions"
-            :key="a.id"
-            class="footer-btn"
-            @click.stop="openModal(a.modal!)"
-            :aria-label="a.label"
+      <div class="center-section">
+        <button
+          class="progress-btn"
+          @click.stop="emit('open-modal', 'toc')"
+          aria-label="Table of contents"
+        >
+          <span class="progress-text"
+            >{{ isNaN(bookProgress) ? 0 : Math.round(bookProgress) }}%</span
           >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-              v-html="a.icon"
-            />
-          </button>
-          <!-- Overflow menu toggle -->
-          <button
-            v-if="hasMenuActions"
-            class="footer-btn"
-            :class="{ active: showMenu }"
-            @click.stop="toggleMenu"
-            aria-label="More options"
-          >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-            >
-              <circle cx="12" cy="5" r="1" fill="currentColor" />
-              <circle cx="12" cy="12" r="1" fill="currentColor" />
-              <circle cx="12" cy="19" r="1" fill="currentColor" />
-            </svg>
-          </button>
-        </div>
-
-        <div class="center-section">
-          <button
-            class="progress-btn"
-            @click.stop="emit('open-modal', 'toc')"
-            aria-label="Table of contents"
-          >
-            <span class="progress-text"
-              >{{ isNaN(bookProgress) ? 0 : Math.round(bookProgress) }}%</span
-            >
-            <span class="chapter-text">{{ currentChapterTitle || "Chapter 1" }}</span>
-          </button>
-        </div>
-
-        <div class="nav-section">
-          <button
-            class="footer-btn"
-            @click.stop="emit('prev-chapter')"
-            :disabled="!canPrev"
-            :aria-label="'Previous chapter'"
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path d="M15 18l-6-6 6-6" />
-            </svg>
-          </button>
-          <button
-            class="footer-btn"
-            @click.stop="emit('next-chapter')"
-            :disabled="!canNext"
-            :aria-label="'Next chapter'"
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path d="M9 18l6-6-6-6" />
-            </svg>
-          </button>
-        </div>
+          <span class="chapter-text">{{ currentChapterTitle || "Chapter 1" }}</span>
+        </button>
       </div>
-    </Transition>
+
+      <div class="nav-section">
+        <button
+          class="footer-btn"
+          @click.stop="emit('prev-chapter')"
+          :disabled="!canPrev"
+          :aria-label="'Previous chapter'"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+        </button>
+        <button
+          class="footer-btn"
+          @click.stop="emit('next-chapter')"
+          :disabled="!canNext"
+          :aria-label="'Next chapter'"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M9 18l6-6-6-6" />
+          </svg>
+        </button>
+      </div>
+    </div>
   </footer>
 </template>
 

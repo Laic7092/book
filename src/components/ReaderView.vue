@@ -28,7 +28,6 @@ import { SWIPE_THRESHOLD, TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../config/consta
 import { registerReaderHost, unregisterReaderHost } from "../core/reader-host";
 import type { ReaderHost } from "../core/reader-host";
 import {
-  getSearchApis,
   getOverlayComponents,
   pluginStateVersion,
   applyContentTransformers,
@@ -56,11 +55,6 @@ const isRestoring = ref(false);
 const currentChapterResources = ref<HTMLElement[]>([]);
 
 // Overlay components from enabled plugins
-const searchApi = computed(() => {
-  void pluginStateVersion.value;
-  return getSearchApis()[0] ?? null;
-});
-
 const overlayComponents = computed(() => {
   void pluginStateVersion.value;
   return getOverlayComponents();
@@ -262,10 +256,6 @@ const host: ReaderHost = {
   async navigateToCfi(cfi: string, chapterId: string) {
     await navigateToCfiLocation(cfi, chapterId);
   },
-  async navigateToSearchResult(result: SearchResult) {
-    const api = getSearchApis()[0];
-    if (api) await api.navigateToResult(result);
-  },
   getCurrentChapter() {
     return readerStore.currentChapter ?? null;
   },
@@ -296,6 +286,9 @@ const host: ReaderHost = {
   },
   getTotalPages() {
     return pagination.totalPages.value;
+  },
+  goToPage(page: number) {
+    pagination.goToPage(page);
   },
   getCurrentChapterRawHtml() {
     return pagination.rawHtml.value;
@@ -963,30 +956,7 @@ onUnmounted(() => {
       :show="uiStore.showControls && isPaginationMode && pagination.isReady.value"
     />
 
-    <!-- Search go-back button -->
-    <Transition name="fade">
-      <button
-        v-if="searchApi?.hasJumpState"
-        class="search-back-btn"
-        @click.stop="searchApi?.goBackFromResult()"
-        aria-label="Go back to previous position"
-      >
-        <svg
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <path d="M19 12H5M12 19l-7-7 7-7" />
-        </svg>
-      </button>
-    </Transition>
-
-    <!-- Plugin overlay components (e.g. annotation toolbar + popover) -->
+    <!-- Plugin overlay components (e.g. annotation toolbar + popover, search go-back) -->
     <component v-for="(comp, name) in overlayComponents" :key="name" :is="comp" />
 
     <ModalWrapper
@@ -1029,38 +999,6 @@ onUnmounted(() => {
 
 .reader-view::-webkit-scrollbar-thumb:hover {
   background: color-mix(in srgb, var(--border) 70%, var(--reader-text));
-}
-
-.search-back-btn {
-  position: fixed;
-  bottom: calc(80px + env(safe-area-inset-bottom, 20px));
-  left: max(16px, env(safe-area-inset-left, 0));
-  z-index: 102;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-  background: var(--bg-elevated, #fff);
-  color: var(--reader-text);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
-  transition:
-    opacity 200ms ease,
-    transform 150ms ease;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.search-back-btn:hover {
-  background: var(--hover-bg);
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.search-back-btn:active {
-  transform: scale(0.92);
 }
 
 .reader-view-container {

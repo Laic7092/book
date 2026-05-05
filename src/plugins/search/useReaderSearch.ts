@@ -202,6 +202,18 @@ export function useReaderSearch(options: UseReaderSearchOptions) {
 
   // ── Result navigation ──
 
+  function findPageFromMark(host: ReaderHost, mark: Element): number {
+    const doc = host.getDocument();
+    if (!doc) return 0;
+    const bodyRect = doc.body.getBoundingClientRect();
+    const markRect = mark.getBoundingClientRect();
+    const offset = markRect.left - bodyRect.left;
+    const total = host.getTotalPages();
+    const scrollWidth = doc.documentElement.scrollWidth;
+    const step = total > 0 ? scrollWidth / total : 0;
+    return step > 0 ? Math.max(0, Math.min(total - 1, Math.floor(offset / step))) : 0;
+  }
+
   async function navigateToResult(result: SearchResult) {
     const host = readerHost();
     if (!host || !result) return;
@@ -250,7 +262,11 @@ export function useReaderSearch(options: UseReaderSearchOptions) {
     await new Promise((r) => setTimeout(r, 50));
     const mark = container.querySelector("mark");
     if (mark) {
-      mark.scrollIntoView({ behavior: "smooth", block: "center", inline: "start" });
+      if (host.isPaginationMode.value) {
+        host.goToPage(findPageFromMark(host, mark));
+      } else {
+        mark.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
     }
 
     hasHighlights.value = true;
@@ -268,15 +284,7 @@ export function useReaderSearch(options: UseReaderSearchOptions) {
     if (previousChapterId !== host.getCurrentChapter()?.id) {
       await host.navigateToChapter(previousChapterId, previousPage);
     } else if (host.isPaginationMode.value) {
-      const doc = host.getDocument();
-      if (doc) {
-        const total = host.getTotalPages();
-        const step = total > 0 ? doc.documentElement.scrollWidth / total : 0;
-        const scrollEl = doc.querySelector("html") || doc.documentElement;
-        if (scrollEl && step > 0) {
-          scrollEl.scrollLeft = previousPage * step;
-        }
-      }
+      host.goToPage(previousPage);
     }
   }
 
