@@ -12,13 +12,7 @@ import { useReaderStore } from "../stores/reader";
 import { useUIStore } from "../stores/ui";
 import { useSettingsStore } from "../stores/settings";
 import { usePagination, useChapterLoader, useNavigationStack } from "../composables";
-import {
-  ReaderHeader,
-  ReaderFooter,
-  ReaderContent,
-  ProgressBar,
-  PageIndicator,
-} from "../components/reader";
+import { ReaderHeader, ReaderFooter, ReaderContent } from "../components/reader";
 import { ModalWrapper } from "../components/modals";
 import type { SearchResult, Chapter, Book } from "../core/types";
 import { navigateToCfi, resolveCfi, getSpineIndex } from "../utils/epub-cfi";
@@ -905,8 +899,6 @@ onUnmounted(() => {
       @open-settings="openModal('settings')"
     />
 
-    <ProgressBar :progress="chapterProgress" />
-
     <ReaderContent
       ref="readerContentRef"
       :content="displayContent"
@@ -937,12 +929,6 @@ onUnmounted(() => {
       @prev-chapter="handleSelectChapter(readerStore.chapters[currentChapterIndex - 1]?.id)"
       @next-chapter="handleSelectChapter(readerStore.chapters[currentChapterIndex + 1]?.id)"
       @open-modal="openModal"
-    />
-
-    <PageIndicator
-      :current-page="pagination.currentPage.value"
-      :total-pages="pagination.totalPages.value"
-      :show="uiStore.showControls && isPaginationMode && pagination.isReady.value"
     />
 
     <!-- Navigation history back/forward -->

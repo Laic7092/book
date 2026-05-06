@@ -1,7 +1,16 @@
 <script setup lang="ts">
-defineProps<{
-  progress: number;
-}>();
+import { computed } from "vue";
+import { getReaderHost } from "./index";
+const host = getReaderHost();
+
+const currentPage = computed(() => host?.getCurrentPage() || 0);
+const totalPages = computed(() => host?.getTotalPages() || 0);
+
+const progress = computed(() => {
+  const total = totalPages.value;
+  if (total <= 1) return 100;
+  return ((currentPage.value + 1) / total) * 100;
+});
 </script>
 
 <template>
