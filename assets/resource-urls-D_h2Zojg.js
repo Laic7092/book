@@ -1,1 +1,0 @@
-import{t as e}from"./resource-urls-DD4ErzGz.js";export{e as rewriteResourcePaths};

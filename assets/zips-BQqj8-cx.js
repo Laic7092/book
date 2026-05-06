@@ -1,1 +1,0 @@
-import{c as e,r as t,t as n}from"./db-BIEHBa4n.js";async function r(t,r,i){await e(n.ZIPS,{bookId:t,data:r,fileSize:i})}async function i(e){return(await t(n.ZIPS,e))?.data}export{r as n,i as t};
