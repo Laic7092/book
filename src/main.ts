@@ -13,6 +13,6 @@ const pinia = createPinia();
 app.use(pinia);
 
 setBootstrap({ app, pinia });
-await loadPluginsFor("app");
-
-app.mount("#app");
+void loadPluginsFor("app").finally(() => {
+  app.mount("#app");
+});
