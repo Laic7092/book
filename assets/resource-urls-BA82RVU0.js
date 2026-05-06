@@ -1,1 +1,0 @@
-import{t as e}from"./resource-urls-BrhLiG09.js";export{e as rewriteResourcePaths};
