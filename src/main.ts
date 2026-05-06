@@ -6,10 +6,13 @@ import App from "./App.vue";
 import "./styles/index.css";
 
 import { setBootstrap } from "./plugins/registry";
+import { loadPluginsFor } from "./plugins/loader";
 
 const app = createApp(App);
 const pinia = createPinia();
 app.use(pinia);
 
 setBootstrap({ app, pinia });
+await loadPluginsFor("app");
+
 app.mount("#app");

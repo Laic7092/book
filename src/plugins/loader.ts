@@ -14,12 +14,12 @@ function isPlugin(obj: unknown): obj is Plugin {
 }
 
 // Compile-time extraction from zero-dependency meta files
-const metas = import.meta.glob<{ loadOn: string }>("./*/meta.ts", { eager: true });
+const metas = import.meta.glob<{ loadOn: Scene }>("./*/meta.ts", { eager: true });
 
 // True lazy loaders — only called when a scene is triggered
 const pluginLoaders = import.meta.glob<Record<string, unknown>>("./*/index.ts");
 
-type Scene = string;
+type Scene = "app" | "book-import" | "bookshelf" | "reader";
 
 const sceneMap = new Map<Scene, Array<() => Promise<void>>>();
 const loaded = new Set<Scene>();

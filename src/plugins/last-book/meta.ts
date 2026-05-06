@@ -1,1 +1,1 @@
-export const loadOn = "bookshelf" as const;
+export const loadOn = "app" as const;
