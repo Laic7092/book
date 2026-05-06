@@ -6,6 +6,8 @@ import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
 import type { SearchApi } from "../types";
 
+export const loadOn = "reader" as const;
+
 export const searchPlugin: Plugin = {
   [PLUGIN_BRAND]: true as const,
   id: "search",

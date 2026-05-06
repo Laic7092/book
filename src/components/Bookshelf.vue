@@ -8,6 +8,7 @@ import { validateBookFile } from "../utils/validation";
 import type { Book } from "../core/types";
 import { ModalWrapper } from "./modals";
 import { getBookshelfWidgets, pluginStateVersion } from "../plugins/registry";
+import { loadPluginsFor } from "../plugins/loader";
 import { navigate } from "../router";
 
 const emit = defineEmits<{
@@ -156,6 +157,7 @@ const bookInitials = computed(() => {
 
 onMounted(() => {
   bookshelfStore.loadBooks();
+  loadPluginsFor("bookshelf");
 });
 </script>
 

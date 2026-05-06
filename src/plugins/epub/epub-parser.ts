@@ -1,8 +1,13 @@
 // EPUB file parser implementation using @zip.js/zip.js for streaming extraction
 
-import { ZipReader, TextWriter, Uint8ArrayReader } from "@zip.js/zip.js";
-import type { Entry, FileEntry } from "@zip.js/zip.js";
+import type { Entry, FileEntry, ZipReader } from "@zip.js/zip.js";
 import { BaseBookParser, generateId, parseXML, cleanHtml } from "../../core/base";
+
+let _zipModule: typeof import("@zip.js/zip.js") | null = null;
+async function getZipModule() {
+  if (!_zipModule) _zipModule = await import("@zip.js/zip.js");
+  return _zipModule;
+}
 import type { BookParser, ParsedBook, Chapter } from "../../core/types";
 import { ErrorCode, createReaderError } from "../../core/errors";
 
@@ -117,7 +122,8 @@ export class EpubParser extends BaseBookParser implements BookParser {
    */
   async parse(file: File): Promise<ParsedBook> {
     const arrayBuffer = await this.readAsArrayBuffer(file);
-    const zipReader = new ZipReader(new Uint8ArrayReader(new Uint8Array(arrayBuffer)));
+    const { ZipReader: ZR, Uint8ArrayReader: UAR } = await getZipModule();
+    const zipReader = new ZR(new UAR(new Uint8Array(arrayBuffer)));
 
     try {
       const entries = await zipReader.getEntries();
@@ -242,7 +248,8 @@ export class EpubParser extends BaseBookParser implements BookParser {
    * Used by the storage layer for lazy extraction.
    */
   static async extractChapterContent(rawData: ArrayBuffer, chapterHref: string): Promise<string> {
-    const zipReader = new ZipReader(new Uint8ArrayReader(new Uint8Array(rawData)));
+    const { ZipReader: ZR, Uint8ArrayReader: UAR, TextWriter: TW } = await getZipModule();
+    const zipReader = new ZR(new UAR(new Uint8Array(rawData)));
     try {
       const entries = await zipReader.getEntries();
       const pathMap = EpubParser.buildEntryMap(entries);
@@ -255,7 +262,7 @@ export class EpubParser extends BaseBookParser implements BookParser {
         );
       }
 
-      const html = await entry.getData(new TextWriter());
+      const html = await entry.getData(new TW());
       return cleanHtml(html);
     } finally {
       await zipReader.close();
@@ -267,7 +274,8 @@ export class EpubParser extends BaseBookParser implements BookParser {
    * Used by the storage layer for lazy resource extraction.
    */
   static async extractResource(rawData: ArrayBuffer, resourceHref: string): Promise<ArrayBuffer> {
-    const zipReader = new ZipReader(new Uint8ArrayReader(new Uint8Array(rawData)));
+    const { ZipReader: ZR, Uint8ArrayReader: UAR } = await getZipModule();
+    const zipReader = new ZR(new UAR(new Uint8Array(rawData)));
     try {
       const entries = await zipReader.getEntries();
       const pathMap = EpubParser.buildEntryMap(entries);
@@ -290,7 +298,8 @@ export class EpubParser extends BaseBookParser implements BookParser {
     try {
       const entry = EpubParser.findEntry(ctx.pathMap, path);
       if (!entry) return null;
-      return await entry.getData(new TextWriter());
+      const { TextWriter: TW } = await getZipModule();
+      return await entry.getData(new TW());
     } catch {
       return null;
     }

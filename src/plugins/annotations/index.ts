@@ -4,6 +4,8 @@ import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
 import { useAnnotationsStore, setAnnotationsAdapter, setReaderHost } from "./store";
 
+export const loadOn = "reader" as const;
+
 let store: ReturnType<typeof useAnnotationsStore> | null = null;
 
 export const annotationsPlugin: Plugin = {

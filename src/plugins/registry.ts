@@ -25,7 +25,6 @@ interface ManagedPlugin {
 
 const managedPlugins = new Map<string, ManagedPlugin>();
 const pluginContexts = new Map<string, TrackedContext>();
-let storedBootstrap: PluginBootstrap | null = null;
 
 /** Incremented every time plugin state changes; used by UI computeds to track reactivity */
 export const pluginStateVersion = ref(0);
@@ -118,19 +117,34 @@ export function registerPlugin(p: Plugin): void {
 
 // ── Initialization ──
 
-export async function initializePlugins(bootstrap: PluginBootstrap): Promise<void> {
+let storedBootstrap: PluginBootstrap | null = null;
+
+export function setBootstrap(bootstrap: PluginBootstrap): void {
   storedBootstrap = bootstrap;
+}
+
+export async function initializePlugins(bootstrap?: PluginBootstrap): Promise<void> {
+  if (bootstrap) storedBootstrap = bootstrap;
+  const bs = storedBootstrap ?? bootstrap;
+  if (!bs) {
+    console.warn("[Plugins] Cannot initialize: bootstrap not available");
+    return;
+  }
 
   const { sorted, errors } = resolveDepGraph();
   for (const err of errors) {
     console.warn(`[Plugins] ${err}`);
   }
 
-  // Reset dynamic capabilities
-  dynamicCapabilities.parsers.length = 0;
-  dynamicCapabilities.searchApis.length = 0;
+  // Reset dynamic capabilities only on first initialization
+  const isFirstInit = pluginContexts.size === 0;
+  if (isFirstInit) {
+    dynamicCapabilities.parsers.length = 0;
+    dynamicCapabilities.searchApis.length = 0;
+  }
 
   for (const id of sorted) {
+    if (pluginContexts.has(id)) continue; // already initialized
     const mp = managedPlugins.get(id);
     if (!mp) continue;
     if (!mp.enabled || !mp.plugin.setup) continue;
@@ -146,7 +160,7 @@ export async function initializePlugins(bootstrap: PluginBootstrap): Promise<voi
       continue;
     }
 
-    await setupPluginInternal(id, bootstrap);
+    await setupPluginInternal(id, bs);
   }
 
   bump();

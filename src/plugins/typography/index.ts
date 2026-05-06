@@ -9,6 +9,8 @@ export function getTypographyReaderHost(): ReaderHost | null {
   return _readerHost?.() ?? null;
 }
 
+export const loadOn = "reader" as const;
+
 export const typographyPlugin: Plugin = {
   [PLUGIN_BRAND]: true as const,
   id: "typography",

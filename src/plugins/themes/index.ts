@@ -9,6 +9,8 @@ export function getThemesReaderHost(): ReaderHost | null {
   return _readerHost?.() ?? null;
 }
 
+export const loadOn = "reader" as const;
+
 export const themesPlugin: Plugin = {
   [PLUGIN_BRAND]: true as const,
   id: "themes",

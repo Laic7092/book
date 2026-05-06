@@ -1,6 +1,8 @@
 import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
 
+export const loadOn = "reader" as const;
+
 interface ProgressData {
   chapterId: string;
   chapterProgress: number;

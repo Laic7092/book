@@ -4,6 +4,7 @@ import { defineStore } from "pinia";
 import type { Book, Chapter, ParsedBook, BookParser } from "../core/types";
 import { ErrorCode, createReaderError } from "../core/errors";
 import { getParsers, getParserForFormat } from "../plugins/registry";
+import { loadPluginsFor } from "../plugins/loader";
 import { pluginEvents } from "../plugins/context";
 import * as booksStore from "../storage/books";
 import { assertValidBookFile, validateBookId } from "../utils/validation";
@@ -65,6 +66,7 @@ export const useReaderStore = defineStore("reader", {
       this.error = null;
 
       try {
+        await loadPluginsFor("book-import");
         const parser = getParserForFile(file);
         if (!parser) {
           throw createReaderError(
@@ -101,6 +103,7 @@ export const useReaderStore = defineStore("reader", {
           throw createReaderError("Book not found", ErrorCode.BOOK_NOT_FOUND);
         }
 
+        await loadPluginsFor("book-import");
         const parser = getParserForFormat(book.format);
         const chaptersData = await booksStore.getChapters(bookId);
 
@@ -122,7 +125,8 @@ export const useReaderStore = defineStore("reader", {
 
         this.currentBook = book;
 
-        // Plugins listen to this event (stats, bookmarks, annotations)
+        // Load reader plugins then emit so they can react
+        await loadPluginsFor("reader");
         void pluginEvents.emit("book:opened", { bookId });
 
         return { book, chapters };

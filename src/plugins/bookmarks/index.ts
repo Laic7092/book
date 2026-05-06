@@ -3,6 +3,8 @@ import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
 import { useBookmarksStore, setBookmarksAdapter, setReaderHost } from "./store";
 
+export const loadOn = "reader" as const;
+
 let store: ReturnType<typeof useBookmarksStore> | null = null;
 
 export const bookmarksPlugin: Plugin = {

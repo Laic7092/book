@@ -1,6 +1,5 @@
 // TXT file parser - robust chapter detection with fallback strategies
 
-import chardet from "chardet";
 import { BaseBookParser, generateId } from "../../core/base";
 import type { BookParser, ParsedBook, Chapter } from "../../core/types";
 import {
@@ -156,6 +155,7 @@ export class TxtParser extends BaseBookParser implements BookParser {
     const bytes = new Uint8Array(buffer);
 
     // Use chardet for encoding detection (increased sample size to 4KB for accuracy)
+    const { default: chardet } = await import("chardet");
     const detected = chardet.detect(bytes.slice(0, 4096));
     const encoding = this.sanitizeEncoding(detected);
 

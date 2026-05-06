@@ -6,6 +6,8 @@ import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
 import { setStatsAdapter, setReaderHost } from "./engine";
 
+export const loadOn = "reader" as const;
+
 export const statsPlugin: Plugin = {
   [PLUGIN_BRAND]: true as const,
   id: "stats",

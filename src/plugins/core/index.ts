@@ -2,6 +2,8 @@ import PluginsPanel from "./PluginsPanel.vue";
 import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
 
+export const loadOn = "reader" as const;
+
 export const corePlugin: Plugin = {
   [PLUGIN_BRAND]: true as const,
   id: "core",

@@ -1,20 +1,17 @@
 <script setup lang="ts">
-import { computed, watch } from "vue";
+import { computed, watch, defineAsyncComponent } from "vue";
 import Bookshelf from "./components/Bookshelf.vue";
-import ReaderView from "./components/ReaderView.vue";
 import { useReaderStore } from "./stores/reader";
 import { useUIStore } from "./stores/ui";
 import { useSettingsStore } from "./stores/settings";
 import { currentRoute, navigate } from "./router";
 
+const ReaderView = defineAsyncComponent(() => import("./components/ReaderView.vue"));
+
 const readerStore = useReaderStore();
 const uiStore = useUIStore();
 const settingsStore = useSettingsStore();
 settingsStore.init();
-
-const showReader = computed(
-  () => currentRoute.name === "reader" && readerStore.currentBook !== null,
-);
 
 watch(
   () => ({ name: currentRoute.name, bookId: currentRoute.params.bookId }),
@@ -42,8 +39,11 @@ watch(
 
 <template>
   <Transition name="page">
-    <Bookshelf v-if="!showReader" key="bookshelf" />
-    <ReaderView v-else key="reader" :book="readerStore.currentBook!" />
+    <Bookshelf v-if="currentRoute.name !== 'reader'" key="bookshelf" />
+    <template v-else key="reader">
+      <ReaderView v-if="readerStore.currentBook" :book="readerStore.currentBook" />
+      <div v-else class="reader-loading" />
+    </template>
   </Transition>
 </template>
 
@@ -170,6 +170,11 @@ body.theme-sepia {
 ::selection {
   background-color: var(--color-accent-muted);
   color: var(--text-primary);
+}
+
+.reader-loading {
+  height: 100%;
+  background: var(--reader-bg, var(--bg-primary));
 }
 
 .app.transitioning {
