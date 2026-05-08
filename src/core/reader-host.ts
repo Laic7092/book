@@ -35,6 +35,8 @@ export interface ReaderHost {
   getTotalPages(): number;
   /** Jump to a page within the current chapter (pagination mode only). */
   goToPage(page: number): void;
+  /** Go to next page, or next chapter if at end of current chapter. Returns true if moved, false if at end of book. */
+  nextPage(): Promise<boolean>;
   /** Push a position to the navigation history stack. Call after non-linear navigation. */
   pushToHistory(chapterId: string, page: number): void;
   getCurrentChapterRawHtml(): string;

@@ -231,6 +231,10 @@ const host: ReaderHost = {
   goToPage(page: number) {
     pagination.goToPage(page);
   },
+  async nextPage() {
+    await nextPage();
+    return true;
+  },
   pushToHistory(chapterId: string, page: number) {
     navStack.push({ chapterId, page });
   },
