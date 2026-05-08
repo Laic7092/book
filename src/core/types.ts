@@ -9,6 +9,14 @@ export interface Book {
   fileSize: number;
   addedAt: number;
   lastReadAt?: number;
+  folderId?: string;
+}
+
+export interface Folder {
+  id: string;
+  name: string;
+  createdAt: number;
+  order: number;
 }
 
 export interface Chapter {

@@ -8,6 +8,7 @@ export const ErrorCode = {
   NO_BOOK_LOADED: "NO_BOOK_LOADED",
   BOOKMARK_NOT_FOUND: "BOOKMARK_NOT_FOUND",
   INVALID_FILE: "INVALID_FILE",
+  FOLDER_NOT_FOUND: "FOLDER_NOT_FOUND",
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];

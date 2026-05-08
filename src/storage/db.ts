@@ -1,7 +1,7 @@
 // IndexedDB wrapper with Promise-based API
 
 const DB_NAME = "reader-db";
-const DB_VERSION = 9;
+const DB_VERSION = 10;
 
 export const STORES = {
   BOOKS: "books",
@@ -11,6 +11,8 @@ export const STORES = {
   ZIPS: "zips",
   /** v9: isolated per-plugin key-value storage. Compound key: [pluginId, key]. */
   PLUGIN_STORE: "plugin_store",
+  /** v10: folder grouping for books */
+  FOLDERS: "folders",
 } as const;
 
 export type StoreName = (typeof STORES)[keyof typeof STORES];
@@ -98,6 +100,12 @@ export async function openDB(): Promise<IDBDatabase> {
         });
         ps.createIndex("pluginId", "pluginId", { unique: false });
         ps.createIndex("createdAt", "createdAt", { unique: false });
+      }
+
+      // v10: Folder grouping for books
+      if (!db.objectStoreNames.contains(STORES.FOLDERS)) {
+        const f = db.createObjectStore(STORES.FOLDERS, { keyPath: "id" });
+        f.createIndex("order", "order");
       }
     };
   });

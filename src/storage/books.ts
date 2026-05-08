@@ -141,6 +141,20 @@ export async function updateLastRead(bookId: string): Promise<void> {
   }
 }
 
+/**
+ * Update partial fields on a book
+ */
+export async function updateBook(
+  bookId: string,
+  partial: Partial<Pick<Book, "title" | "author" | "folderId" | "coverUrl">>,
+): Promise<Book | undefined> {
+  const book = await getBook(bookId);
+  if (!book) return undefined;
+  Object.assign(book, partial);
+  await dbPut(STORES.BOOKS, book);
+  return book;
+}
+
 interface StoredChapter {
   bookId: string;
   chapterId: string;

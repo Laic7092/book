@@ -29,6 +29,111 @@ const bookshelfWidgets = computed(() => {
   void pluginStateVersion.value;
   return getBookshelfWidgets();
 });
+
+// ── Rename state ──
+const renamingBookId = ref<string | null>(null);
+const renameValue = ref("");
+
+function startRename(book: Book) {
+  renamingBookId.value = book.id;
+  renameValue.value = book.title;
+}
+
+function saveRename() {
+  const id = renamingBookId.value;
+  if (id) {
+    bookshelfStore.renameBook(id, renameValue.value);
+  }
+  cancelRename();
+}
+
+function cancelRename() {
+  renamingBookId.value = null;
+  renameValue.value = "";
+}
+
+// ── Folder dropdown state ──
+const folderDropdownBookId = ref<string | null>(null);
+const folderDropdownOpen = ref(false);
+
+function toggleFolderDropdown(bookId: string, e: MouseEvent) {
+  e.stopPropagation();
+  if (folderDropdownBookId.value === bookId && folderDropdownOpen.value) {
+    folderDropdownOpen.value = false;
+  } else {
+    folderDropdownBookId.value = bookId;
+    folderDropdownOpen.value = true;
+  }
+}
+
+function closeDropdown() {
+  folderDropdownOpen.value = false;
+  folderDropdownBookId.value = null;
+}
+
+function handleMoveToFolder(folderId: string | null) {
+  if (folderDropdownBookId.value) {
+    bookshelfStore.moveToFolder(folderDropdownBookId.value, folderId);
+  }
+  closeDropdown();
+}
+
+// ── Folder context menu state ──
+const folderCtxId = ref<string | null>(null);
+const folderCtxPos = ref({ x: 0, y: 0 });
+
+function onFolderContextMenu(folderId: string, e: MouseEvent) {
+  e.preventDefault();
+  e.stopPropagation();
+  folderCtxId.value = folderId;
+  folderCtxPos.value = { x: e.clientX, y: e.clientY };
+}
+
+function closeFolderCtx() {
+  folderCtxId.value = null;
+}
+
+function renameFolderCtx() {
+  const folder = bookshelfStore.folders.find((f) => f.id === folderCtxId.value);
+  if (folder) {
+    const name = prompt("Rename folder:", folder.name);
+    if (name && name.trim()) {
+      bookshelfStore.renameFolder(folder.id, name.trim());
+    }
+  }
+  closeFolderCtx();
+}
+
+function deleteFolderCtx() {
+  if (folderCtxId.value) {
+    bookshelfStore.deleteFolder(folderCtxId.value);
+  }
+  closeFolderCtx();
+}
+
+// ── New folder ──
+const showNewFolderInput = ref(false);
+const newFolderName = ref("");
+
+function createNewFolder() {
+  const name = newFolderName.value.trim();
+  if (name) {
+    bookshelfStore.createFolder(name);
+  }
+  showNewFolderInput.value = false;
+  newFolderName.value = "";
+}
+
+// ── Click outside handler for dropdowns ──
+function onDocumentClick() {
+  closeDropdown();
+  closeFolderCtx();
+  if (showNewFolderInput.value) {
+    createNewFolder();
+  }
+}
+
+// ── Existing code below ──
 const sortBy = ref<"recent" | "title-asc" | "title-desc" | "author-asc" | "added">("recent");
 const showMenu = ref(false);
 
@@ -157,7 +262,9 @@ const bookInitials = computed(() => {
 
 onMounted(() => {
   bookshelfStore.loadBooks();
+  bookshelfStore.loadFolders();
   loadPluginsFor("bookshelf");
+  document.addEventListener("click", onDocumentClick);
 });
 </script>
 
@@ -417,6 +524,59 @@ onMounted(() => {
       <component v-for="(comp, i) in bookshelfWidgets" :key="i" :is="comp" />
     </header>
 
+    <!-- Folder filter chips -->
+    <div class="folder-bar">
+      <button
+        class="folder-chip"
+        :class="{ active: !bookshelfStore.selectedFolderId }"
+        @click="bookshelfStore.setSelectedFolder(null)"
+      >
+        All
+      </button>
+      <button
+        v-for="folder in bookshelfStore.folders"
+        :key="folder.id"
+        class="folder-chip"
+        :class="{ active: bookshelfStore.selectedFolderId === folder.id }"
+        @click="bookshelfStore.setSelectedFolder(folder.id)"
+        @contextmenu="onFolderContextMenu(folder.id, $event)"
+      >
+        {{ folder.name }}
+      </button>
+      <div class="new-folder-wrap">
+        <button
+          v-if="!showNewFolderInput"
+          class="folder-chip new-folder-btn"
+          @click.stop="showNewFolderInput = true"
+          title="New folder"
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+          >
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+        </button>
+        <input
+          v-else
+          ref="newFolderInputEl"
+          v-model="newFolderName"
+          class="new-folder-input"
+          placeholder="Folder name"
+          @keydown.enter="createNewFolder"
+          @keydown.escape="
+            showNewFolderInput = false;
+            newFolderName = '';
+          "
+          @click.stop
+        />
+      </div>
+    </div>
+
     <!-- Content Area -->
     <div class="bookshelf-content">
       <!-- Loading State -->
@@ -518,7 +678,23 @@ onMounted(() => {
                   <span class="cover-format">{{ book.format.toUpperCase() }}</span>
                 </div>
                 <div class="book-info">
-                  <h3 class="book-title" :title="book.title">{{ book.title }}</h3>
+                  <h3
+                    v-if="renamingBookId !== book.id"
+                    class="book-title"
+                    :title="book.title"
+                    @click.stop="startRename(book)"
+                  >
+                    {{ book.title }}
+                  </h3>
+                  <input
+                    v-else
+                    v-model="renameValue"
+                    class="rename-input"
+                    @keydown.enter="saveRename"
+                    @keydown.escape="cancelRename"
+                    @blur="saveRename"
+                    @click.stop
+                  />
                   <p class="book-author" :class="{ unknown: !book.author }">
                     {{ book.author || "Unknown author" }}
                   </p>
@@ -529,6 +705,26 @@ onMounted(() => {
                     }}</span>
                   </div>
                 </div>
+                <button
+                  class="btn-folder"
+                  @click="toggleFolderDropdown(book.id, $event)"
+                  title="Move to folder"
+                  aria-label="Move to folder"
+                  tabindex="0"
+                >
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path
+                      d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2v11z"
+                    />
+                  </svg>
+                </button>
                 <button
                   class="btn-delete"
                   @click="confirmDelete(book.id, $event)"
@@ -579,15 +775,66 @@ onMounted(() => {
               <span class="cover-format">{{ book.format.toUpperCase() }}</span>
             </div>
             <div class="book-info">
-              <h3 class="book-title" :title="book.title">{{ book.title }}</h3>
+              <h3
+                v-if="renamingBookId !== book.id"
+                class="book-title"
+                :title="book.title"
+                @click.stop="startRename(book)"
+              >
+                {{ book.title }}
+              </h3>
+              <input
+                v-else
+                v-model="renameValue"
+                class="rename-input"
+                @keydown.enter="saveRename"
+                @keydown.escape="cancelRename"
+                @blur="saveRename"
+                @click.stop
+              />
               <p class="book-author" :class="{ unknown: !book.author }">
                 {{ book.author || "Unknown author" }}
               </p>
+              <div v-if="book.folderId" class="book-folder-tag">
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2v11z"
+                  />
+                </svg>
+                <span>{{ bookshelfStore.folders.find((f) => f.id === book.folderId)?.name }}</span>
+              </div>
               <div v-if="book.lastReadAt" class="book-meta">
                 <span class="meta-dot"></span>
                 <span class="meta-date">{{ new Date(book.lastReadAt).toLocaleDateString() }}</span>
               </div>
             </div>
+            <button
+              class="btn-folder"
+              @click="toggleFolderDropdown(book.id, $event)"
+              title="Move to folder"
+              aria-label="Move to folder"
+              tabindex="0"
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2v11z"
+                />
+              </svg>
+            </button>
             <button
               class="btn-delete"
               @click="confirmDelete(book.id, $event)"
@@ -744,6 +991,53 @@ onMounted(() => {
       modal-type="plugins"
       @close="closePluginsModal"
     />
+
+    <!-- Folder assignment dropdown -->
+    <div v-if="folderDropdownOpen" class="folder-dropdown" @click.stop>
+      <div class="folder-dropdown-header">Move to folder</div>
+      <button
+        class="folder-dropdown-item"
+        :class="{
+          selected: !bookshelfStore.books.find((b) => b.id === folderDropdownBookId)?.folderId,
+        }"
+        @click="handleMoveToFolder(null)"
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2v11z" />
+        </svg>
+        Uncategorized
+      </button>
+      <button
+        v-for="folder in bookshelfStore.folders"
+        :key="folder.id"
+        class="folder-dropdown-item"
+        :class="{
+          selected:
+            bookshelfStore.books.find((b) => b.id === folderDropdownBookId)?.folderId === folder.id,
+        }"
+        @click="handleMoveToFolder(folder.id)"
+      >
+        {{ folder.name }}
+      </button>
+    </div>
+
+    <!-- Folder context menu -->
+    <div
+      v-if="folderCtxId"
+      class="folder-context-menu"
+      :style="{ left: folderCtxPos.x + 'px', top: folderCtxPos.y + 'px' }"
+      @click.stop
+    >
+      <button class="ctx-item" @click="renameFolderCtx">Rename</button>
+      <button class="ctx-item ctx-danger" @click="deleteFolderCtx">Delete</button>
+    </div>
   </div>
 </template>
 
@@ -1740,9 +2034,268 @@ onMounted(() => {
   background: #b91c1c !important;
 }
 
-/* ==========================================
+/* ═══════════════════════════════════════════════
+   FOLDER BAR + CHIPS
+   ═══════════════════════════════════════════════ */
+
+.folder-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 2px;
+  margin-bottom: 18px;
+  flex-shrink: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.folder-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.folder-chip {
+  flex-shrink: 0;
+  padding: 5px 12px;
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  line-height: 1.3;
+}
+
+.folder-chip:hover {
+  border-color: var(--color-accent);
+  color: var(--text-primary);
+}
+
+.folder-chip.active {
+  background: var(--color-accent);
+  color: #fff;
+  border-color: var(--color-accent);
+}
+
+.new-folder-btn {
+  padding: 5px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.new-folder-wrap {
+  flex-shrink: 0;
+}
+
+.new-folder-input {
+  width: 110px;
+  padding: 5px 10px;
+  border-radius: 16px;
+  border: 1px solid var(--color-accent);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: var(--font-ui);
+  outline: none;
+}
+
+/* ═══════════════════════════════════════════════
+   BOOK RENAME INPUT
+   ═══════════════════════════════════════════════ */
+
+.rename-input {
+  width: 100%;
+  padding: 2px 4px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--font-ui);
+  border: 1px solid var(--color-accent);
+  border-radius: 4px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  outline: none;
+  line-height: 1.35;
+  box-sizing: border-box;
+}
+
+.book-title {
+  cursor: text;
+}
+
+/* ═══════════════════════════════════════════════
+   FOLDER TAG ON CARD
+   ═══════════════════════════════════════════════ */
+
+.book-folder-tag {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1;
+}
+
+.book-folder-tag svg {
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+.book-folder-tag span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════════════
+   FOLDER BUTTON ON CARD HOVER
+   ═══════════════════════════════════════════════ */
+
+.btn-folder {
+  position: absolute;
+  top: 7px;
+  right: 41px;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  border: none;
+  background: rgba(255, 255, 255, 0.93);
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.85);
+  transition: all var(--transition-fast);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  z-index: 1;
+}
+
+.book-card:hover .btn-folder {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.btn-folder:hover {
+  background: #f0f5ff;
+  color: var(--color-accent);
+  box-shadow: 0 3px 10px rgba(91, 154, 255, 0.18);
+}
+
+.btn-folder:active {
+  transform: scale(0.92);
+}
+
+/* ═══════════════════════════════════════════════
+   FOLDER DROPDOWN
+   ═══════════════════════════════════════════════ */
+
+.folder-dropdown {
+  position: fixed;
+  z-index: 1002;
+  min-width: 170px;
+  padding: 6px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.folder-dropdown-header {
+  padding: 6px 10px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-family: var(--font-ui);
+}
+
+.folder-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  text-align: left;
+}
+
+.folder-dropdown-item:hover {
+  background: var(--bg-secondary);
+}
+
+.folder-dropdown-item.selected {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.folder-dropdown-item svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+/* ═══════════════════════════════════════════════
+   FOLDER CONTEXT MENU
+   ═══════════════════════════════════════════════ */
+
+.folder-context-menu {
+  position: fixed;
+  z-index: 1003;
+  min-width: 130px;
+  padding: 6px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+}
+
+.ctx-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  text-align: left;
+}
+
+.ctx-item:hover {
+  background: var(--bg-secondary);
+}
+
+.ctx-danger {
+  color: #dc2626;
+}
+
+.ctx-danger:hover {
+  background: #fef2f2;
+}
+
+/* ═══════════════════════════════════════════════
    KEYFRAMES
-   ========================================== */
+   ═══════════════════════════════════════════════ */
 
 @keyframes spin {
   to {
@@ -1809,6 +2362,10 @@ onMounted(() => {
   .stats-bar {
     padding-left: 0;
   }
+
+  .folder-bar {
+    margin-bottom: 16px;
+  }
 }
 
 @media (max-width: 600px) {
@@ -1857,6 +2414,20 @@ onMounted(() => {
   }
   .shelf-letter {
     font-size: 22px;
+  }
+
+  .folder-bar {
+    gap: 4px;
+    margin-bottom: 14px;
+  }
+
+  .folder-chip {
+    padding: 4px 10px;
+    font-size: 11px;
+  }
+
+  .new-folder-input {
+    width: 90px;
   }
 }
 </style>
