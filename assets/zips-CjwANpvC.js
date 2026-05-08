@@ -1,1 +1,0 @@
-import{i as e,n as t,t as n}from"./db-iBAt3De2.js";async function r(t,r,i){await e(n.ZIPS,{bookId:t,data:r,fileSize:i})}async function i(e){return(await t(n.ZIPS,e))?.data}export{i as getZip,r as saveZip};
