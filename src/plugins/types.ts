@@ -66,6 +66,12 @@ export interface PluginStorageAdapter {
   clear(): Promise<void>;
 }
 
+export interface ToolbarItem {
+  id: string;
+  order: number;
+  component: Component;
+}
+
 export interface UISlots {
   registerModal(name: string, component: Component): void;
   registerOverlay(name: string, component: Component): void;
@@ -73,6 +79,8 @@ export interface UISlots {
   registerFooterContent(component: Component): void;
   /** Register a widget rendered in the bookshelf (e.g. stats bar). */
   registerBookshelfWidget(component: Component): void;
+  /** Register an item in the reader right-edge toolbar (e.g. auto-read, TTS). */
+  registerToolbarItem(item: ToolbarItem): void;
 }
 
 export interface ContentTransformer {

@@ -17,6 +17,8 @@ export interface UIState {
   confirmTitle: string;
   confirmMessage: string;
   isTransitioning: boolean;
+  /** When true, header/footer/toolbar won't show even if showControls is true. Used by plugins. */
+  suppressControls: boolean;
 }
 
 export const useUIStore = defineStore("ui", {
@@ -32,6 +34,7 @@ export const useUIStore = defineStore("ui", {
     confirmTitle: "",
     confirmMessage: "",
     isTransitioning: false,
+    suppressControls: false,
   }),
 
   actions: {
@@ -136,5 +139,13 @@ export const useUIStore = defineStore("ui", {
     setTransitioning(value: boolean) {
       this.isTransitioning = value;
     },
+
+    setSuppressControls(value: boolean) {
+      this.suppressControls = value;
+    },
+  },
+
+  getters: {
+    effectiveShowControls: (state) => state.showControls && !state.suppressControls,
   },
 });

@@ -1,8 +1,21 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, watch, onUnmounted } from "vue";
 import { getSearchApis } from "../registry";
+import { useUIStore } from "../../stores/ui";
+
+const uiStore = useUIStore();
 
 const api = computed(() => getSearchApis()[0] ?? null);
+
+// Suppress header/footer/toolbar when search highlights are active
+const active = computed(() => !!(api.value?.hasHighlights && api.value?.searchResults.length));
+watch(
+  active,
+  (val) => {
+    uiStore.setSuppressControls(val);
+  },
+  { immediate: true },
+);
 
 function handlePrevMatch() {
   const s = getSearchApis()[0];
@@ -19,110 +32,150 @@ function handleNextMatch() {
     s.navigateToResult(s.searchResults[idx]);
   }
 }
+
+function handleClear() {
+  const s = getSearchApis()[0];
+  s?.clearHighlights();
+  uiStore.setSuppressControls(false);
+}
+
+onUnmounted(() => {
+  uiStore.setSuppressControls(false);
+});
+
+const currentLabel = computed(() => {
+  const a = api.value;
+  if (!a || a.searchResults.length === 0) return "";
+  return `${(a.currentResultIndex ?? -1) + 1} / ${a.searchResults.length}`;
+});
 </script>
 
 <template>
-  <div v-if="api?.hasHighlights && api?.searchResults.length" class="search-footer">
-    <div class="search-footer-actions">
-      <button
-        class="search-footer-btn"
-        @click.stop="api?.clearHighlights()"
-        aria-label="Exit search"
-      >
+  <div
+    v-if="api?.hasHighlights && api?.searchResults.length"
+    class="search-nav-overlay"
+    :class="{ 'with-controls': uiStore.showControls }"
+  >
+    <div class="search-nav-chip">
+      <button class="nav-btn" @click.stop="handlePrevMatch()" aria-label="Previous match">
         <svg
-          width="16"
-          height="16"
+          width="14"
+          height="14"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
-          stroke-width="2"
-        >
-          <path d="M18 6L6 18M6 6l12 12" />
-        </svg>
-      </button>
-    </div>
-    <div class="search-footer-center">
-      <span class="search-footer-counter">
-        {{ (api?.currentResultIndex ?? -1) + 1 }} / {{ api?.searchResults.length ?? 0 }}
-      </span>
-    </div>
-    <div class="search-footer-nav">
-      <button class="search-footer-btn" @click.stop="handlePrevMatch()" aria-label="Previous match">
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
+          stroke-width="2.5"
         >
           <path d="M15 18l-6-6 6-6" />
         </svg>
       </button>
-      <button class="search-footer-btn" @click.stop="handleNextMatch()" aria-label="Next match">
+      <span class="nav-counter">{{ currentLabel }}</span>
+      <button class="nav-btn" @click.stop="handleNextMatch()" aria-label="Next match">
         <svg
-          width="16"
-          height="16"
+          width="14"
+          height="14"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
-          stroke-width="2"
+          stroke-width="2.5"
         >
           <path d="M9 18l6-6-6-6" />
+        </svg>
+      </button>
+      <div class="nav-divider"></div>
+      <button class="nav-btn nav-close" @click.stop="handleClear" aria-label="Exit search">
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+        >
+          <path d="M18 6L6 18M6 6l12 12" />
         </svg>
       </button>
     </div>
   </div>
 </template>
 
-<style>
-.search-footer {
-  display: flex;
-  align-items: center;
-  padding: 10px 12px;
-  gap: 8px;
+<style scoped>
+.search-nav-overlay {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 76px;
+  z-index: 150;
+  transition: bottom 350ms cubic-bezier(0.4, 0, 0.2, 1);
 }
-.search-footer-btn {
+
+.search-nav-overlay.with-controls {
+  bottom: calc(env(safe-area-inset-bottom) + 76px);
+}
+
+.search-nav-chip {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 10px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  background: var(--bg-elevated, var(--reader-bg));
-  color: var(--reader-text);
+  gap: 2px;
+  padding: 4px;
+  background: var(--bg-elevated, #fff);
+  border: 1px solid var(--border-subtle, #e0e0e0);
+  border-radius: 24px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+}
+
+.nav-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--reader-text, #333);
   cursor: pointer;
-  min-width: 40px;
-  min-height: 40px;
-  -webkit-tap-highlight-color: transparent;
-}
-.search-footer-btn:hover {
-  background: var(--hover-bg);
-  border-color: var(--border);
-}
-.search-footer-btn:active {
-  transform: scale(0.95);
-}
-.search-footer-actions,
-.search-footer-nav {
   display: flex;
-  gap: 6px;
-  flex-shrink: 0;
-}
-.search-footer-center {
-  flex: 1;
-  display: flex;
+  align-items: center;
   justify-content: center;
-  min-width: 0;
+  transition: background 150ms;
 }
-.search-footer-counter {
-  font-size: 14px;
+
+.nav-btn:hover {
+  background: var(--hover-bg, rgba(0, 0, 0, 0.06));
+}
+
+.nav-btn:active {
+  transform: scale(0.9);
+}
+
+.nav-close:hover {
+  color: #e74c3c;
+}
+
+.nav-counter {
+  font-size: 13px;
   font-weight: 600;
-  padding: 8px 16px;
-  border-radius: 20px;
-  background: var(--accent-soft);
-  border: 1px solid var(--accent);
-  color: var(--accent);
-  white-space: nowrap;
+  padding: 0 6px;
+  min-width: 40px;
+  text-align: center;
+  color: var(--reader-text, #333);
+  font-variant-numeric: tabular-nums;
+}
+
+.nav-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border-subtle, #e0e0e0);
+  margin: 0 2px;
+}
+
+@media (max-width: 480px) {
+  .search-nav-overlay {
+    bottom: 68px;
+  }
+
+  .search-nav-overlay.with-controls {
+    bottom: calc(env(safe-area-inset-bottom) + 68px);
+  }
 }
 </style>

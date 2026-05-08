@@ -22,7 +22,7 @@ export const searchPlugin: Plugin = {
     });
 
     ctx.ui.registerModal("search", SearchPanel);
-    ctx.ui.registerFooterContent(SearchFooterContent);
+    ctx.ui.registerOverlay("search-nav", SearchFooterContent);
     ctx.ui.registerFooterAction({
       id: "search",
       position: "menu",

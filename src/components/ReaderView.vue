@@ -12,7 +12,7 @@ import { useReaderStore } from "../stores/reader";
 import { useUIStore } from "../stores/ui";
 import { useSettingsStore } from "../stores/settings";
 import { usePagination, useChapterLoader, useNavigationStack } from "../composables";
-import { ReaderHeader, ReaderFooter, ReaderContent } from "../components/reader";
+import { ReaderHeader, ReaderFooter, ReaderContent, ReaderToolbar } from "../components/reader";
 import { ModalWrapper } from "../components/modals";
 import type { SearchResult, Chapter, Book } from "../core/types";
 import { navigateToCfi, resolveCfi, getSpineIndex } from "../utils/epub-cfi";
@@ -898,7 +898,7 @@ onUnmounted(() => {
     <ReaderHeader
       :book-title="book.title"
       :chapter-title="readerStore.currentChapter?.title"
-      :show-controls="uiStore.showControls"
+      :show-controls="uiStore.effectiveShowControls"
       @close="handleClose"
       @open-settings="openModal('settings')"
     />
@@ -919,7 +919,7 @@ onUnmounted(() => {
     />
 
     <ReaderFooter
-      :show-controls="uiStore.showControls"
+      :show-controls="uiStore.effectiveShowControls"
       :is-pagination-mode="isPaginationMode"
       :current-page="pagination.currentPage.value"
       :pages-count="pagination.totalPages.value"
@@ -977,6 +977,8 @@ onUnmounted(() => {
 
     <!-- Plugin overlay components (e.g. annotation toolbar + popover, search go-back) -->
     <component v-for="(comp, name) in overlayComponents" :key="name" :is="comp" />
+
+    <ReaderToolbar />
 
     <ModalWrapper
       :modal-type="uiStore.activeModal"

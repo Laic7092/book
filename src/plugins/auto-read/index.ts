@@ -16,6 +16,6 @@ export const autoReadPlugin: Plugin = {
   version: "1.0.0",
   setup(ctx) {
     _host = ctx.readerHost;
-    ctx.ui.registerOverlay("auto-read", AutoReadControls);
+    ctx.ui.registerToolbarItem({ id: "auto-read", order: 10, component: AutoReadControls });
   },
 };

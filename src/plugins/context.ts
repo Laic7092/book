@@ -12,6 +12,7 @@ import type {
   IEventBus,
   EventHandler,
   ContentTransformer,
+  ToolbarItem,
 } from "./types";
 import { getReaderHost } from "../core/reader-host";
 import { navigate as routerNavigate } from "../router";
@@ -89,6 +90,7 @@ export const registeredFooterActions = shallowRef<FooterAction[]>([]);
 export const registeredFooterContents = shallowRef<Component[]>([]);
 export const registeredBookshelfWidgets = shallowRef<Component[]>([]);
 export const registeredContentTransformers = shallowRef<ContentTransformer[]>([]);
+export const registeredToolbarItems = shallowRef<ToolbarItem[]>([]);
 
 export function createUISlots(): UISlots {
   return {
@@ -114,6 +116,11 @@ export function createUISlots(): UISlots {
     },
     registerBookshelfWidget(component: Component) {
       registeredBookshelfWidgets.value = [...registeredBookshelfWidgets.value, component];
+    },
+    registerToolbarItem(item: ToolbarItem) {
+      const items = [...registeredToolbarItems.value, item];
+      items.sort((a, b) => a.order - b.order);
+      registeredToolbarItems.value = items;
     },
   };
 }
@@ -249,6 +256,12 @@ export function createTrackedContext(id: string, bootstrap: PluginBootstrap): Tr
         registeredBookshelfWidgets.value = registeredBookshelfWidgets.value.filter(
           (c) => c !== component,
         );
+      });
+    },
+    registerToolbarItem(item) {
+      rawUi.registerToolbarItem(item);
+      cleanupFns.push(() => {
+        registeredToolbarItems.value = registeredToolbarItems.value.filter((i) => i.id !== item.id);
       });
     },
   };
