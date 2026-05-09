@@ -329,13 +329,7 @@ export function getHeaderActions(): HeaderAction[] {
 // ── Capability collectors ──
 
 export function getParsers(): BookParser[] {
-  const result: BookParser[] = [];
-  for (const [, mp] of managedPlugins) {
-    if (!mp.enabled || !mp.plugin.provide?.parsers) continue;
-    result.push(...mp.plugin.provide.parsers);
-  }
-  result.push(...dynamicCapabilities.parsers);
-  return result;
+  return [...dynamicCapabilities.parsers];
 }
 
 export function getParserForFormat(format: string): BookParser | null {
@@ -347,12 +341,7 @@ export function getParserForFormat(format: string): BookParser | null {
 
 /** Returns all registered search APIs from plugins (dynamic capabilities + static provides). */
 export function getSearchApis(): SearchApi[] {
-  const result: SearchApi[] = [...dynamicCapabilities.searchApis];
-  for (const [, mp] of managedPlugins) {
-    if (!mp.enabled || !mp.plugin.provide?.searchApis) continue;
-    result.push(...mp.plugin.provide.searchApis);
-  }
-  return result;
+  return [...dynamicCapabilities.searchApis];
 }
 
 // ── Content transformers ──

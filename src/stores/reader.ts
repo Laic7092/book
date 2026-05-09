@@ -248,98 +248,16 @@ export const useReaderStore = defineStore("reader", {
       );
       if (!content) return null;
 
-      const doc = new DOMParser().parseFromString(content, "text/html");
+      const { resolveChapterResources } = await import("../reader-engine/resource-resolver");
 
-      // Collect resource paths and resolve via parser
-      const resourcePaths = collectResourcePaths(doc);
-      if (resourcePaths.length > 0 && this.currentParser?.resolveResourceUrl) {
-        if (!this.resourceUrls) this.resourceUrls = new Map();
-        await resolveMissingResources(
-          this.currentBook.id,
-          resourcePaths,
-          this.resourceUrls,
-          this.currentParser,
-        );
-      }
+      if (!this.resourceUrls) this.resourceUrls = new Map();
 
-      if (this.resourceUrls && this.resourceUrls.size > 0) {
-        const { rewriteResourcePaths } = await import("../reader-engine/resource-urls");
-        const rewrittenDoc = rewriteResourcePaths(content, this.resourceUrls);
-
-        const resources: HTMLElement[] = [];
-        const headElements = Array.from(rewrittenDoc.head.children);
-        for (const element of headElements) {
-          resources.push(element.cloneNode(true) as HTMLElement);
-        }
-
-        return { html: rewrittenDoc.body.innerHTML, resources };
-      }
-
-      return { html: doc.body.innerHTML, resources: [] };
+      return resolveChapterResources(
+        content,
+        this.currentBook.id,
+        this.currentParser!,
+        this.resourceUrls,
+      );
     },
   },
 });
-
-// ── Resource resolution helpers ──
-
-const CSS_URL_PATTERN = /url\(['"]?([^'")\s]+)['"]?\)/gi;
-
-function collectResourcePaths(doc: Document): string[] {
-  const paths = new Set<string>();
-
-  doc.querySelectorAll("img[src]").forEach((el) => {
-    const src = el.getAttribute("src");
-    if (src) paths.add(src);
-  });
-
-  doc.querySelectorAll("image").forEach((el) => {
-    const href = el.getAttribute("xlink:href");
-    if (href) paths.add(href);
-  });
-
-  doc.querySelectorAll("link[rel='stylesheet'][href]").forEach((el) => {
-    const href = el.getAttribute("href");
-    if (href) paths.add(href);
-  });
-
-  doc.querySelectorAll("*[style]").forEach((el) => {
-    const style = el.getAttribute("style");
-    if (style) {
-      for (const [, url] of style.matchAll(CSS_URL_PATTERN)) {
-        paths.add(url);
-      }
-    }
-  });
-
-  doc.querySelectorAll("style").forEach((el) => {
-    const css = el.textContent;
-    if (css) {
-      for (const [, url] of css.matchAll(CSS_URL_PATTERN)) {
-        paths.add(url);
-      }
-    }
-  });
-
-  return Array.from(paths);
-}
-
-async function resolveMissingResources(
-  bookId: string,
-  paths: string[],
-  resourceUrls: Map<string, string>,
-  parser: BookParser,
-): Promise<void> {
-  const missingPaths = paths.filter((p) => !resourceUrls.has(p));
-  if (missingPaths.length === 0) return;
-
-  const results = await Promise.all(
-    missingPaths.map(async (path) => ({
-      path,
-      url: await parser.resolveResourceUrl?.(bookId, path),
-    })),
-  );
-
-  for (const { path, url } of results) {
-    if (url) resourceUrls.set(path, url);
-  }
-}

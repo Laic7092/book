@@ -170,9 +170,6 @@ export interface Plugin {
   /** Plugin IDs this plugin depends on. Dependencies are initialized first. */
   dependsOn?: string[];
 
-  /** Capabilities provided to the core. */
-  provide?: Partial<CapabilityMap>;
-
   /** Called after registration, before mount. Use ctx.ui / ctx.storage / ctx.events. */
   setup?: (context: PluginContext) => void | Promise<void>;
 

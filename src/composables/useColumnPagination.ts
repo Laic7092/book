@@ -6,7 +6,7 @@ export interface PaginateOptions {
   resources?: HTMLElement[];
 }
 
-export function usePagination() {
+export function useColumnPagination() {
   const currentPage = ref(0);
   const totalPages = ref(1);
   const isReady = ref(false);
@@ -41,7 +41,6 @@ export function usePagination() {
     currentPage.value = clampPage(pendingTargetPage, totalPages.value);
 
     isPaginating.value = false;
-    // isReady set by updateColumnLayout after consumer renders and measures
   }
 
   function updateColumnLayout(cw: number, gap: number, scrollW: number): void {
@@ -66,7 +65,6 @@ export function usePagination() {
     return Math.max(0, Math.min(totalPages.value - 1, Math.floor(offsetInBody / step)));
   }
 
-  /** ratio: 0-1 fraction within the total content (e.g. charOffset / totalChars) */
   function getPageAtRatio(ratio: number): number {
     if (totalPages.value <= 0) return 0;
     return Math.max(0, Math.min(totalPages.value - 1, Math.floor(ratio * totalPages.value)));
