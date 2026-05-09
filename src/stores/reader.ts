@@ -9,6 +9,13 @@ import { pluginEvents } from "../plugins/context";
 import * as booksStore from "../storage/books";
 import { assertValidBookFile, validateBookId } from "../utils/validation";
 
+const EXTENSION_MIME_MAP: Record<string, string> = {
+  txt: "text/plain",
+  epub: "application/epub+zip",
+  pdf: "application/pdf",
+  cbz: "application/vnd.comicbook+zip",
+};
+
 function getParserForFile(file: File): BookParser | null {
   const parsers = getParsers();
 
@@ -17,13 +24,11 @@ function getParserForFile(file: File): BookParser | null {
   }
 
   const ext = file.name.split(".").pop()?.toLowerCase();
-  for (const parser of parsers) {
-    if (
-      parser.supportsFormat(
-        ext === "txt" ? "text/plain" : ext === "epub" ? "application/epub+zip" : "",
-      )
-    ) {
-      return parser;
+  if (ext && EXTENSION_MIME_MAP[ext]) {
+    for (const parser of parsers) {
+      if (parser.supportsFormat(EXTENSION_MIME_MAP[ext])) {
+        return parser;
+      }
     }
   }
 
@@ -105,6 +110,12 @@ export const useReaderStore = defineStore("reader", {
 
         await loadPluginsFor("book-import");
         const parser = getParserForFormat(book.format);
+        if (!parser) {
+          throw createReaderError(
+            `No parser available for format "${book.format}". The corresponding plugin may be disabled.`,
+            ErrorCode.UNSUPPORTED_FORMAT,
+          );
+        }
         const chaptersData = await booksStore.getChapters(bookId);
 
         const chapters: Chapter[] = chaptersData.map((ch) => ({

@@ -5,7 +5,7 @@ export interface Book {
   title: string;
   author: string;
   coverUrl?: string;
-  format: "txt" | "epub";
+  format: string;
   fileSize: number;
   addedAt: number;
   lastReadAt?: number;
@@ -95,7 +95,7 @@ export interface BookParser {
    * Format identifier (matches Book.format).
    * Used to find the right parser for a stored book.
    */
-  format: "txt" | "epub";
+  format: string;
 
   /** Store format-specific resources. Called during book import. */
   saveResources?(bookId: string, resources: Map<string, ArrayBuffer>): Promise<void>;

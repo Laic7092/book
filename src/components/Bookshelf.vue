@@ -355,7 +355,7 @@ onMounted(() => {
             <span>{{ bookshelfStore.isUploading ? "Adding…" : "Add" }}</span>
             <input
               type="file"
-              accept=".txt,.epub"
+              accept=".txt,.epub,.pdf,.cbz"
               @change="handleFileUpload"
               hidden
               :disabled="bookshelfStore.isUploading"
@@ -636,7 +636,7 @@ onMounted(() => {
           Add your first book
           <input
             type="file"
-            accept=".txt,.epub"
+            accept=".txt,.epub,.pdf,.cbz"
             @change="handleFileUpload"
             hidden
             :disabled="bookshelfStore.isUploading"
