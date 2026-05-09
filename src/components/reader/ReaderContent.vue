@@ -225,13 +225,7 @@ defineExpose({
 <template>
   <div ref="containerRef" class="reader-content-wrapper">
     <div v-if="chapterLoading" class="chapter-loading-overlay" />
-    <iframe
-      ref="iframeRef"
-      class="reader-iframe"
-      title="Reader Content"
-      sandbox="allow-scripts allow-same-origin"
-      @load="handleLoad"
-    />
+    <iframe ref="iframeRef" class="reader-iframe" title="Reader Content" @load="handleLoad" />
   </div>
 </template>
 
