@@ -15,15 +15,39 @@ const navStack = useNavigationStack();
 const fixedLayoutRef = ref<InstanceType<typeof FixedLayoutReader> | null>(null);
 const isTransitioning = ref(false);
 const showControls = ref(true);
+const pdfPageCount = ref(0);
+const showOutline = ref(false);
 
 const chapters = computed(() => readerStore.chapters);
-const currentIdx = computed(() =>
-  chapters.value.findIndex((c) => c.id === readerStore.currentChapter?.id),
-);
-const totalPages = computed(() => chapters.value.length);
-const displayPage = computed(() => currentIdx.value + 1);
-const canPrev = computed(() => currentIdx.value > 0);
-const canNext = computed(() => currentIdx.value < totalPages.value - 1);
+const isPdf = computed(() => props.book.format === "pdf");
+
+// Source of truth: PDF uses href (page number), CBZ uses chapter index
+const currentPageNum = computed(() => {
+  if (isPdf.value) {
+    const href = readerStore.currentChapter?.href;
+    if (href) {
+      const n = parseInt(href, 10);
+      if (!isNaN(n)) return n;
+    }
+  }
+  // CBZ or fallback: use chapter position in array
+  const idx = chapters.value.findIndex((c) => c.id === readerStore.currentChapter?.id);
+  return idx >= 0 ? idx + 1 : 1;
+});
+
+const displayPage = computed(() => currentPageNum.value);
+const totalPages = computed(() => {
+  if (isPdf.value) return pdfPageCount.value || chapters.value.length;
+  return chapters.value.length;
+});
+const canPrev = computed(() => currentPageNum.value > 1);
+const canNext = computed(() => currentPageNum.value < totalPages.value);
+
+const outline = computed(() => fixedLayoutRef.value?.getOutline?.() ?? []);
+
+function toggleOutline() {
+  showOutline.value = !showOutline.value;
+}
 
 // ── Navigation ──
 
@@ -31,40 +55,54 @@ function handleClose() {
   navigate("/");
 }
 
-function goToChapter(chapterId: string) {
-  const chapter = chapters.value.find((c) => c.id === chapterId);
-  if (!chapter) return;
+function goToPage(pageNum: number) {
+  if (pageNum < 1 || pageNum > totalPages.value) return;
+  if (pageNum === currentPageNum.value) return;
+
+  const chapter = isPdf.value
+    ? chapters.value.find((c) => c.href === String(pageNum))
+    : chapters.value[pageNum - 1];
+  const prevChapter = readerStore.currentChapter;
+  if (prevChapter) navStack.push({ chapterId: prevChapter.id, page: currentPageNum.value });
+
   isTransitioning.value = true;
-  readerStore.currentChapter = chapter;
+
+  if (chapter) {
+    readerStore.currentChapter = chapter;
+  } else {
+    // Page without a dedicated chapter (outline-based PDF): create a synthetic one
+    readerStore.currentChapter = {
+      id: `page-${pageNum}`,
+      bookId: props.book.id,
+      title: `Page ${pageNum}`,
+      href: String(pageNum),
+      order: pageNum - 1,
+    };
+  }
   readerStore.chapterProgress = 0;
   readerStore.readingProgress = 0;
+
   requestAnimationFrame(() => {
     isTransitioning.value = false;
   });
 }
 
 function nextPage() {
-  if (!canNext.value) return;
-  const prev = readerStore.currentChapter;
-  if (prev) navStack.push({ chapterId: prev.id, page: currentIdx.value });
-  goToChapter(chapters.value[currentIdx.value + 1].id);
+  if (canNext.value) goToPage(currentPageNum.value + 1);
 }
 
 function prevPage() {
-  if (!canPrev.value) return;
-  const prev = readerStore.currentChapter;
-  if (prev) navStack.push({ chapterId: prev.id, page: currentIdx.value });
-  goToChapter(chapters.value[currentIdx.value - 1].id);
+  if (canPrev.value) goToPage(currentPageNum.value - 1);
 }
 
 function handleHistoryBack() {
   const entry = navStack.back();
-  if (entry) goToChapter(entry.chapterId);
+  if (entry) goToPage(entry.page);
 }
 
 function handleHistoryForward() {
   const entry = navStack.forward();
-  if (entry) goToChapter(entry.chapterId);
+  if (entry) goToPage(entry.page);
 }
 
 // ── Gestures ──
@@ -96,34 +134,50 @@ function handleClick(e: MouseEvent) {
 }
 
 function handleKeydown(e: KeyboardEvent) {
-  if (e.key === "ArrowLeft") prevPage();
-  else if (e.key === "ArrowRight") nextPage();
-  else if (e.key === "Escape") handleClose();
+  if (e.key === "ArrowLeft") {
+    prevPage();
+    return;
+  }
+  if (e.key === "ArrowRight") {
+    nextPage();
+    return;
+  }
+  if (e.key === "Escape") {
+    handleClose();
+    return;
+  }
+
+  // Zoom shortcuts (PDF only)
+  if (!isPdf.value) return;
+  if ((e.ctrlKey || e.metaKey) && (e.key === "=" || e.key === "+")) {
+    e.preventDefault();
+    fixedLayoutRef.value?.zoomIn?.();
+  } else if ((e.ctrlKey || e.metaKey) && e.key === "-") {
+    e.preventDefault();
+    fixedLayoutRef.value?.zoomOut?.();
+  } else if ((e.ctrlKey || e.metaKey) && e.key === "0") {
+    e.preventDefault();
+    fixedLayoutRef.value?.zoomFit?.();
+  } else if ((e.ctrlKey || e.metaKey) && e.key === "9") {
+    e.preventDefault();
+    fixedLayoutRef.value?.zoomWidth?.();
+  } else if (e.key === "r" && !e.ctrlKey && !e.metaKey) {
+    fixedLayoutRef.value?.rotate?.(90);
+  }
 }
 
 // ── Internal link clicks (PDF cross-references) ──
 
 function handleLinkClick(href: string) {
-  // Try to interpret as page number
   const pageNum = parseInt(href, 10);
   if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= totalPages.value) {
-    const ch = chapters.value[pageNum - 1];
-    if (ch) goToChapter(ch.id);
+    goToPage(pageNum);
     return;
-  }
-  // Try JSON dest array [pageRef, ...]
-  try {
-    const arr = JSON.parse(href);
-    if (Array.isArray(arr) && arr.length > 0) {
-      // External dest — not handled yet
-    }
-  } catch {
-    // Not JSON, ignore
   }
 }
 
 function handleReady() {
-  // Renderer initialized
+  pdfPageCount.value = fixedLayoutRef.value?.getPageCount?.() ?? 0;
 }
 
 // ── Lifecycle ──
@@ -159,6 +213,40 @@ onUnmounted(() => {
       <span class="fl-page-indicator" v-if="totalPages > 0"
         >{{ displayPage }} / {{ totalPages }}</span
       >
+      <template v-if="isPdf">
+        <button
+          class="fl-btn fl-zoom-btn"
+          @click.stop="fixedLayoutRef?.zoomOut?.()"
+          aria-label="Zoom out"
+          title="Zoom out (Ctrl+-)"
+        >
+          −
+        </button>
+        <button
+          class="fl-btn fl-zoom-btn"
+          @click.stop="fixedLayoutRef?.zoomFit?.()"
+          aria-label="Fit page"
+          title="Fit page (Ctrl+0)"
+        >
+          ⊡
+        </button>
+        <button
+          class="fl-btn fl-zoom-btn"
+          @click.stop="fixedLayoutRef?.zoomIn?.()"
+          aria-label="Zoom in"
+          title="Zoom in (Ctrl++)"
+        >
+          +
+        </button>
+        <button
+          class="fl-btn fl-zoom-btn"
+          @click.stop="toggleOutline"
+          aria-label="Table of contents"
+          title="Outline"
+        >
+          ☰
+        </button>
+      </template>
     </header>
 
     <main class="fl-content">
@@ -244,6 +332,38 @@ onUnmounted(() => {
         <path d="M5 12h14M12 5l7 7-7 7" />
       </svg>
     </button>
+
+    <!-- Outline / TOC overlay -->
+    <Transition name="outline">
+      <aside v-if="showOutline" class="fl-outline-overlay" @click.self="showOutline = false">
+        <div class="fl-outline-panel">
+          <header class="fl-outline-header">
+            <span>Outline</span>
+            <button class="fl-btn" @click.stop="showOutline = false" aria-label="Close outline">
+              ✕
+            </button>
+          </header>
+          <nav class="fl-outline-list">
+            <template v-if="outline.length">
+              <button
+                v-for="(item, i) in outline"
+                :key="i"
+                class="fl-outline-item"
+                :class="{ active: item.pageNumber === currentPageNum }"
+                @click.stop="
+                  goToPage(item.pageNumber);
+                  showOutline = false;
+                "
+              >
+                <span class="fl-outline-title">{{ item.title }}</span>
+                <span class="fl-outline-page">{{ item.pageNumber }}</span>
+              </button>
+            </template>
+            <p v-else class="fl-outline-empty">No outline available</p>
+          </nav>
+        </div>
+      </aside>
+    </Transition>
   </div>
 </template>
 
@@ -349,6 +469,12 @@ onUnmounted(() => {
   height: 36px;
 }
 
+.fl-zoom-btn {
+  font-size: 16px;
+  font-weight: 600;
+  font-family: "SF Mono", "Cascadia Code", monospace;
+}
+
 .fl-history-btn {
   position: fixed;
   top: 50%;
@@ -380,5 +506,114 @@ onUnmounted(() => {
 
 .fl-history-forward {
   right: max(12px, env(safe-area-inset-right, 0));
+}
+
+/* ── Outline / TOC overlay ── */
+
+.fl-outline-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.fl-outline-panel {
+  width: min(320px, 85vw);
+  height: 100%;
+  background: #1e1e1e;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.4);
+}
+
+.fl-outline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  padding-top: max(12px, env(safe-area-inset-top, 0));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.fl-outline-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+  overscroll-behavior: contain;
+}
+
+.fl-outline-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+  gap: 12px;
+}
+
+.fl-outline-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+
+.fl-outline-item.active {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.fl-outline-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fl-outline-page {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.fl-outline-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 13px;
+}
+
+/* outline transition */
+.outline-enter-active,
+.outline-leave-active {
+  transition: opacity 200ms ease;
+}
+.outline-enter-active .fl-outline-panel,
+.outline-leave-active .fl-outline-panel {
+  transition: transform 200ms ease;
+}
+.outline-enter-from,
+.outline-leave-to {
+  opacity: 0;
+}
+.outline-enter-from .fl-outline-panel {
+  transform: translateX(100%);
+}
+.outline-leave-to .fl-outline-panel {
+  transform: translateX(100%);
 }
 </style>
