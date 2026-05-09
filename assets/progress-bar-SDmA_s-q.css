@@ -1,1 +1,0 @@
-.progress-bar-container[data-v-5e9fb6aa]{background:var(--progress-track);z-index:101;pointer-events:none;height:3px;position:fixed;top:0;left:0;right:0}.progress-bar[data-v-5e9fb6aa]{background:linear-gradient(90deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 75%, white) 100%);border-radius:0 1.5px 1.5px 0;height:100%;transition:width .35s cubic-bezier(.4,0,.2,1)}
