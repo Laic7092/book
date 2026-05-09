@@ -20,7 +20,7 @@ export interface IframeLinkClickEvent {
  *
  * iframe internal style structure:
  * - <style id="base-style">       — constant reset styles
- * - <style id="epub-style">       — EPUB resource styles
+ * - <style id="resource-style">   — format resource styles (CSS, fonts)
  * - <style id="pagination-style"> — pagination column layout
  * - <style id="plugin-*">         — plugin-injected styles (theme, typography via CssAPI)
  */
@@ -72,7 +72,7 @@ export function useIframeRenderer(
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
         <style id="base-style">${baseCSS}</style>
-        <style id="epub-style"></style>
+        <style id="resource-style"></style>
         <style id="pagination-style"></style>
         ${linkHandlerScript}
       </head>
@@ -93,14 +93,20 @@ export function useIframeRenderer(
     iframeDoc.body.innerHTML = html;
   }
 
-  function updateEpubResources(elements: HTMLElement[]): void {
+  function syncResources(elements: HTMLElement[]): void {
     if (!iframeDoc) return;
-    injectResources(iframeDoc, elements, injectedResources, "epub-style", "data-epub-dynamic");
+    injectResources(
+      iframeDoc,
+      elements,
+      injectedResources,
+      "resource-style",
+      "data-resource-dynamic",
+    );
   }
 
-  function clearEpubResources(): void {
+  function clearSyncedResources(): void {
     if (!iframeDoc) return;
-    clearResources(iframeDoc, injectedResources, "epub-style");
+    clearResources(iframeDoc, injectedResources, "resource-style");
   }
 
   function getArticle(): HTMLElement | null {
@@ -132,7 +138,7 @@ export function useIframeRenderer(
   }
 
   function cleanup() {
-    clearEpubResources();
+    clearSyncedResources();
     window.removeEventListener("message", messageHandler);
     iframeDoc = null;
     isReady.value = false;
@@ -142,8 +148,8 @@ export function useIframeRenderer(
     isReady,
     initIframe,
     updateContent,
-    updateEpubResources,
-    clearEpubResources,
+    syncResources,
+    clearSyncedResources,
     getArticle,
     getDocument,
     scrollToChapter,

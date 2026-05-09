@@ -1,5 +1,5 @@
-// 公共的 iframe 资源注入工具
-// 用于在 iframe 中增量更新 EPUB 资源（<link> 和 <style> 元素）
+// Iframe resource injection utilities
+// Incrementally updates <link> and <style> elements in the reader iframe
 
 /** 资源追踪：记录已注入的资源详细信息 */
 export interface ResourceInfo {
@@ -59,8 +59,8 @@ export function injectResources(
   doc: Document,
   elements: HTMLElement[],
   injectedResources: Map<string, ResourceInfo>,
-  styleTagId = "epub-style",
-  dynamicAttrName = "data-dynamic",
+  styleTagId = "resource-style",
+  dynamicAttrName = "data-resource-dynamic",
 ): void {
   // 1. 构建新资源列表
   const newResources = new Map<string, ResourceInfo>();
@@ -197,7 +197,7 @@ export function injectResources(
 export function clearResources(
   doc: Document,
   injectedResources: Map<string, ResourceInfo>,
-  styleTagId = "epub-style",
+  styleTagId = "resource-style",
 ): void {
   // 清空 style 标签内容
   const styleTag = doc.getElementById(styleTagId);

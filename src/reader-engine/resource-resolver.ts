@@ -1,7 +1,8 @@
 import type { BookParser } from "../core/types";
-import { rewriteResourcePaths } from "./resource-urls";
 
 const CSS_URL_PATTERN = /url\(['"]?([^'")\s]+)['"]?\)/gi;
+
+// ── Path collection ──
 
 function collectResourcePaths(doc: Document): string[] {
   const paths = new Set<string>();
@@ -42,6 +43,8 @@ function collectResourcePaths(doc: Document): string[] {
   return Array.from(paths);
 }
 
+// ── Blob URL resolution ──
+
 async function resolveMissingResources(
   bookId: string,
   paths: string[],
@@ -63,15 +66,125 @@ async function resolveMissingResources(
   }
 }
 
+// ── Path rewriting ──
+
+function findResourceUrl(path: string, resourceUrls: Map<string, string>): string | null {
+  const normalizedPath = path.replace(/^\//, "").split("#")[0].split("?")[0];
+
+  let decodedPath: string;
+  try {
+    decodedPath = decodeURIComponent(normalizedPath);
+  } catch {
+    decodedPath = normalizedPath;
+  }
+
+  const pathsToTry = [path, normalizedPath, decodedPath];
+  if (decodedPath !== normalizedPath) pathsToTry.push(decodedPath);
+
+  const basename = normalizedPath.split("/").pop();
+  if (basename && basename !== normalizedPath) {
+    pathsToTry.push(basename);
+    try {
+      const db = decodeURIComponent(basename);
+      if (db !== basename) pathsToTry.push(db);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const decodedBasename = decodedPath.split("/").pop();
+  if (decodedBasename && decodedBasename !== decodedPath) {
+    pathsToTry.push(decodedBasename);
+  }
+
+  for (const tryPath of pathsToTry) {
+    if (tryPath && resourceUrls.has(tryPath)) return resourceUrls.get(tryPath)!;
+  }
+
+  // Last resort: basename match against all resource keys
+  const finalBasename = normalizedPath.split("/").pop() || "";
+  for (const [resourcePath, blobUrl] of resourceUrls.entries()) {
+    if (finalBasename && finalBasename === resourcePath.split("/").pop()) {
+      return blobUrl;
+    }
+  }
+
+  return null;
+}
+
+function rewriteCssUrls(cssContent: string, resourceUrls: Map<string, string>): string {
+  return cssContent.replace(/url\(['"]?([^'")\s]+)['"]?\)/gi, (match, url) => {
+    const blobUrl = findResourceUrl(url, resourceUrls);
+    return blobUrl ? `url("${blobUrl}")` : match;
+  });
+}
+
+/**
+ * Rewrite resource paths in HTML content to use blob URLs.
+ */
+export function rewriteResourcePaths(
+  htmlContent: string,
+  resourceUrls: Map<string, string>,
+): Document {
+  const parser = new DOMParser();
+  if (!resourceUrls || resourceUrls.size === 0) {
+    return parser.parseFromString("<html></html>", "text/html");
+  }
+  const doc = parser.parseFromString(htmlContent, "text/html");
+
+  doc.querySelectorAll("img").forEach((img) => {
+    const src = img.getAttribute("src");
+    if (src) {
+      const blobUrl = findResourceUrl(src, resourceUrls);
+      if (blobUrl) img.setAttribute("src", blobUrl);
+    }
+  });
+
+  doc.querySelectorAll("image").forEach((img) => {
+    const src = img.getAttribute("xlink:href");
+    if (src) {
+      const blobUrl = findResourceUrl(src, resourceUrls);
+      if (blobUrl) img.setAttribute("xlink:href", blobUrl);
+    }
+  });
+
+  doc.querySelectorAll("link[rel='stylesheet']").forEach((link) => {
+    const href = link.getAttribute("href");
+    if (href) {
+      const blobUrl = findResourceUrl(href, resourceUrls);
+      if (blobUrl) link.setAttribute("href", blobUrl);
+    }
+  });
+
+  doc.querySelectorAll("*[style]").forEach((el) => {
+    const style = el.getAttribute("style");
+    if (style && (style.includes("url(") || style.includes("background"))) {
+      const rewritten = rewriteCssUrls(style, resourceUrls);
+      if (rewritten !== style) el.setAttribute("style", rewritten);
+    }
+  });
+
+  doc.querySelectorAll("style").forEach((styleEl) => {
+    const cssContent = styleEl.textContent;
+    if (cssContent) {
+      const rewritten = rewriteCssUrls(cssContent, resourceUrls);
+      if (rewritten !== cssContent) styleEl.textContent = rewritten;
+    }
+  });
+
+  return doc;
+}
+
+// ── Public API ──
+
 export interface ResolvedChapter {
   html: string;
   resources: HTMLElement[];
 }
 
 /**
- * Resolve EPUB/format-specific resources in chapter HTML.
- * Handles: img src, image xlink:href, stylesheet link href,
- * inline style url(), and embedded <style> url() references.
+ * Resolve format-specific resources in chapter HTML.
+ * Collects resource paths → resolves to blob URLs → rewrites HTML → extracts head elements.
  */
 export async function resolveChapterResources(
   rawHtml: string,
@@ -90,8 +203,7 @@ export async function resolveChapterResources(
     const rewrittenDoc = rewriteResourcePaths(rawHtml, resourceUrls);
 
     const resources: HTMLElement[] = [];
-    const headElements = Array.from(rewrittenDoc.head.children);
-    for (const element of headElements) {
+    for (const element of Array.from(rewrittenDoc.head.children)) {
       resources.push(element.cloneNode(true) as HTMLElement);
     }
 

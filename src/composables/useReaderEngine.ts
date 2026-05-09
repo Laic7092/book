@@ -4,7 +4,7 @@ import { useUIStore } from "../stores/ui";
 import { useColumnPagination } from "./useColumnPagination";
 import { useChapterLoader } from "./useChapterLoader";
 import { useNavigationStack } from "./useNavigationStack";
-import { rewriteResourcePaths } from "../reader-engine/resource-urls";
+import { rewriteResourcePaths } from "../reader-engine/resource-resolver";
 import { navigateToCfi, resolveCfi, getSpineIndex } from "../utils/epub-cfi";
 import { TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../config/constants";
 import { registerReaderHost, unregisterReaderHost } from "../core/reader-host";
@@ -23,7 +23,7 @@ export interface ReaderContentAPI {
   getDocument?(): Document | null;
   getArticle?(): HTMLElement | null;
   scrollToChapter?(chapterId: string): void;
-  syncEpubResources?(elements: HTMLElement[]): void;
+  syncResources?(elements: HTMLElement[]): void;
 }
 
 export function useReaderEngine(
@@ -200,7 +200,7 @@ export function useReaderEngine(
         const resources = content?.resources || [];
         await pagination.paginate(chapterId, { html, targetPage, resources });
         currentChapterResources.value = resources;
-        readerContentRef.value?.syncEpubResources?.(resources);
+        readerContentRef.value?.syncResources?.(resources);
       } else {
         await chapterLoader.loadCurrentAndAdjacent(2);
         await nextTick();
@@ -647,7 +647,7 @@ export function useReaderEngine(
     }
     const resources = content?.resources || [];
     currentChapterResources.value = resources;
-    readerContentRef.value?.syncEpubResources?.(resources);
+    readerContentRef.value?.syncResources?.(resources);
     await pagination.paginate(readerStore.currentChapter!.id, { html, resources });
   }
 
@@ -747,7 +747,7 @@ export function useReaderEngine(
         }
         const resources = content?.resources || [];
         currentChapterResources.value = resources;
-        readerContentRef.value?.syncEpubResources?.(resources);
+        readerContentRef.value?.syncResources?.(resources);
         await pagination.paginate(readerStore.currentChapter.id, { html, resources });
       } else {
         await chapterLoader.loadCurrentAndAdjacent(2);

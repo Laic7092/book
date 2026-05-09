@@ -33,8 +33,8 @@ const {
   isReady,
   initIframe,
   updateContent,
-  updateEpubResources,
-  clearEpubResources,
+  syncResources,
+  clearSyncedResources,
   getArticle,
   getDocument,
   scrollToChapter,
@@ -137,7 +137,7 @@ watch(
   () => props.epubResources,
   (resources) => {
     if (resources) {
-      updateEpubResources(resources);
+      syncResources(resources);
     }
   },
 );
@@ -208,7 +208,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   cleanup();
-  clearEpubResources();
+  clearSyncedResources();
   resizeCleanup?.();
   if (columnMeasureTimer) clearTimeout(columnMeasureTimer);
 });
@@ -218,7 +218,7 @@ defineExpose({
   getArticle,
   scrollToChapter,
   restoreScrollPosition,
-  syncEpubResources: updateEpubResources,
+  syncResources,
 });
 </script>
 
