@@ -110,4 +110,4 @@ var e={light:{background:`#ffffff`,text:`#333333`},dark:{background:`#1a1a1a`,te
       height: ${t}px;
       overflow: visible;
     }
-  `}function a(e){return{theme:t(e.theme,e.contrast),base:n(),typography:r(e)}}export{r as i,i as n,t as r,a as t};
+  `}export{r as i,i as n,t as r,n as t};
