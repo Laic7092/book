@@ -6,9 +6,15 @@ import { useUIStore } from "./stores/ui";
 import { currentRoute, navigate } from "./router";
 
 const ReaderView = defineAsyncComponent(() => import("./components/ReaderView.vue"));
+const FixedLayoutView = defineAsyncComponent(() => import("./components/FixedLayoutView.vue"));
 
 const readerStore = useReaderStore();
 const uiStore = useUIStore();
+
+const isFixedLayout = computed(() => {
+  const fmt = readerStore.currentBook?.format;
+  return fmt === "pdf" || fmt === "cbz";
+});
 
 watch(
   () => ({ name: currentRoute.name, bookId: currentRoute.params.bookId }),
@@ -38,7 +44,11 @@ watch(
   <Transition name="page">
     <Bookshelf v-if="currentRoute.name !== 'reader'" key="bookshelf" />
     <template v-else key="reader">
-      <ReaderView v-if="readerStore.currentBook" :book="readerStore.currentBook" />
+      <FixedLayoutView
+        v-if="readerStore.currentBook && isFixedLayout"
+        :book="readerStore.currentBook"
+      />
+      <ReaderView v-else-if="readerStore.currentBook" :book="readerStore.currentBook" />
       <div v-else class="reader-loading" />
     </template>
   </Transition>
