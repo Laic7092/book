@@ -9,8 +9,8 @@
  * 4. epub-style     → EPUB 资源样式（动态注入）
  */
 
-import type { ReaderSettings } from "../core/types";
-import { THEME_COLORS } from "../core/types";
+import type { ReaderSettings } from "../plugins/settings/types";
+import { THEME_COLORS } from "../plugins/settings/types";
 
 // ============================================================
 // 独立样式生成函数（按需调用）

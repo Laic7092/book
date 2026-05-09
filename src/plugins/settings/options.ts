@@ -1,4 +1,23 @@
-// Font options for settings UI
+// Theme options
+export const THEME_OPTIONS = [
+  { label: "Light", value: "light", desc: "Easy on battery" },
+  { label: "Dark", value: "dark", desc: "Night reading" },
+  { label: "Sepia", value: "sepia", desc: "Paper-like comfort" },
+] as const;
+
+// Reading mode options
+export const SCROLL_MODE_OPTIONS = [
+  { label: "Vertical", value: "vertical", desc: "Continuous scroll" },
+  { label: "Pagination", value: "pagination", desc: "Page by page" },
+] as const;
+
+// Pagination animation options
+export const ANIMATION_OPTIONS = [
+  { label: "Slide", value: "slide", desc: "Smooth slide" },
+  { label: "Fade", value: "fade", desc: "Fade transition" },
+] as const;
+
+// Font options for typography settings UI
 export const FONT_OPTIONS = [
   { label: "Literata", value: "Literata, Georgia, serif", preview: "Literata" },
   { label: "Cormorant", value: "Cormorant, Georgia, serif", preview: "Cormorant" },
@@ -9,13 +28,6 @@ export const FONT_OPTIONS = [
   },
   { label: "System", value: "system-ui, -apple-system, sans-serif", preview: "system-ui" },
   { label: "Mono", value: "JetBrains Mono, Consolas, monospace", preview: "JetBrains Mono" },
-] as const;
-
-// Theme options
-export const THEME_OPTIONS = [
-  { label: "Light", value: "light", desc: "Easy on battery" },
-  { label: "Dark", value: "dark", desc: "Night reading" },
-  { label: "Sepia", value: "sepia", desc: "Paper-like comfort" },
 ] as const;
 
 // Contrast options for dark mode
@@ -30,18 +42,6 @@ export const TEXT_ALIGN_OPTIONS = [
   { label: "Left", value: "left" },
   { label: "Center", value: "center" },
   { label: "Justify", value: "justify" },
-] as const;
-
-// Reading mode options
-export const SCROLL_MODE_OPTIONS = [
-  { label: "Vertical", value: "vertical", desc: "Continuous scroll" },
-  { label: "Pagination", value: "pagination", desc: "Page by page" },
-] as const;
-
-// Pagination animation options
-export const ANIMATION_OPTIONS = [
-  { label: "Slide", value: "slide", desc: "Smooth slide" },
-  { label: "Fade", value: "fade", desc: "Fade transition" },
 ] as const;
 
 // Size presets

@@ -1,10 +1,5 @@
 import { ref, type Ref } from "vue";
-import type { ReaderSettings } from "../core/types";
-import {
-  generateIframeStyles,
-  generateThemeCSS,
-  generateTypographyCSS,
-} from "../reader-engine/reader-styles";
+import { generateBaseCSS } from "../reader-engine/reader-styles";
 import {
   type ResourceInfo,
   injectResources,
@@ -12,7 +7,6 @@ import {
 } from "../reader-engine/iframe-resources";
 
 export interface IframeRendererOptions {
-  settings: ReaderSettings;
   isPaginationMode: boolean;
 }
 
@@ -22,14 +16,13 @@ export interface IframeLinkClickEvent {
 }
 
 /**
- * Iframe 渲染器 composable（纯渲染，不处理手势/滚动）
+ * Iframe renderer composable.
  *
- * iframe 内部样式结构:
- * - <style id="theme-style"> 主题颜色变量
- * - <style id="base-style"> 基础重置
- * - <style id="typography-style"> 排版设置
- * - <style id="epub-style"> EPUB 资源样式
- * - <style id="pagination-style"> 分页列布局
+ * iframe internal style structure:
+ * - <style id="base-style">       — constant reset styles
+ * - <style id="epub-style">       — EPUB resource styles
+ * - <style id="pagination-style"> — pagination column layout
+ * - <style id="plugin-*">         — plugin-injected styles (theme, typography via CssAPI)
  */
 export function useIframeRenderer(
   iframeRef: Ref<HTMLIFrameElement | null>,
@@ -53,7 +46,7 @@ export function useIframeRenderer(
     iframeDoc = iframe.contentDocument || iframe.contentWindow?.document || null;
     if (!iframeDoc) return;
 
-    const styles = generateIframeStyles(options.value.settings);
+    const baseCSS = generateBaseCSS();
 
     const linkHandlerScript = onLinkClick
       ? `<script>
@@ -78,9 +71,7 @@ export function useIframeRenderer(
       <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-        <style id="theme-style">${styles.theme}</style>
-        <style id="base-style">${styles.base}</style>
-        <style id="typography-style">${styles.typography}</style>
+        <style id="base-style">${baseCSS}</style>
         <style id="epub-style"></style>
         <style id="pagination-style"></style>
         ${linkHandlerScript}
@@ -100,24 +91,6 @@ export function useIframeRenderer(
   function updateContent(html: string) {
     if (!iframeDoc?.body) return;
     iframeDoc.body.innerHTML = html;
-  }
-
-  function updateStyles() {
-    if (!iframeDoc) return;
-
-    const themeStyle = iframeDoc.getElementById("theme-style");
-    const typographyStyle = iframeDoc.getElementById("typography-style");
-
-    if (themeStyle) {
-      themeStyle.textContent = generateThemeCSS(
-        options.value.settings.theme,
-        options.value.settings.contrast,
-      );
-    }
-
-    if (typographyStyle) {
-      typographyStyle.textContent = generateTypographyCSS(options.value.settings);
-    }
   }
 
   function updateEpubResources(elements: HTMLElement[]): void {
@@ -169,7 +142,6 @@ export function useIframeRenderer(
     isReady,
     initIframe,
     updateContent,
-    updateStyles,
     updateEpubResources,
     clearEpubResources,
     getArticle,

@@ -1,7 +1,7 @@
-import type { ReaderSettings } from "../../core/types";
+import type { ReaderSettings } from "./types";
 import {
-  generateIframeStyles,
   generateThemeCSS,
+  generateBaseCSS,
   generateTypographyCSS,
 } from "../../reader-engine/reader-styles";
 
@@ -35,7 +35,10 @@ export function createPreviewIframe(
     };
   }
 
-  const styles = generateIframeStyles(settings);
+  const themeCSS = generateThemeCSS(settings.theme, settings.contrast);
+  const baseCSS = generateBaseCSS();
+  const typographyCSS = generateTypographyCSS(settings);
+
   doc.open();
   doc.write(`
     <!DOCTYPE html>
@@ -43,9 +46,9 @@ export function createPreviewIframe(
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-      <style id="theme-style">${styles.theme}</style>
-      <style id="base-style">${styles.base}</style>
-      <style id="typography-style">${styles.typography}</style>
+      <style id="theme-style">${themeCSS}</style>
+      <style id="base-style">${baseCSS}</style>
+      <style id="typography-style">${typographyCSS}</style>
     </head>
     <body class="reader-content vertical-content">
       <h2 class="chapter-heading">Preview</h2>

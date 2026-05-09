@@ -9,11 +9,12 @@ import {
   registeredFooterContents,
   registeredBookshelfWidgets,
   registeredToolbarItems,
+  registeredHeaderActions,
   registeredContentTransformers,
   dynamicCapabilities,
   type TrackedContext,
 } from "./context";
-import type { ContentTransformer, SearchApi, ToolbarItem } from "./types";
+import type { ContentTransformer, SearchApi, ToolbarItem, HeaderAction } from "./types";
 import type { BookParser } from "../core/types";
 
 // ── Internal state ──
@@ -319,6 +320,10 @@ export function getBookshelfWidgets(): Component[] {
 
 export function getToolbarItems(): ToolbarItem[] {
   return [...registeredToolbarItems.value];
+}
+
+export function getHeaderActions(): HeaderAction[] {
+  return [...registeredHeaderActions.value];
 }
 
 // ── Capability collectors ──

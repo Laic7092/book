@@ -2,11 +2,8 @@
 import type { Chapter } from "../../core/types";
 import TableOfContents from "./TableOfContents.vue";
 import { computed } from "vue";
-import { useSettingsStore } from "../../stores/settings";
 import { getModalComponents, pluginStateVersion } from "../../plugins/registry";
 
-const settingsStore = useSettingsStore();
-const themeClass = computed(() => `theme-${settingsStore.settings.theme}`);
 const pluginModals = computed(() => {
   void pluginStateVersion.value;
   return getModalComponents();
@@ -31,7 +28,7 @@ function handleClose() {
 <template>
   <Teleport to="body">
     <div v-if="modalType" class="modal-overlay" @click.stop="handleClose">
-      <div class="modal-content modal-panel" :class="themeClass" @click.stop>
+      <div class="modal-content modal-panel" @click.stop>
         <!-- Core: Table of Contents -->
         <TableOfContents
           v-if="modalType === 'toc'"

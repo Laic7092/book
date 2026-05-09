@@ -6,12 +6,14 @@ import {
   MARGIN_PRESETS,
   TEXT_ALIGN_OPTIONS,
   CONTRAST_OPTIONS,
-} from "../../config/settings-options";
+} from "./options";
 import { createPreviewIframe, type PreviewIframe } from "./preview-iframe";
-import { getTypographyReaderHost } from "./index";
+import { getSettingsState } from "./index";
+import { DEFAULT_SETTINGS } from "./defaults";
 
-const host = getTypographyReaderHost()!;
-const settings = host.getSettings();
+const state = getSettingsState();
+if (!state) throw new Error("TypographyPanel: settings plugin not initialized");
+const settings = state.settings;
 
 const emit = defineEmits<{
   (e: "close"): void;
@@ -48,17 +50,17 @@ onUnmounted(() => {
 });
 
 function resetSettings() {
-  host.updateSettings({
-    fontSize: 18,
-    fontFamily: "Literata, Georgia, serif",
-    lineHeight: 1.6,
-    theme: "light",
-    margin: 24,
-    letterSpacing: 0,
-    paragraphSpacing: 1.2,
-    textAlign: "left",
-    contrast: "normal",
-    customTypography: false,
+  state.update({
+    fontSize: DEFAULT_SETTINGS.fontSize,
+    fontFamily: DEFAULT_SETTINGS.fontFamily,
+    lineHeight: DEFAULT_SETTINGS.lineHeight,
+    theme: DEFAULT_SETTINGS.theme,
+    margin: DEFAULT_SETTINGS.margin,
+    letterSpacing: DEFAULT_SETTINGS.letterSpacing,
+    paragraphSpacing: DEFAULT_SETTINGS.paragraphSpacing,
+    textAlign: DEFAULT_SETTINGS.textAlign,
+    contrast: DEFAULT_SETTINGS.contrast,
+    customTypography: DEFAULT_SETTINGS.customTypography,
   });
 }
 </script>
@@ -93,7 +95,7 @@ function resetSettings() {
           </label>
           <button
             :class="['toggle-switch', { active: settings.customTypography }]"
-            @click="host.updateSettings({ customTypography: !settings.customTypography })"
+            @click="state.update({ customTypography: !settings.customTypography })"
             :aria-checked="settings.customTypography"
             role="switch"
           >
@@ -127,7 +129,7 @@ function resetSettings() {
       </div>
 
       <!-- 排版设置（受开关控制） -->
-      <div :class="['typography-group', { disabled: !settings.customTypography }]">
+      <div class="typography-group">
         <!-- 字体 -->
         <div v-if="settings.customTypography" class="setting-row">
           <label class="setting-label">字体</label>
@@ -136,7 +138,7 @@ function resetSettings() {
               v-for="font in FONT_OPTIONS"
               :key="font.value"
               :class="['font-btn', { active: settings.fontFamily.includes(font.value) }]"
-              @click="host.updateSettings({ fontFamily: font.value })"
+              @click="state.update({ fontFamily: font.value })"
               :style="{ fontFamily: font.preview || font.value }"
             >
               {{ font.label }}
@@ -155,7 +157,7 @@ function resetSettings() {
               v-for="height in LINE_HEIGHT_PRESETS"
               :key="height"
               :class="['lh-btn', { active: Math.abs(settings.lineHeight - height) < 0.05 }]"
-              @click="host.updateSettings({ lineHeight: height })"
+              @click="state.update({ lineHeight: height })"
             >
               {{ height }}
             </button>
@@ -173,7 +175,7 @@ function resetSettings() {
               v-for="margin in MARGIN_PRESETS"
               :key="margin"
               :class="['margin-btn', { active: settings.margin === margin }]"
-              @click="host.updateSettings({ margin: margin })"
+              @click="state.update({ margin: margin })"
             >
               {{ margin }}
             </button>
@@ -188,7 +190,7 @@ function resetSettings() {
               v-for="align in TEXT_ALIGN_OPTIONS"
               :key="align.value"
               :class="['align-btn', { active: settings.textAlign === align.value }]"
-              @click="host.updateSettings({ textAlign: align.value })"
+              @click="state.update({ textAlign: align.value })"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                 <rect v-if="align.value === 'left'" x="3" y="5" width="18" height="2" />
@@ -219,7 +221,7 @@ function resetSettings() {
               v-for="option in CONTRAST_OPTIONS"
               :key="option.value"
               :class="['contrast-btn', { active: settings.contrast === option.value }]"
-              @click="host.updateSettings({ contrast: option.value })"
+              @click="state.update({ contrast: option.value })"
             >
               {{ option.label }}
             </button>
@@ -239,9 +241,7 @@ function resetSettings() {
             step="0.01"
             :value="settings.letterSpacing || 0"
             @input="
-              host.updateSettings({
-                letterSpacing: Number(($event.target as HTMLInputElement).value),
-              })
+              state.update({ letterSpacing: Number(($event.target as HTMLInputElement).value) })
             "
             class="range-input"
           />
@@ -260,9 +260,7 @@ function resetSettings() {
             step="0.1"
             :value="settings.paragraphSpacing || 1.2"
             @input="
-              host.updateSettings({
-                paragraphSpacing: Number(($event.target as HTMLInputElement).value),
-              })
+              state.update({ paragraphSpacing: Number(($event.target as HTMLInputElement).value) })
             "
             class="range-input"
           />
@@ -457,12 +455,6 @@ function resetSettings() {
   transition:
     opacity 200ms ease,
     transform 200ms ease;
-}
-
-.typography-group.disabled {
-  opacity: 0.5;
-  pointer-events: none;
-  filter: grayscale(0.3);
 }
 
 /* Font options */

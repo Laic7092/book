@@ -68,8 +68,8 @@ body {
   --transition-base: 300ms ease;
 }
 
-/* Modal theme styles - for Teleport modals that can't inherit from reader container */
-.modal-content.theme-light {
+/* Modal theme styles - driven by body class set by settings plugin's CssAPI */
+body.theme-light .modal-content {
   --modal-bg: #fdfcfb;
   --modal-text: #1f1a17;
   --border: #e6e2d8;
@@ -80,7 +80,7 @@ body {
   --bg-elevated: #ffffff;
 }
 
-.modal-content.theme-dark {
+body.theme-dark .modal-content {
   --modal-bg: #221f1c;
   --modal-text: #e8e4de;
   --border: #3d3630;
@@ -91,7 +91,7 @@ body {
   --bg-elevated: #2a2622;
 }
 
-.modal-content.theme-sepia {
+body.theme-sepia .modal-content {
   --modal-bg: #f5f0e6;
   --modal-text: #3d352a;
   --border: #c9bfa8;

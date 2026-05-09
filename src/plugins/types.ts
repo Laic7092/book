@@ -1,6 +1,7 @@
 import type { Component, App } from "vue";
 import type { Pinia } from "pinia";
-import type { BookParser, ReaderSettings, SearchResult } from "../core/types";
+import type { BookParser, SearchResult } from "../core/types";
+import type { ReaderSettings } from "./settings/types";
 import type { ReaderHost } from "../core/reader-host";
 
 // ── Search API (defined here so core doesn't need to know about search) ──
@@ -56,6 +57,29 @@ export interface FooterAction {
   order: number;
 }
 
+/**
+ * Header toolbar action declared by a plugin.
+ * ReaderHeader builds its buttons from these dynamically.
+ */
+export interface HeaderAction {
+  id: string;
+  order: number;
+  icon: string;
+  label: string;
+  onClick: () => void;
+}
+
+// ── CSS injection API ──
+
+export interface CssAPI {
+  /** Set theme class on document.body + .reader-view-container. Auto-cleaned on teardown. */
+  setTheme(theme: string): void;
+  /** Inject or update a <style> element in the reader iframe. */
+  injectIframeStyle(id: string, css: string): void;
+  /** Remove an injected <style> from the reader iframe. */
+  removeIframeStyle(id: string): void;
+}
+
 // ── PluginContext types ──
 
 export interface PluginStorageAdapter {
@@ -81,6 +105,8 @@ export interface UISlots {
   registerBookshelfWidget(component: Component): void;
   /** Register an item in the reader right-edge toolbar (e.g. auto-read, TTS). */
   registerToolbarItem(item: ToolbarItem): void;
+  /** Register an action button in the reader header (e.g. settings gear). */
+  registerHeaderAction(action: HeaderAction): void;
 }
 
 export interface ContentTransformer {
@@ -110,6 +136,12 @@ export interface PluginContext {
   registerContentTransformer(transformer: ContentTransformer): void;
   /** Navigate to a route. */
   navigate: (url: string, replace?: boolean) => void;
+  /** CSS injection for themes, typography, etc. Auto-cleaned on teardown. */
+  css: CssAPI;
+  /** Open a modal by name (delegates to uiStore). */
+  openModal: (name: string) => void;
+  /** Close the current modal. */
+  closeModal: () => void;
 }
 
 export interface PluginBootstrap {

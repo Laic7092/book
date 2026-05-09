@@ -1,9 +1,8 @@
 import type { ComputedRef } from "vue";
-import type { Chapter, ReaderSettings } from "./types";
+import type { Chapter } from "./types";
 
 /**
  * Host API that ReaderView exposes to plugins.
- * Merged from ReaderHost + ReaderNavigation (P0).
  */
 export interface ReaderHost {
   // ── Document access ──
@@ -22,9 +21,9 @@ export interface ReaderHost {
   getCurrentBookId(): string | undefined;
   isPaginationMode: ComputedRef<boolean>;
 
-  // ── Settings (delegates to settings store) ──
-  getSettings(): ComputedRef<ReaderSettings>;
-  updateSettings(partial: Partial<ReaderSettings>): void;
+  // ── Render mode control ──
+  setScrollMode(mode: "vertical" | "pagination"): void;
+  setPageMargin(margin: number): void;
 
   // ── Actions ──
   openModal(name: string): void;

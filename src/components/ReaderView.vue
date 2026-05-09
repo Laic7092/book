@@ -10,7 +10,6 @@ import {
 } from "vue";
 import { useReaderStore } from "../stores/reader";
 import { useUIStore } from "../stores/ui";
-import { useSettingsStore } from "../stores/settings";
 import { usePagination, useChapterLoader, useNavigationStack } from "../composables";
 import { ReaderHeader, ReaderFooter, ReaderContent, ReaderToolbar } from "../components/reader";
 import { ModalWrapper } from "../components/modals";
@@ -23,6 +22,7 @@ import { registerReaderHost, unregisterReaderHost } from "../core/reader-host";
 import type { ReaderHost } from "../core/reader-host";
 import {
   getOverlayComponents,
+  getHeaderActions,
   pluginStateVersion,
   applyContentTransformers,
 } from "../plugins/registry";
@@ -41,7 +41,8 @@ function handleClose() {
 
 const readerStore = useReaderStore();
 const uiStore = useUIStore();
-const settingsStore = useSettingsStore();
+const scrollMode = ref<"vertical" | "pagination">("pagination");
+const pageMargin = ref(24);
 
 const readerContentRef = ref<ComponentInstance<typeof ReaderContent> | null>(null);
 
@@ -53,6 +54,12 @@ const currentChapterResources = ref<HTMLElement[]>([]);
 const overlayComponents = computed(() => {
   void pluginStateVersion.value;
   return getOverlayComponents();
+});
+
+// Header actions from enabled plugins
+const headerActions = computed(() => {
+  void pluginStateVersion.value;
+  return getHeaderActions();
 });
 
 // Cleanup registry
@@ -79,9 +86,7 @@ const currentChapterIndex = computed(() => {
   return readerStore.chapters.findIndex((c) => c.id === readerStore.currentChapter?.id);
 });
 
-const isPaginationMode = computed(
-  () => (settingsStore.settings.scrollMode || "vertical") === "pagination",
-);
+const isPaginationMode = computed(() => scrollMode.value === "pagination");
 
 const chapterProgress = computed(() => {
   if (isPaginationMode.value) {
@@ -210,11 +215,17 @@ const host: ReaderHost = {
     return readerStore.currentBook?.id;
   },
   isPaginationMode,
-  getSettings() {
-    return computed(() => settingsStore.settings);
+  setScrollMode(mode: "vertical" | "pagination") {
+    if (scrollMode.value === mode) return;
+    scrollMode.value = mode;
+    if (mode === "vertical" && readerStore.chapters.length > 0) {
+      chapterLoader.loadCurrentAndAdjacent(2);
+    } else if (mode === "pagination" && readerStore.currentChapter) {
+      reloadForPagination();
+    }
   },
-  updateSettings(partial) {
-    settingsStore.updateSettings(partial);
+  setPageMargin(margin: number) {
+    pageMargin.value = margin;
   },
   openModal(name: string) {
     uiStore.openModal(name);
@@ -775,47 +786,20 @@ async function navigateToCfiLocation(cfi: string, chapterId: string) {
   }
 }
 
-const updateThemeClass = () => {
-  const container = document.querySelector(".reader-view-container");
-  if (!container) return;
-  container.classList.remove("theme-light", "theme-dark", "theme-sepia");
-  container.classList.add(`theme-${settingsStore.settings.theme}`);
-  document.body.classList.remove("theme-light", "theme-dark", "theme-sepia");
-  document.body.classList.add(`theme-${settingsStore.settings.theme}`);
-};
-
-// Scroll mode: load surrounding chapters on chapter change
-// Watch for scroll mode changes
-watch(
-  () => settingsStore.settings.scrollMode,
-  async (newMode) => {
-    if (newMode === "vertical" && readerStore.chapters.length > 0) {
-      await chapterLoader.loadCurrentAndAdjacent(2);
-    } else if (newMode === "pagination" && readerStore.currentChapter) {
-      const content = await readerStore.getCurrentChapterContent();
-      let html = content?.html || "";
-      if (html && readerStore.currentBook) {
-        html = await applyContentTransformers(html, {
-          bookId: readerStore.currentBook.id,
-          chapterId: readerStore.currentChapter.id,
-        });
-      }
-      const resources = content?.resources || [];
-      currentChapterResources.value = resources;
-      readerContentRef.value?.syncEpubResources?.(resources);
-      await pagination.paginate(readerStore.currentChapter.id, { html, resources });
-    }
-  },
-);
-
-// Watch for theme changes
-watch(
-  () => settingsStore.settings.theme,
-  () => {
-    updateThemeClass();
-  },
-  { immediate: true },
-);
+async function reloadForPagination() {
+  const content = await readerStore.getCurrentChapterContent();
+  let html = content?.html || "";
+  if (html && readerStore.currentBook) {
+    html = await applyContentTransformers(html, {
+      bookId: readerStore.currentBook.id,
+      chapterId: readerStore.currentChapter!.id,
+    });
+  }
+  const resources = content?.resources || [];
+  currentChapterResources.value = resources;
+  readerContentRef.value?.syncEpubResources?.(resources);
+  await pagination.paginate(readerStore.currentChapter!.id, { html, resources });
+}
 
 // Watch for page changes in pagination mode to auto-save + emit event
 watch([() => pagination.currentPage.value, () => pagination.totalPages.value], ([page, total]) => {
@@ -847,8 +831,6 @@ function handleIframeReady() {
 
 // Lifecycle
 onMounted(async () => {
-  updateThemeClass();
-
   uiStore.showControls = true;
 
   isRestoring.value = true;
@@ -872,7 +854,6 @@ onMounted(async () => {
   } finally {
     isRestoring.value = false;
   }
-
   void pluginEvents.emit("reader:mounted", { bookId: props.book.id });
 });
 
@@ -899,19 +880,19 @@ onUnmounted(() => {
       :book-title="book.title"
       :chapter-title="readerStore.currentChapter?.title"
       :show-controls="uiStore.effectiveShowControls"
+      :header-actions="headerActions"
       @close="handleClose"
-      @open-settings="openModal('settings')"
     />
 
     <ReaderContent
       ref="readerContentRef"
       :content="displayContent"
-      :settings="settingsStore.settings"
       :is-pagination-mode="isPaginationMode"
       :scroll-offset="pagination.scrollOffset.value"
       :chapter-loading="chapterLoading"
       :loaded-chapters="transformedLoadedContent"
       :epub-resources="currentChapterResources"
+      :page-margin="pageMargin"
       :on-link-click="handleInternalLinkClick"
       :on-column-layout="handleColumnLayout"
       :on-chapters-changed="handleChaptersChanged"

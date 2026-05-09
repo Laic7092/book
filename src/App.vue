@@ -3,15 +3,12 @@ import { computed, watch, defineAsyncComponent } from "vue";
 import Bookshelf from "./components/Bookshelf.vue";
 import { useReaderStore } from "./stores/reader";
 import { useUIStore } from "./stores/ui";
-import { useSettingsStore } from "./stores/settings";
 import { currentRoute, navigate } from "./router";
 
 const ReaderView = defineAsyncComponent(() => import("./components/ReaderView.vue"));
 
 const readerStore = useReaderStore();
 const uiStore = useUIStore();
-const settingsStore = useSettingsStore();
-settingsStore.init();
 
 watch(
   () => ({ name: currentRoute.name, bookId: currentRoute.params.bookId }),

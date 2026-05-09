@@ -7,6 +7,8 @@ import type {
   UISlots,
   PluginBootstrap,
   FooterAction,
+  HeaderAction,
+  CssAPI,
   PluginEventMap,
   CapabilityMap,
   IEventBus,
@@ -16,6 +18,7 @@ import type {
 } from "./types";
 import { getReaderHost } from "../core/reader-host";
 import { navigate as routerNavigate } from "../router";
+import { useUIStore } from "../stores/ui";
 
 // ── PluginStorageAdapter implementation ──
 
@@ -91,6 +94,7 @@ export const registeredFooterContents = shallowRef<Component[]>([]);
 export const registeredBookshelfWidgets = shallowRef<Component[]>([]);
 export const registeredContentTransformers = shallowRef<ContentTransformer[]>([]);
 export const registeredToolbarItems = shallowRef<ToolbarItem[]>([]);
+export const registeredHeaderActions = shallowRef<HeaderAction[]>([]);
 
 export function createUISlots(): UISlots {
   return {
@@ -107,7 +111,8 @@ export function createUISlots(): UISlots {
       };
     },
     registerFooterAction(action: FooterAction) {
-      const actions = [...registeredFooterActions.value, action];
+      const existing = registeredFooterActions.value.filter((a) => a.id !== action.id);
+      const actions = [...existing, action];
       actions.sort((a, b) => a.order - b.order);
       registeredFooterActions.value = actions;
     },
@@ -118,9 +123,16 @@ export function createUISlots(): UISlots {
       registeredBookshelfWidgets.value = [...registeredBookshelfWidgets.value, component];
     },
     registerToolbarItem(item: ToolbarItem) {
-      const items = [...registeredToolbarItems.value, item];
+      const existing = registeredToolbarItems.value.filter((i) => i.id !== item.id);
+      const items = [...existing, item];
       items.sort((a, b) => a.order - b.order);
       registeredToolbarItems.value = items;
+    },
+    registerHeaderAction(action: HeaderAction) {
+      const existing = registeredHeaderActions.value.filter((a) => a.id !== action.id);
+      const actions = [...existing, action];
+      actions.sort((a, b) => a.order - b.order);
+      registeredHeaderActions.value = actions;
     },
   };
 }
@@ -190,6 +202,48 @@ export const pluginEvents = new EventBus<PluginEventMap>();
 
 // ── PluginContext factory ──
 
+// ── CssAPI implementation ──
+
+export function createCssAPI(): CssAPI {
+  let currentTheme: string | null = null;
+
+  return {
+    setTheme(theme: string) {
+      if (currentTheme) {
+        document.body.classList.remove(`theme-${currentTheme}`);
+        const container = document.querySelector(".reader-view-container");
+        if (container) {
+          container.classList.remove(`theme-${currentTheme}`);
+        }
+      }
+      document.body.classList.add(`theme-${theme}`);
+      const container = document.querySelector(".reader-view-container");
+      if (container) {
+        container.classList.add(`theme-${theme}`);
+      }
+      currentTheme = theme;
+    },
+    injectIframeStyle(id: string, css: string) {
+      const doc = getReaderHost()?.getDocument();
+      if (!doc) return;
+      const styleId = `plugin-${id}`;
+      let style = doc.getElementById(styleId);
+      if (!style) {
+        style = doc.createElement("style");
+        style.id = styleId;
+        doc.head.appendChild(style);
+      }
+      style.textContent = css;
+    },
+    removeIframeStyle(id: string) {
+      const doc = getReaderHost()?.getDocument();
+      if (!doc) return;
+      const style = doc.getElementById(`plugin-${id}`);
+      if (style) style.remove();
+    },
+  };
+}
+
 export function createPluginContext(id: string, bootstrap: PluginBootstrap): PluginContext {
   return {
     id,
@@ -203,6 +257,38 @@ export function createPluginContext(id: string, bootstrap: PluginBootstrap): Plu
     readerHost: () => getReaderHost(),
     registerContentTransformer,
     navigate: routerNavigate,
+    css: createCssAPI(),
+    openModal: (name) => {
+      const uiStore = useUIStore(bootstrap.pinia);
+      uiStore.openModal(name);
+    },
+    closeModal: () => {
+      const uiStore = useUIStore(bootstrap.pinia);
+      uiStore.closeModal();
+    },
+  };
+}
+
+function createTrackedCss(cleanupFns: (() => void | Promise<void>)[]): CssAPI {
+  const raw = createCssAPI();
+  const injectedStyles: string[] = [];
+
+  return {
+    setTheme(theme: string) {
+      raw.setTheme(theme);
+    },
+    injectIframeStyle(id: string, css: string) {
+      raw.injectIframeStyle(id, css);
+      if (!injectedStyles.includes(id)) {
+        injectedStyles.push(id);
+        cleanupFns.push(() => raw.removeIframeStyle(id));
+      }
+    },
+    removeIframeStyle(id: string) {
+      raw.removeIframeStyle(id);
+      const idx = injectedStyles.indexOf(id);
+      if (idx >= 0) injectedStyles.splice(idx, 1);
+    },
   };
 }
 
@@ -264,6 +350,14 @@ export function createTrackedContext(id: string, bootstrap: PluginBootstrap): Tr
         registeredToolbarItems.value = registeredToolbarItems.value.filter((i) => i.id !== item.id);
       });
     },
+    registerHeaderAction(action) {
+      rawUi.registerHeaderAction(action);
+      cleanupFns.push(() => {
+        registeredHeaderActions.value = registeredHeaderActions.value.filter(
+          (a) => a.id !== action.id,
+        );
+      });
+    },
   };
 
   const events: IEventBus<PluginEventMap> = {
@@ -308,6 +402,15 @@ export function createTrackedContext(id: string, bootstrap: PluginBootstrap): Tr
       trackedTransformers.push(t);
     },
     navigate: routerNavigate,
+    css: createTrackedCss(cleanupFns),
+    openModal: (name) => {
+      const uiStore = useUIStore(bootstrap.pinia);
+      uiStore.openModal(name);
+    },
+    closeModal: () => {
+      const uiStore = useUIStore(bootstrap.pinia);
+      uiStore.closeModal();
+    },
     async runCleanup() {
       const unsubResults = await Promise.allSettled(
         eventUnsubs.map((fn) => {

@@ -1,17 +1,16 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, nextTick, computed } from "vue";
-import type { ReaderSettings } from "../../core/types";
 import { useIframeRenderer } from "../../composables/useIframeRenderer";
 import { generatePaginationCSS } from "../../reader-engine/reader-styles";
 
 const props = defineProps<{
   content: string;
-  settings: ReaderSettings;
   isPaginationMode: boolean;
   scrollOffset?: number;
   chapterLoading?: boolean;
   loadedChapters?: Array<{ chapterId: string; title: string; content: string }>;
   epubResources?: HTMLElement[];
+  pageMargin?: number;
   onLinkClick?: (href: string) => void;
   onColumnLayout?: (data: {
     columnWidth: number;
@@ -27,7 +26,6 @@ const containerRef = ref<HTMLElement | null>(null);
 const iframeRef = ref<HTMLIFrameElement | null>(null);
 
 const rendererOptions = computed(() => ({
-  settings: props.settings,
   isPaginationMode: props.isPaginationMode,
 }));
 
@@ -35,7 +33,6 @@ const {
   isReady,
   initIframe,
   updateContent,
-  updateStyles,
   updateEpubResources,
   clearEpubResources,
   getArticle,
@@ -62,10 +59,10 @@ function injectColumnCSS() {
   if (!styleEl) return;
   const iframe = iframeRef.value;
   if (!iframe) return;
-  const margin = props.settings.margin || 24;
-  const cw = iframe.clientWidth - margin * 2;
-  const ch = iframe.clientHeight - margin * 2;
-  const gap = margin * 2;
+  const m = props.pageMargin ?? 24;
+  const cw = iframe.clientWidth - m * 2;
+  const ch = iframe.clientHeight - m * 2;
+  const gap = m * 2;
   styleEl.textContent = generatePaginationCSS(cw, ch, gap);
 }
 
@@ -77,83 +74,88 @@ function measureColumns() {
     requestAnimationFrame(() => {
       const iframe = iframeRef.value;
       if (!iframe) return;
-      const margin = props.settings.margin || 24;
-      const cw = iframe.getBoundingClientRect().width - margin * 2;
-      const gap = margin * 2;
-      const sw = doc.body.scrollWidth;
-      props.onColumnLayout?.({
-        columnWidth: cw,
-        gap,
-        scrollWidth: sw || cw,
-        iframeWidth: iframe.clientWidth,
-      });
-    });
-  }, 50);
-}
-
-function paginationUpdateContent(html: string) {
-  injectColumnCSS();
-  updateContent(html);
-  measureColumns();
-}
-
-onMounted(() => {
-  nextTick(() => {
-    if (iframeRef.value) {
-      initIframe();
-      if (props.isPaginationMode) {
-        paginationUpdateContent(props.content);
-      } else if (props.loadedChapters) {
-        const combinedContent = props.loadedChapters
-          .map(
-            (ch) =>
-              `<div data-chapter-id="${ch.chapterId}" class="chapter-container">${ch.content}</div>`,
-          )
-          .join("");
-        updateContent(combinedContent);
+      const m = props.pageMargin ?? 24;
+      const cw = iframe.clientWidth - m * 2;
+      const gap = m * 2;
+      const scrollWidth = doc.body.scrollWidth || 0;
+      const iframeWidth = iframe.clientWidth || 0;
+      if (cw > 0) {
+        props.onColumnLayout?.({ columnWidth: cw, gap, scrollWidth, iframeWidth });
       }
-      props.onIframeReady?.();
-    }
+    });
+  }, 150);
+}
 
-    if (containerRef.value) {
-      let isFirst = true;
-      resizeObserver = new ResizeObserver(() => {
-        if (isFirst) {
-          isFirst = false;
-          return;
-        }
-        if (props.isPaginationMode) {
-          injectColumnCSS();
-          measureColumns();
-        }
-      });
-      resizeObserver.observe(containerRef.value);
-    }
+function handleLoad() {
+  const doc = getDocument();
+  if (!doc) return;
+
+  injectColumnCSS();
+  measureColumns();
+
+  if (props.loadedChapters) {
+    updateContent(props.loadedChapters.map((ch) => ch.content).join(""));
+  }
+
+  doc.querySelectorAll<HTMLElement>("[data-chapter-id]").forEach((el) => {
+    el.style.display = "block";
   });
-});
+
+  props.onChaptersChanged?.();
+  props.onIframeReady?.();
+}
 
 watch(
-  () => props.isPaginationMode,
-  (isPagination) => {
-    const doc = getDocument();
-    if (!doc?.body) return;
-
-    const body = doc.body;
-    body.classList.toggle("vertical-content", !isPagination);
-
-    if (!isPagination) {
-      const styleEl = doc.getElementById("pagination-style");
-      if (styleEl) styleEl.textContent = "";
-      body.style.transform = "";
+  () => props.loadedChapters,
+  (chapters) => {
+    if (chapters?.length) {
+      updateContent(chapters.map((ch) => ch.content).join(""));
+      nextTick(() => {
+        injectColumnCSS();
+        measureColumns();
+        props.onChaptersChanged?.();
+      });
     }
   },
 );
 
 watch(
   () => props.content,
-  (newContent) => {
-    if (props.isPaginationMode && isReady.value && newContent) {
-      paginationUpdateContent(newContent);
+  (html) => {
+    if (html) {
+      updateContent(html);
+      nextTick(() => {
+        injectColumnCSS();
+        measureColumns();
+        props.onChaptersChanged?.();
+      });
+    }
+  },
+);
+
+watch(
+  () => props.epubResources,
+  (resources) => {
+    if (resources) {
+      updateEpubResources(resources);
+    }
+  },
+);
+
+watch([() => props.isPaginationMode, isReady], ([mode, ready]) => {
+  if (ready && mode) {
+    nextTick(injectColumnCSS);
+  }
+});
+
+watch(
+  () => props.pageMargin,
+  () => {
+    if (props.isPaginationMode && isReady.value) {
+      nextTick(() => {
+        injectColumnCSS();
+        measureColumns();
+      });
     }
   },
 );
@@ -169,156 +171,90 @@ watch(
   },
 );
 
-function syncChapters(chapters: Array<{ chapterId: string; title: string; content: string }>) {
-  if (props.isPaginationMode || !isReady.value) return;
+let resizeCleanup: (() => void) | null = null;
+
+function setupResizeObserver() {
+  if (!iframeRef.value) return;
   const doc = getDocument();
   if (!doc?.body) return;
 
-  const hasContainers = doc.querySelectorAll("[data-chapter-id]").length > 0;
-  if (hasContainers) {
-    const currentIds = new Map(chapters.map((ch) => [ch.chapterId, ch]));
+  resizeObserver = new ResizeObserver(() => {
+    injectColumnCSS();
+    measureColumns();
+  });
+  resizeObserver.observe(doc.body);
 
-    const existing = doc.querySelectorAll("[data-chapter-id]");
-    existing.forEach((el) => {
-      const id = el.getAttribute("data-chapter-id");
-      if (id && !currentIds.has(id)) {
-        el.remove();
-      }
-    });
+  resizeCleanup = () => {
+    resizeObserver?.disconnect();
+    resizeObserver = null;
+  };
+}
 
-    for (const ch of chapters) {
-      if (doc.querySelector(`[data-chapter-id="${ch.chapterId}"]`)) continue;
+onMounted(() => {
+  initIframe();
 
-      const html = `<div data-chapter-id="${ch.chapterId}" class="chapter-container">${ch.content}</div>`;
-
-      const next = chapters
-        .filter((c) => (c as any).order > (ch as any).order)
-        .find((c) => doc.querySelector(`[data-chapter-id="${c.chapterId}"]`));
-
-      if (next) {
-        const ref = doc.querySelector(`[data-chapter-id="${next.chapterId}"]`);
-        ref?.insertAdjacentHTML("beforebegin", html);
-      } else {
-        doc.body.insertAdjacentHTML("beforeend", html);
-      }
-    }
+  const doc = getDocument();
+  if (doc) {
+    handleLoad();
   } else {
-    const combined = chapters
-      .map(
-        (ch) =>
-          `<div data-chapter-id="${ch.chapterId}" class="chapter-container">${ch.content}</div>`,
-      )
-      .join("");
-    updateContent(combined);
+    const iframe = iframeRef.value;
+    if (iframe) {
+      iframe.addEventListener("load", handleLoad, { once: true });
+    }
   }
 
-  props.onChaptersChanged?.();
-}
-
-watch(() => props.loadedChapters, syncChapters);
-
-watch(
-  () => [
-    props.settings.fontSize,
-    props.settings.fontFamily,
-    props.settings.lineHeight,
-    props.settings.letterSpacing,
-    props.settings.textAlign,
-    props.settings.paragraphSpacing,
-    props.settings.customTypography,
-  ],
-  () => {
-    if (isReady.value) {
-      updateStyles();
-      if (props.isPaginationMode) {
-        nextTick(() => {
-          injectColumnCSS();
-          measureColumns();
-        });
-      }
-    }
-  },
-);
-
-watch(
-  () => [props.settings.theme, props.settings.contrast],
-  () => {
-    if (isReady.value) {
-      updateStyles();
-      if (props.isPaginationMode) {
-        nextTick(() => {
-          injectColumnCSS();
-          measureColumns();
-        });
-      }
-    }
-  },
-);
-
-function syncEpubResources(resources: HTMLElement[]) {
-  if (isReady.value) {
-    updateEpubResources(resources);
-  }
-}
+  setupResizeObserver();
+});
 
 onUnmounted(() => {
-  if (columnMeasureTimer) {
-    clearTimeout(columnMeasureTimer);
-    columnMeasureTimer = null;
-  }
-  if (resizeObserver) {
-    resizeObserver.disconnect();
-    resizeObserver = null;
-  }
-  clearEpubResources();
   cleanup();
+  clearEpubResources();
+  resizeCleanup?.();
+  if (columnMeasureTimer) clearTimeout(columnMeasureTimer);
 });
 
 defineExpose({
-  isReady,
-  getArticle,
   getDocument,
+  getArticle,
   scrollToChapter,
   restoreScrollPosition,
-  syncEpubResources,
-  syncChapters,
+  syncEpubResources: updateEpubResources,
 });
 </script>
 
 <template>
-  <main class="reader-view" :class="{ 'pagination-mode': isPaginationMode }" ref="containerRef">
+  <div ref="containerRef" class="reader-content-wrapper">
+    <div v-if="chapterLoading" class="chapter-loading-overlay" />
     <iframe
       ref="iframeRef"
       class="reader-iframe"
-      :class="{ 'iframe-fade-out': chapterLoading }"
-      :scrolling="isPaginationMode ? 'no' : undefined"
-      frameborder="0"
-    ></iframe>
-  </main>
+      title="Reader Content"
+      sandbox="allow-scripts allow-same-origin"
+      @load="handleLoad"
+    />
+  </div>
 </template>
 
 <style scoped>
-.reader-view {
-  min-height: 0;
+.reader-content-wrapper {
+  position: relative;
   flex: 1;
   overflow: hidden;
-  background-color: var(--reader-bg);
-  position: relative;
-  -webkit-overflow-scrolling: touch;
-  width: 100%;
-  max-width: 700px;
-  margin: auto;
+  contain: strict;
 }
 
 .reader-iframe {
+  display: block;
   width: 100%;
   height: 100%;
   border: none;
-  transition: opacity 0.35s ease;
 }
 
-.reader-iframe.iframe-fade-out {
-  opacity: 0;
-  transition: none;
+.chapter-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: var(--reader-bg, transparent);
+  cursor: wait;
 }
 </style>
