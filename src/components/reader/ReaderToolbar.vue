@@ -26,7 +26,7 @@ const toolbarItems = computed(() => {
   position: fixed;
   right: 16px;
   bottom: calc(env(safe-area-inset-bottom) + 80px);
-  z-index: 200;
+  z-index: var(--z-chrome);
   display: flex;
   flex-direction: column;
   align-items: center;

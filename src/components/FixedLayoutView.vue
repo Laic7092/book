@@ -479,7 +479,7 @@ onUnmounted(() => {
   position: fixed;
   top: 50%;
   transform: translateY(-50%);
-  z-index: 101;
+  z-index: var(--z-chrome);
   width: 36px;
   height: 36px;
   border-radius: 50%;
@@ -513,7 +513,7 @@ onUnmounted(() => {
 .fl-outline-overlay {
   position: fixed;
   inset: 0;
-  z-index: 200;
+  z-index: var(--z-chrome);
   background: rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(4px);
   display: flex;

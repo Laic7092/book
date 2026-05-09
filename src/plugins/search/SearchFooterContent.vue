@@ -105,7 +105,7 @@ const currentLabel = computed(() => {
   left: 50%;
   transform: translateX(-50%);
   bottom: 76px;
-  z-index: 150;
+  z-index: var(--z-overlay);
   transition: bottom 350ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -118,12 +118,9 @@ const currentLabel = computed(() => {
   align-items: center;
   gap: 2px;
   padding: 4px;
-  background: var(--bg-elevated, #fff);
   border: 1px solid var(--border-subtle, #e0e0e0);
   border-radius: 24px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
-  backdrop-filter: blur(12px) saturate(180%);
-  -webkit-backdrop-filter: blur(12px) saturate(180%);
 }
 
 .nav-btn {

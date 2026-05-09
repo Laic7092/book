@@ -411,7 +411,7 @@ watch(speed, (val) => {
   position: fixed;
   right: 72px;
   bottom: calc(env(safe-area-inset-bottom) + 80px);
-  z-index: 200;
+  z-index: var(--z-chrome);
   background: var(--bg-elevated, #fff);
   border: 1px solid var(--border-subtle, #e0e0e0);
   border-radius: 14px;

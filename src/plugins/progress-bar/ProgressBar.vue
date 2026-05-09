@@ -27,7 +27,7 @@ const progress = computed(() => {
   right: 0;
   height: 3px;
   background: var(--progress-track);
-  z-index: 101;
+  z-index: var(--z-chrome);
   pointer-events: none;
 }
 

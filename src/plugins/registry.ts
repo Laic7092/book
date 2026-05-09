@@ -6,7 +6,6 @@ import {
   registeredModals,
   registeredOverlays,
   registeredFooterActions,
-  registeredFooterContents,
   registeredBookshelfWidgets,
   registeredToolbarItems,
   registeredHeaderActions,
@@ -308,10 +307,6 @@ export function getOverlayComponents(): Record<string, Component> {
 
 export function getFooterActions(): FooterAction[] {
   return [...registeredFooterActions.value];
-}
-
-export function getFooterContents(): Component[] {
-  return [...registeredFooterContents.value];
 }
 
 export function getBookshelfWidgets(): Component[] {

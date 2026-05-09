@@ -208,7 +208,7 @@ function formatDate(ts: number) {
 <style scoped>
 .annotation-popover {
   position: fixed;
-  z-index: 1001;
+  z-index: var(--z-overlay);
   width: 280px;
   background: var(--modal-bg, #fff);
   border: 1px solid var(--border, #e5e7eb);

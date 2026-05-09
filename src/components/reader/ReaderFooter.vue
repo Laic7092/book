@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, nextTick } from "vue";
-import { getFooterActions, pluginStateVersion, getFooterContents } from "../../plugins/registry";
+import { getFooterActions, pluginStateVersion } from "../../plugins/registry";
 
 defineProps<{
   showControls: boolean;
@@ -33,11 +33,6 @@ const menuActions = computed(() => {
   return getFooterActions().filter((a) => a.position === "menu");
 });
 const hasMenuActions = computed(() => menuActions.value.length > 0);
-const footerContents = computed(() => {
-  void pluginStateVersion.value;
-  return getFooterContents();
-});
-
 function toggleMenu() {
   showMenu.value = !showMenu.value;
 }
@@ -77,9 +72,6 @@ async function openModal(modal: string) {
         </button>
       </div>
     </Transition>
-
-    <!-- Plugin footer content (e.g. search match nav) -->
-    <component v-for="(comp, i) in footerContents" :key="i" :is="comp" />
 
     <!-- Normal Mode -->
     <div class="footer-sections">
@@ -186,7 +178,7 @@ async function openModal(modal: string) {
   right: 0;
   background: var(--header-bg);
   border-top: 1px solid var(--border-subtle);
-  z-index: 100;
+  z-index: var(--z-chrome);
   opacity: 0;
   transform: translateY(100%);
   transition: all 350ms cubic-bezier(0.4, 0, 0.2, 1);

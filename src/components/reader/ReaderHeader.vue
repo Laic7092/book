@@ -66,7 +66,7 @@ const emit = defineEmits<{
   padding-top: max(12px, env(safe-area-inset-top, 12px));
   background: var(--header-bg);
   border-bottom: 1px solid var(--border-subtle);
-  z-index: 100;
+  z-index: var(--z-chrome);
   opacity: 0;
   transform: translateY(-100%);
   transition: all 350ms cubic-bezier(0.4, 0, 0.2, 1);

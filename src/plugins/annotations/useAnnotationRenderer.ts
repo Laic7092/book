@@ -1,6 +1,7 @@
 import type { Annotation } from "../../core/types";
 import { resolveCfiRange, compareCfi } from "../../utils/epub-cfi";
 import { hexToRgba } from "../../config/colors";
+import { useDocumentMarker } from "../../composables/useDocumentMarker";
 
 export interface SelectionInfo {
   rect: { top: number; left: number; bottom: number; right: number };
@@ -8,138 +9,74 @@ export interface SelectionInfo {
 }
 
 export function useAnnotationRenderer(getDocument: () => Document | null | undefined) {
+  const marker = useDocumentMarker(getDocument);
   let cleanupFns: (() => void)[] = [];
 
-  function removeSpans() {
-    const doc = getDocument();
-    if (!doc) return;
-    doc.querySelectorAll("[data-annotation-id]").forEach((el) => {
-      const parent = el.parentNode;
-      if (!parent) return;
-      while (el.firstChild) {
-        parent.insertBefore(el.firstChild, el);
-      }
-      el.remove();
-    });
+  function applyStyle(ann: Annotation, el: HTMLElement) {
+    if (ann.type === "highlight") {
+      el.style.backgroundColor = hexToRgba(ann.color, 0.35);
+      el.style.borderRadius = "2px";
+      el.style.textDecoration = "";
+    } else {
+      el.style.backgroundColor = "";
+      el.style.textDecoration = "underline";
+      el.style.textDecorationColor = ann.color;
+      el.style.textDecorationThickness = "2px";
+      el.style.textUnderlineOffset = "2px";
+    }
+    el.style.cursor = "pointer";
   }
 
   function applyToContent(annotations: Annotation[]) {
     const doc = getDocument();
     if (!doc) return;
 
-    // Collect currently rendered annotation IDs
-    const renderedIds = new Set<string>();
-    doc.querySelectorAll("[data-annotation-id]").forEach((el) => {
-      renderedIds.add(el.getAttribute("data-annotation-id")!);
-    });
     const targetIds = new Set(annotations.map((a) => a.id));
 
-    // Remove spans for annotations that were deleted
+    // Remove spans for deleted annotations
     doc.querySelectorAll("[data-annotation-id]").forEach((el) => {
       const id = el.getAttribute("data-annotation-id")!;
-      if (!targetIds.has(id)) {
-        const parent = el.parentNode;
-        if (parent) {
-          while (el.firstChild) {
-            parent.insertBefore(el.firstChild, el);
-          }
-          el.remove();
-        }
-      }
+      if (!targetIds.has(id)) marker.remove(id);
     });
 
-    // Update styles for existing annotations that may have changed
+    // Update styles for existing annotations
     for (const ann of annotations) {
-      if (renderedIds.has(ann.id)) {
-        const span = doc.querySelector(`[data-annotation-id="${ann.id}"]`) as HTMLElement | null;
-        if (span) {
-          if (ann.type === "highlight") {
-            span.style.backgroundColor = hexToRgba(ann.color, 0.35);
-            span.style.textDecoration = "";
-          } else {
-            span.style.backgroundColor = "";
-            span.style.textDecoration = "underline";
-            span.style.textDecorationColor = ann.color;
-            span.style.textDecorationThickness = "2px";
-            span.style.textUnderlineOffset = "2px";
-          }
-        }
-      }
+      const existing = doc.querySelector(`[data-annotation-id="${ann.id}"]`) as HTMLElement | null;
+      if (existing) applyStyle(ann, existing);
     }
 
-    // Only wrap new annotations — existing ones keep their spans (and split text
-    // nodes) intact so stored CFI offsets stay valid.
-    const toAdd = annotations.filter((a) => !renderedIds.has(a.id));
-    if (toAdd.length === 0) return;
+    // Add new annotations (reverse document order to avoid position shifting)
+    const renderedIds = new Set(
+      Array.from(doc.querySelectorAll("[data-annotation-id]")).map(
+        (el) => el.getAttribute("data-annotation-id")!,
+      ),
+    );
+    const toAdd = annotations
+      .filter((a) => !renderedIds.has(a.id))
+      .sort((a, b) => compareCfi(b.startCfi, a.startCfi));
 
-    // Sort in reverse document order so wrapping doesn't shift earlier positions
-    const sorted = [...toAdd].sort((a, b) => compareCfi(b.startCfi, a.startCfi));
-
-    for (const ann of sorted) {
+    for (const ann of toAdd) {
       const range = resolveCfiRange(ann.startCfi, ann.endCfi, doc.body);
       if (!range || range.collapsed) continue;
 
-      const wrapper = doc.createElement("span");
-      wrapper.setAttribute("data-annotation-id", ann.id);
-      wrapper.setAttribute("data-annotation-type", ann.type);
+      marker.add({
+        id: ann.id,
+        range,
+        attributes: {
+          "data-annotation-id": ann.id,
+          "data-annotation-type": ann.type,
+        },
+      });
 
-      if (ann.type === "highlight") {
-        wrapper.style.backgroundColor = hexToRgba(ann.color, 0.35);
-        wrapper.style.borderRadius = "2px";
-      } else {
-        wrapper.style.textDecoration = "underline";
-        wrapper.style.textDecorationColor = ann.color;
-        wrapper.style.textDecorationThickness = "2px";
-        wrapper.style.textUnderlineOffset = "2px";
-      }
-      wrapper.style.cursor = "pointer";
-
-      wrapRange(doc, range, wrapper);
+      // Apply annotation-specific styling
+      doc.querySelectorAll(`[data-annotation-id="${ann.id}"]`).forEach((el) => {
+        applyStyle(ann, el as HTMLElement);
+      });
     }
   }
 
-  function wrapRange(doc: Document, range: Range, wrapper: HTMLElement) {
-    if (range.collapsed) return;
-
-    // Collect text nodes that intersect the range.
-    // Handle the common single-text-node case directly to avoid TreeWalker
-    // edge cases when the range is rooted at a text node.
-    const textNodes: Text[] = [];
-    if (
-      range.startContainer === range.endContainer &&
-      range.startContainer.nodeType === Node.TEXT_NODE
-    ) {
-      textNodes.push(range.startContainer as Text);
-    } else {
-      const walker = doc.createTreeWalker(range.commonAncestorContainer, NodeFilter.SHOW_TEXT, {
-        acceptNode: (node) =>
-          range.intersectsNode(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT,
-      });
-      let node: Text | null;
-      while ((node = walker.nextNode() as Text | null)) {
-        if (node.textContent && node.textContent.length > 0) {
-          textNodes.push(node);
-        }
-      }
-    }
-
-    for (const textNode of textNodes) {
-      let startOffset = 0;
-      let endOffset = (textNode.textContent || "").length;
-
-      if (textNode === range.startContainer) startOffset = range.startOffset;
-      if (textNode === range.endContainer) endOffset = range.endOffset;
-      if (startOffset >= endOffset) continue;
-
-      textNode.splitText(endOffset);
-      const selectedNode = startOffset > 0 ? textNode.splitText(startOffset) : textNode;
-
-      if (selectedNode.textContent && selectedNode.textContent.length > 0) {
-        const span = wrapper.cloneNode() as HTMLElement;
-        selectedNode.parentNode!.insertBefore(span, selectedNode);
-        span.appendChild(selectedNode);
-      }
-    }
+  function removeSpans() {
+    marker.removeAll();
   }
 
   function setupListeners(handlers: {
@@ -233,6 +170,7 @@ export function useAnnotationRenderer(getDocument: () => Document | null | undef
   function cleanup() {
     cleanupFns.forEach((fn) => fn());
     cleanupFns = [];
+    marker.cleanup();
   }
 
   return { applyToContent, removeSpans, setupListeners, cleanup };

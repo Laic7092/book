@@ -1,29 +1,35 @@
-// Composable for search functionality in reader
-
 import { ref } from "vue";
 import { searchInBook } from "./engine";
 import type { SearchResult } from "../../core/types";
 import type { ReaderHost } from "../../core/reader-host";
 import { generateCfiFromCharOffset, resolveCfiRange } from "../../utils/epub-cfi";
+import { useDocumentMarker } from "../../composables/useDocumentMarker";
+
+const SEARCH_MARKER_ID = "search-temp";
 
 export function useReaderSearch(readerHost: () => ReaderHost | null) {
   const searchQuery = ref("");
   const searchResults = ref<SearchResult[]>([]);
   const hasHighlights = ref(false);
   const currentResultIndex = ref(-1);
-  let clearTempHighlight: (() => void) | null = null;
+  let marker: ReturnType<typeof useDocumentMarker> | null = null;
 
-  // ── Temp highlight helpers ──
+  function getMarker() {
+    if (!marker) {
+      marker = useDocumentMarker(() => readerHost()?.getDocument() ?? null);
+    }
+    return marker;
+  }
 
   function applyTempHighlight(
-    doc: Document,
+    _doc: Document,
     container: Element,
     position: number,
     textLength: number,
     spineIndex: number,
   ) {
-    clearTempHighlight?.();
-    clearTempHighlight = null;
+    const m = getMarker();
+    m.remove(SEARCH_MARKER_ID);
 
     const startCfi = generateCfiFromCharOffset(spineIndex, container, position);
     const endCfi = generateCfiFromCharOffset(spineIndex, container, position + textLength);
@@ -32,62 +38,15 @@ export function useReaderSearch(readerHost: () => ReaderHost | null) {
     const range = resolveCfiRange(startCfi, endCfi, container);
     if (!range || range.collapsed) return;
 
-    const marks: HTMLElement[] = [];
-
-    const textNodes: Text[] = [];
-    if (
-      range.startContainer === range.endContainer &&
-      range.startContainer.nodeType === Node.TEXT_NODE
-    ) {
-      textNodes.push(range.startContainer as Text);
-    } else {
-      const walker = doc.createTreeWalker(range.commonAncestorContainer, NodeFilter.SHOW_TEXT, {
-        acceptNode: (node) =>
-          range.intersectsNode(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT,
-      });
-      let node: Text | null;
-      while ((node = walker.nextNode() as Text | null)) {
-        if (node.textContent && node.textContent.length > 0) {
-          textNodes.push(node);
-        }
-      }
-    }
-
-    for (const textNode of textNodes) {
-      let startOffset = 0;
-      let endOffset = (textNode.textContent || "").length;
-
-      if (textNode === range.startContainer) startOffset = range.startOffset;
-      if (textNode === range.endContainer) endOffset = range.endOffset;
-      if (startOffset >= endOffset) continue;
-
-      textNode.splitText(endOffset);
-      const selectedNode = startOffset > 0 ? textNode.splitText(startOffset) : textNode;
-
-      if (selectedNode.textContent && selectedNode.textContent.length > 0) {
-        const mark = doc.createElement("mark");
-        mark.style.backgroundColor = "rgba(251, 191, 36, 0.45)";
-        mark.style.borderRadius = "2px";
-        mark.style.transition = "background-color 1.5s ease";
-        selectedNode.parentNode!.insertBefore(mark, selectedNode);
-        mark.appendChild(selectedNode);
-        marks.push(mark);
-      }
-    }
-
-    if (marks.length > 0) {
-      clearTempHighlight = () => {
-        for (const mark of marks) {
-          const parent = mark.parentNode;
-          if (parent) {
-            while (mark.firstChild) {
-              parent.insertBefore(mark.firstChild, mark);
-            }
-            mark.remove();
-          }
-        }
-      };
-    }
+    m.add({
+      id: SEARCH_MARKER_ID,
+      range,
+      style: {
+        backgroundColor: "rgba(251, 191, 36, 0.45)",
+        borderRadius: "2px",
+        transition: "background-color 1.5s ease",
+      },
+    });
   }
 
   // ── Search ──
@@ -99,8 +58,7 @@ export function useReaderSearch(readerHost: () => ReaderHost | null) {
       return;
     }
 
-    clearTempHighlight?.();
-    clearTempHighlight = null;
+    getMarker().remove(SEARCH_MARKER_ID);
     await clearHighlights();
 
     const host = readerHost();
@@ -117,22 +75,7 @@ export function useReaderSearch(readerHost: () => ReaderHost | null) {
   const clearHighlights = async () => {
     hasHighlights.value = false;
     currentResultIndex.value = -1;
-    clearTempHighlight?.();
-    clearTempHighlight = null;
-
-    const host = readerHost();
-    const doc = host?.getDocument();
-    const contentEl = doc?.querySelector(".chapter-body");
-    if (contentEl) {
-      const marks = contentEl.querySelectorAll("mark");
-      marks.forEach((mark) => {
-        const parent = mark.parentNode;
-        while (mark.firstChild) {
-          parent?.insertBefore(mark.firstChild, mark);
-        }
-        mark.remove();
-      });
-    }
+    getMarker().remove(SEARCH_MARKER_ID);
   };
 
   const goToNextMatch = () => {
@@ -199,7 +142,7 @@ export function useReaderSearch(readerHost: () => ReaderHost | null) {
     applyTempHighlight(doc, container, result.position, result.text.length, targetChapter.order);
 
     await new Promise((r) => setTimeout(r, 50));
-    const mark = container.querySelector("mark");
+    const mark = getMarker().getElement(SEARCH_MARKER_ID);
     if (mark) {
       if (host.isPaginationMode.value) {
         const page = findPageFromMark(host, mark);
@@ -216,8 +159,7 @@ export function useReaderSearch(readerHost: () => ReaderHost | null) {
   }
 
   const reset = () => {
-    clearTempHighlight?.();
-    clearTempHighlight = null;
+    getMarker().remove(SEARCH_MARKER_ID);
     searchQuery.value = "";
     searchResults.value = [];
     hasHighlights.value = false;

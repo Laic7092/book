@@ -38,14 +38,7 @@ function closeModal() {
 
 <template>
   <div class="reader-view-container">
-    <ReaderHeader
-      :book-title="book.title"
-      :chapter-title="readerStore.currentChapter?.title"
-      :show-controls="uiStore.effectiveShowControls"
-      :header-actions="engine.headerActions.value"
-      @close="handleClose"
-    />
-
+    <!-- ── Content layer (z: 0) ── -->
     <ReaderContent
       ref="readerContentRef"
       :content="engine.displayContent.value"
@@ -59,6 +52,18 @@ function closeModal() {
       :on-column-layout="engine.handleColumnLayout"
       :on-chapters-changed="engine.handleChaptersChanged"
       :on-iframe-ready="engine.handleIframeReady"
+    />
+
+    <!-- ── Overlay layer (z: 100) ── -->
+    <component v-for="(comp, name) in engine.overlayComponents.value" :key="name" :is="comp" />
+
+    <!-- ── Chrome layer (z: 200) ── -->
+    <ReaderHeader
+      :book-title="book.title"
+      :chapter-title="readerStore.currentChapter?.title"
+      :show-controls="uiStore.effectiveShowControls"
+      :header-actions="engine.headerActions.value"
+      @close="handleClose"
     />
 
     <ReaderFooter
@@ -82,7 +87,6 @@ function closeModal() {
       @open-modal="openModal"
     />
 
-    <!-- Navigation history back/forward -->
     <button
       v-show="uiStore.showControls && engine.navStack.canGoBack.value"
       class="history-btn history-back"
@@ -122,9 +126,6 @@ function closeModal() {
       </svg>
     </button>
 
-    <!-- Plugin overlay components -->
-    <component v-for="(comp, name) in engine.overlayComponents.value" :key="name" :is="comp" />
-
     <ReaderToolbar />
 
     <ModalWrapper
@@ -156,7 +157,7 @@ function closeModal() {
   position: fixed;
   top: 50%;
   transform: translateY(-50%);
-  z-index: 101;
+  z-index: var(--z-chrome);
   width: 40px;
   height: 40px;
   border-radius: 50%;

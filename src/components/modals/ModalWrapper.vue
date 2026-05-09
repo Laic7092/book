@@ -55,7 +55,7 @@ function handleClose() {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.55);
-  z-index: 200;
+  z-index: var(--z-chrome);
   display: flex;
   align-items: flex-end;
   justify-content: center;

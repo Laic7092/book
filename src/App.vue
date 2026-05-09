@@ -112,6 +112,11 @@ watch(
   --text-muted-sepia: #9a8a70;
   --border-color-sepia: #c9bfa8;
 
+  /* Z-axis layering: content → overlay → chrome */
+  --z-content: 0;
+  --z-overlay: 100;
+  --z-chrome: 200;
+
   /* Typography */
   --font-ui: "Instrument Sans", -apple-system, BlinkMacSystemFont, sans-serif;
   --font-display: "Cormorant", Georgia, serif;

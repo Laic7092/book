@@ -100,7 +100,6 @@ export interface UISlots {
   registerModal(name: string, component: Component): void;
   registerOverlay(name: string, component: Component): void;
   registerFooterAction(action: FooterAction): void;
-  registerFooterContent(component: Component): void;
   /** Register a widget rendered in the bookshelf (e.g. stats bar). */
   registerBookshelfWidget(component: Component): void;
   /** Register an item in the reader right-edge toolbar (e.g. auto-read, TTS). */
