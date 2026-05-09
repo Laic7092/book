@@ -190,9 +190,6 @@ const host: ReaderHost = {
   getDocument() {
     return readerContentRef.value?.getDocument?.() ?? null;
   },
-  getArticle() {
-    return readerContentRef.value?.getArticle?.() ?? null;
-  },
   async navigateToChapter(chapterId: string, targetPage?: number) {
     await handleSelectChapter(chapterId, targetPage ?? 0);
   },
@@ -202,14 +199,8 @@ const host: ReaderHost = {
   getCurrentChapter() {
     return readerStore.currentChapter ?? null;
   },
-  getCurrentCfi() {
-    return null;
-  },
   getChapters() {
     return readerStore.chapters;
-  },
-  getChapterTitle(chapterId: string) {
-    return readerStore.chapters.find((c) => c.id === chapterId)?.title ?? "Unknown Chapter";
   },
   getCurrentBookId() {
     return readerStore.currentBook?.id;

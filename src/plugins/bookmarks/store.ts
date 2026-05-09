@@ -130,7 +130,7 @@ export const useBookmarksStore = defineStore("bookmarks", {
       const chapter = host.getCurrentChapter();
       if (!chapter) return;
 
-      const article = host.getArticle();
+      const article = host.getDocument()?.body;
       if (!article) return;
 
       const bookId = host.getCurrentBookId();

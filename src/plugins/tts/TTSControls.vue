@@ -24,7 +24,7 @@ const SPEED_PERSIST_KEY = "tts_speed";
 function getChapterText(): string {
   const host = getTTSReaderHost();
   if (!host) return "";
-  const article = host.getArticle();
+  const article = host.getDocument()?.body;
   if (!article) return "";
   const clone = article.cloneNode(true) as HTMLElement;
   clone.querySelectorAll("script, style, nav, aside, [aria-hidden]").forEach((el) => el.remove());

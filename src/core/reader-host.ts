@@ -7,7 +7,6 @@ import type { Chapter } from "./types";
 export interface ReaderHost {
   // ── Document access ──
   getDocument(): Document | null;
-  getArticle(): HTMLElement | null;
 
   // ── Navigation ──
   navigateToChapter(chapterId: string, targetPage?: number): Promise<void>;
@@ -15,9 +14,7 @@ export interface ReaderHost {
 
   // ── State queries ──
   getCurrentChapter(): Chapter | null;
-  getCurrentCfi(): string | null;
   getChapters(): Chapter[];
-  getChapterTitle(chapterId: string): string;
   getCurrentBookId(): string | undefined;
   isPaginationMode: ComputedRef<boolean>;
 

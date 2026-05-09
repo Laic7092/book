@@ -96,7 +96,10 @@ export const registeredContentTransformers = shallowRef<ContentTransformer[]>([]
 export const registeredToolbarItems = shallowRef<ToolbarItem[]>([]);
 export const registeredHeaderActions = shallowRef<HeaderAction[]>([]);
 
-export function createUISlots(): UISlots {
+export function createUISlots(): Omit<
+  UISlots,
+  "openModal" | "setTheme" | "injectIframeStyle" | "removeIframeStyle"
+> {
   return {
     registerModal(name: string, component: Component) {
       registeredModals.value = {
@@ -245,27 +248,27 @@ export function createCssAPI(): CssAPI {
 }
 
 export function createPluginContext(id: string, bootstrap: PluginBootstrap): PluginContext {
+  const slots = createUISlots();
+  const css = createCssAPI();
   return {
-    id,
     storage: createPluginStorageAdapter(id),
     pinia: bootstrap.pinia,
-    app: bootstrap.app,
-    ui: createUISlots(),
+    ui: {
+      ...slots,
+      openModal: (name) => {
+        const uiStore = useUIStore(bootstrap.pinia);
+        uiStore.openModal(name);
+      },
+      setTheme: (t) => css.setTheme(t),
+      injectIframeStyle: (id, c) => css.injectIframeStyle(id, c),
+      removeIframeStyle: (id) => css.removeIframeStyle(id),
+    },
     events: pluginEvents,
     capabilities: createCapabilitySlots(),
     onCleanup(_fn: () => void | Promise<void>) {},
     readerHost: () => getReaderHost(),
     registerContentTransformer,
     navigate: routerNavigate,
-    css: createCssAPI(),
-    openModal: (name) => {
-      const uiStore = useUIStore(bootstrap.pinia);
-      uiStore.openModal(name);
-    },
-    closeModal: () => {
-      const uiStore = useUIStore(bootstrap.pinia);
-      uiStore.closeModal();
-    },
   };
 }
 
@@ -302,6 +305,8 @@ export function createTrackedContext(id: string, bootstrap: PluginBootstrap): Tr
   const cleanupFns: (() => void | Promise<void>)[] = [];
   const eventUnsubs: (() => void)[] = [];
   const registeredCapKeys: { key: keyof CapabilityMap; value: unknown }[] = [];
+
+  const trackedCss = createTrackedCss(cleanupFns);
 
   const ui: UISlots = {
     registerModal(name, component) {
@@ -358,6 +363,13 @@ export function createTrackedContext(id: string, bootstrap: PluginBootstrap): Tr
         );
       });
     },
+    openModal: (name) => {
+      const uiStore = useUIStore(bootstrap.pinia);
+      uiStore.openModal(name);
+    },
+    setTheme: (t) => trackedCss.setTheme(t),
+    injectIframeStyle: (id, c) => trackedCss.injectIframeStyle(id, c),
+    removeIframeStyle: (id) => trackedCss.removeIframeStyle(id),
   };
 
   const events: IEventBus<PluginEventMap> = {
@@ -386,10 +398,8 @@ export function createTrackedContext(id: string, bootstrap: PluginBootstrap): Tr
   const trackedTransformers: ContentTransformer[] = [];
 
   return {
-    id,
     storage: createPluginStorageAdapter(id),
     pinia: bootstrap.pinia,
-    app: bootstrap.app,
     ui,
     events,
     capabilities,
@@ -402,15 +412,6 @@ export function createTrackedContext(id: string, bootstrap: PluginBootstrap): Tr
       trackedTransformers.push(t);
     },
     navigate: routerNavigate,
-    css: createTrackedCss(cleanupFns),
-    openModal: (name) => {
-      const uiStore = useUIStore(bootstrap.pinia);
-      uiStore.openModal(name);
-    },
-    closeModal: () => {
-      const uiStore = useUIStore(bootstrap.pinia);
-      uiStore.closeModal();
-    },
     async runCleanup() {
       const unsubResults = await Promise.allSettled(
         eventUnsubs.map((fn) => {

@@ -39,8 +39,8 @@ export const settingsPlugin: Plugin = {
 
     function syncToHost() {
       const s = state.settings.value;
-      ctx.css.setTheme(s.theme);
-      ctx.css.injectIframeStyle("typography", buildFullCSS(s));
+      ctx.ui.setTheme(s.theme);
+      ctx.ui.injectIframeStyle("typography", buildFullCSS(s));
       const host = ctx.readerHost();
       if (host) {
         host.setScrollMode(s.scrollMode ?? "pagination");
@@ -74,7 +74,7 @@ export const settingsPlugin: Plugin = {
       order: 0,
       icon: GEAR_ICON,
       label: "Settings",
-      onClick: () => ctx.openModal("settings"),
+      onClick: () => ctx.ui.openModal("settings"),
     });
 
     // Catch-up: if host already registered (reader mounted during init), sync now
@@ -84,8 +84,8 @@ export const settingsPlugin: Plugin = {
     watch(
       () => s.value.theme,
       (theme) => {
-        ctx.css.setTheme(theme);
-        ctx.css.injectIframeStyle("typography", buildFullCSS(s.value));
+        ctx.ui.setTheme(theme);
+        ctx.ui.injectIframeStyle("typography", buildFullCSS(s.value));
       },
     );
 
@@ -120,7 +120,7 @@ export const settingsPlugin: Plugin = {
         s.value.contrast,
       ],
       () => {
-        ctx.css.injectIframeStyle("typography", buildFullCSS(s.value));
+        ctx.ui.injectIframeStyle("typography", buildFullCSS(s.value));
       },
     );
 

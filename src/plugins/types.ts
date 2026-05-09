@@ -107,6 +107,14 @@ export interface UISlots {
   registerToolbarItem(item: ToolbarItem): void;
   /** Register an action button in the reader header (e.g. settings gear). */
   registerHeaderAction(action: HeaderAction): void;
+  /** Open a modal by name (delegates to uiStore). */
+  openModal(name: string): void;
+  /** Set theme class on document.body + .reader-view-container. Auto-cleaned on teardown. */
+  setTheme(theme: string): void;
+  /** Inject or update a <style> element in the reader iframe. Auto-cleaned on teardown. */
+  injectIframeStyle(id: string, css: string): void;
+  /** Remove an injected <style> from the reader iframe. */
+  removeIframeStyle(id: string): void;
 }
 
 export interface ContentTransformer {
@@ -117,10 +125,8 @@ export interface ContentTransformer {
 }
 
 export interface PluginContext {
-  id: string;
   storage: PluginStorageAdapter;
   pinia: Pinia;
-  app: App<Element>;
   ui: UISlots;
   events: IEventBus<PluginEventMap>;
   /** Register/unregister runtime capabilities. */
@@ -136,12 +142,6 @@ export interface PluginContext {
   registerContentTransformer(transformer: ContentTransformer): void;
   /** Navigate to a route. */
   navigate: (url: string, replace?: boolean) => void;
-  /** CSS injection for themes, typography, etc. Auto-cleaned on teardown. */
-  css: CssAPI;
-  /** Open a modal by name (delegates to uiStore). */
-  openModal: (name: string) => void;
-  /** Close the current modal. */
-  closeModal: () => void;
 }
 
 export interface PluginBootstrap {

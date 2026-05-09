@@ -41,7 +41,7 @@ const groupedByChapter = computed(() => {
     if (!group) {
       group = {
         chapterId: ann.chapterId,
-        title: host?.getChapterTitle(ann.chapterId) ?? "Unknown Chapter",
+        title: host?.getChapters().find((c) => c.id === ann.chapterId)?.title ?? "Unknown Chapter",
         annotations: [],
       };
       groups.push(group);
