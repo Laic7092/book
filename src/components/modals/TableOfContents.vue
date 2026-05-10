@@ -98,8 +98,6 @@ function setRef(el: HTMLElement | null, chapterId: string) {
 </template>
 
 <style scoped>
-@import "../../styles/modal-shared.css";
-
 .no-chapters {
   display: flex;
   align-items: center;

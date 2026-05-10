@@ -7,7 +7,11 @@ import { formatBookToast } from "../utils/toast";
 import { validateBookFile } from "../utils/validation";
 import type { Book } from "../core/types";
 import { ModalWrapper } from "./modals";
-import { getBookshelfWidgets, pluginStateVersion } from "../plugins/registry";
+import {
+  getBookshelfWidgets,
+  getBookshelfMenuActions,
+  pluginStateVersion,
+} from "../plugins/registry";
 import { loadPluginsFor } from "../plugins/loader";
 import { navigate } from "../router";
 
@@ -18,7 +22,7 @@ const emit = defineEmits<{
 const bookshelfStore = useBookshelfStore();
 const uiStore = useUIStore();
 
-function closePluginsModal() {
+function closeModal() {
   uiStore.activeModal = null;
 }
 
@@ -28,6 +32,11 @@ const viewMode = ref<"card" | "list">("card");
 const bookshelfWidgets = computed(() => {
   void pluginStateVersion.value;
   return getBookshelfWidgets();
+});
+
+const bookshelfMenuActions = computed(() => {
+  void pluginStateVersion.value;
+  return getBookshelfMenuActions();
 });
 
 // ── Rename state ──
@@ -492,6 +501,29 @@ onMounted(() => {
                     </svg>
                   </button>
                 </div>
+                <div v-if="bookshelfMenuActions.length" class="menu-divider"></div>
+                <button
+                  v-for="action in bookshelfMenuActions"
+                  :key="action.id"
+                  class="menu-item"
+                  @click="
+                    if (action.modal) uiStore.activeModal = action.modal;
+                    else action.onClick?.();
+                    closeMenu();
+                  "
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    v-html="action.icon"
+                  />
+                  <span>{{ action.label }}</span>
+                </button>
                 <div class="menu-divider"></div>
                 <button
                   class="menu-item"
@@ -985,12 +1017,8 @@ onMounted(() => {
       </div>
     </transition>
 
-    <!-- Plugins Panel -->
-    <ModalWrapper
-      v-if="uiStore.activeModal === 'plugins'"
-      modal-type="plugins"
-      @close="closePluginsModal"
-    />
+    <!-- Modal container (plugin modals: OPDS, stats, etc.) -->
+    <ModalWrapper :modal-type="uiStore.activeModal" @close="closeModal" />
 
     <!-- Folder assignment dropdown -->
     <div v-if="folderDropdownOpen" class="folder-dropdown" @click.stop>

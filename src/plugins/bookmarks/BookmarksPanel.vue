@@ -118,8 +118,6 @@ function formatDate(timestamp: number): string {
 </template>
 
 <style scoped>
-@import "../../styles/modal-shared.css";
-
 .bookmark-bar-fixed {
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-subtle);

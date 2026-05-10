@@ -14,10 +14,27 @@ export default defineConfig({
     }),
   ],
   base: "/book/",
+  server: {
+    proxy: {
+      "/api": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+      },
+    },
+  },
+  test: {
+    environment: "happy-dom",
+  },
   staged: {
     "*": "vp check --fix",
   },
-  lint: { options: { typeAware: true, typeCheck: true } },
+  lint: {
+    options: {
+      typeAware: true,
+      typeCheck: true,
+    },
+    ignorePatterns: ["server/**"],
+  },
   build: {
     rolldownOptions: {
       output: {

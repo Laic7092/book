@@ -1,5 +1,5 @@
 import { ref, type Component } from "vue";
-import type { Plugin, FooterAction, PluginBootstrap } from "./types";
+import type { Plugin, FooterAction, BookshelfMenuAction, PluginBootstrap } from "./types";
 import { STORES, dbPut, dbGet } from "../storage/db";
 import {
   createTrackedContext,
@@ -7,6 +7,7 @@ import {
   registeredOverlays,
   registeredFooterActions,
   registeredBookshelfWidgets,
+  registeredBookshelfMenuActions,
   registeredToolbarItems,
   registeredHeaderActions,
   registeredContentTransformers,
@@ -311,6 +312,10 @@ export function getFooterActions(): FooterAction[] {
 
 export function getBookshelfWidgets(): Component[] {
   return [...registeredBookshelfWidgets.value];
+}
+
+export function getBookshelfMenuActions(): BookshelfMenuAction[] {
+  return [...registeredBookshelfMenuActions.value];
 }
 
 export function getToolbarItems(): ToolbarItem[] {

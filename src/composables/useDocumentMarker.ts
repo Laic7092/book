@@ -32,7 +32,7 @@ export function useDocumentMarker(getDocument: () => Document | null | undefined
     if (options.style) {
       const style = wrapper.style as unknown as Record<string, string>;
       for (const [key, value] of Object.entries(options.style)) {
-        style[key] = String(value);
+        style[key] = String(value as unknown as string);
       }
     }
 
@@ -73,7 +73,7 @@ export function useDocumentMarker(getDocument: () => Document | null | undefined
     doc.querySelectorAll(`[data-marker-id="${id}"]`).forEach((el) => {
       const elStyle = (el as HTMLElement).style as unknown as Record<string, string>;
       for (const [key, value] of Object.entries(style)) {
-        elStyle[key] = String(value);
+        elStyle[key] = String(value as unknown as string);
       }
     });
   }

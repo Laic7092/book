@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted } from "vue";
+import ModalHeader from "../../components/modals/ModalHeader.vue";
 import {
   FONT_OPTIONS,
   LINE_HEIGHT_PRESETS,
@@ -67,23 +68,7 @@ function resetSettings() {
 
 <template>
   <div class="modal-content-inner">
-    <div class="modal-header">
-      <div class="header-title">
-        <h3>自定义排版</h3>
-      </div>
-      <button class="modal-close" @click="emit('close')">
-        <svg
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
-        >
-          <path d="M18 6L6 18M6 6l12 12" />
-        </svg>
-      </button>
-    </div>
+    <ModalHeader title="自定义排版" @close="emit('close')" />
 
     <div class="modal-body">
       <!-- 自定义排版开关 -->
@@ -271,43 +256,6 @@ function resetSettings() {
 </template>
 
 <style scoped>
-@import "../../styles/modal-shared.css";
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--modal-bg);
-  flex-shrink: 0;
-}
-
-.header-title h3 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--modal-text);
-}
-
-.modal-close {
-  padding: 6px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  cursor: pointer;
-  color: var(--text-secondary);
-  transition: all 150ms ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.modal-close:hover {
-  background: var(--hover-bg);
-  color: var(--modal-text);
-}
-
 .modal-body {
   padding: 16px 20px 24px;
 }
@@ -346,13 +294,13 @@ function resetSettings() {
   align-items: center;
   padding: 14px 16px;
   background: var(--bg-elevated, var(--modal-bg));
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-color);
   border-radius: 12px;
   transition: border-color 200ms ease;
 }
 
 .toggle-row:hover {
-  border-color: var(--accent);
+  border-color: var(--color-accent);
 }
 
 .toggle-label {
@@ -379,7 +327,7 @@ function resetSettings() {
   height: 26px;
   border: none;
   border-radius: 13px;
-  background: var(--border);
+  background: var(--border-color);
   cursor: pointer;
   transition: background 200ms ease;
   flex-shrink: 0;
@@ -390,7 +338,7 @@ function resetSettings() {
 }
 
 .toggle-switch.active {
-  background: var(--accent);
+  background: var(--color-accent);
 }
 
 .toggle-knob {
@@ -417,7 +365,7 @@ function resetSettings() {
   gap: 8px;
   width: 100%;
   padding: 12px;
-  border: 1px dashed var(--border);
+  border: 1px dashed var(--border-color);
   border-radius: 10px;
   background: transparent;
   cursor: pointer;
@@ -427,10 +375,10 @@ function resetSettings() {
 }
 
 .reset-btn:hover {
-  border-color: var(--accent);
+  border-color: var(--color-accent);
   border-style: solid;
-  color: var(--accent);
-  background: var(--accent-soft);
+  color: var(--color-accent);
+  background: var(--color-accent-soft);
 }
 
 /* Preview card */
@@ -470,7 +418,7 @@ function resetSettings() {
 .font-btn {
   flex: 1;
   padding: 10px 8px;
-  border: 1.5px solid var(--border);
+  border: 1.5px solid var(--border-color);
   border-radius: 8px;
   background: var(--modal-bg);
   cursor: pointer;
@@ -484,20 +432,20 @@ function resetSettings() {
 }
 
 .font-btn:hover {
-  border-color: var(--border);
-  background: var(--hover-bg);
+  border-color: var(--border-color);
+  background: var(--bg-secondary);
 }
 
 .font-btn.active {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
 }
 
 .lh-btn,
 .margin-btn {
   flex: 1;
   padding: 10px;
-  border: 1.5px solid var(--border);
+  border: 1.5px solid var(--border-color);
   border-radius: 8px;
   background: var(--modal-bg);
   cursor: pointer;
@@ -509,14 +457,14 @@ function resetSettings() {
 
 .lh-btn:hover,
 .margin-btn:hover {
-  border-color: var(--accent);
-  background: var(--hover-bg);
+  border-color: var(--color-accent);
+  background: var(--bg-secondary);
 }
 
 .lh-btn.active,
 .margin-btn.active {
-  border-color: var(--accent);
-  background: var(--accent);
+  border-color: var(--color-accent);
+  background: var(--color-accent);
   color: white;
 }
 
@@ -527,7 +475,7 @@ function resetSettings() {
   align-items: center;
   justify-content: center;
   padding: 10px;
-  border: 1.5px solid var(--border);
+  border: 1.5px solid var(--border-color);
   border-radius: 8px;
   background: var(--modal-bg);
   cursor: pointer;
@@ -538,14 +486,14 @@ function resetSettings() {
 
 .align-btn:hover,
 .contrast-btn:hover {
-  border-color: var(--border);
-  background: var(--hover-bg);
+  border-color: var(--border-color);
+  background: var(--bg-secondary);
 }
 
 .align-btn.active,
 .contrast-btn.active {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
 }
 
 /* Range input */
@@ -553,7 +501,7 @@ function resetSettings() {
   width: 100%;
   height: 4px;
   border-radius: 2px;
-  background: var(--border);
+  background: var(--border-color);
   appearance: none;
   cursor: pointer;
 }
@@ -564,7 +512,7 @@ function resetSettings() {
   height: 18px;
   border-radius: 50%;
   background: var(--modal-bg);
-  border: 2px solid var(--accent);
+  border: 2px solid var(--color-accent);
   cursor: pointer;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
   transition: transform 150ms ease;

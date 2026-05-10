@@ -1,0 +1,22 @@
+{
+  "name": "book-reader-proxy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npx tsx watch index.ts",
+    "start": "npx tsx index.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.14.1",
+    "hono": "^4.7.7"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "tsx": "^4.19.4",
+    "typescript": "~5.9.3"
+  },
+  "engines": {
+    "node": ">=18.12"
+  }
+}

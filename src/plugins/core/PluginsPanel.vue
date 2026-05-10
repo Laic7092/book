@@ -82,8 +82,6 @@ defineEmits<{ close: [] }>();
 </template>
 
 <style scoped>
-@import "../../styles/modal-shared.css";
-
 .plugin-body {
   flex: 1;
   overflow-y: auto;

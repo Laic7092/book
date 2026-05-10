@@ -14,7 +14,7 @@ importers:
     dependencies:
       '@vitejs/plugin-vue':
         specifier: ^6.0.5
-        version: 6.0.5(@voidzero-dev/vite-plus-core@0.1.12(terser@5.46.1)(typescript@5.9.3))(vue@3.5.30(typescript@5.9.3))
+        version: 6.0.5(@voidzero-dev/vite-plus-core@0.1.12(@types/node@25.6.2)(terser@5.46.1)(typescript@5.9.3))(vue@3.5.30(typescript@5.9.3))
       '@zip.js/zip.js':
         specifier: ^2.8.26
         version: 2.8.26
@@ -31,18 +31,21 @@ importers:
         specifier: ^3.5.30
         version: 3.5.30(typescript@5.9.3)
     devDependencies:
+      happy-dom:
+        specifier: ^20.9.0
+        version: 20.9.0
       typescript:
         specifier: ~5.9.3
         version: 5.9.3
       vite:
         specifier: npm:@voidzero-dev/vite-plus-core@latest
-        version: '@voidzero-dev/vite-plus-core@0.1.12(terser@5.46.1)(typescript@5.9.3)'
+        version: '@voidzero-dev/vite-plus-core@0.1.12(@types/node@25.6.2)(terser@5.46.1)(typescript@5.9.3)'
       vite-plugin-pwa:
         specifier: ^1.2.0
-        version: 1.2.0(@voidzero-dev/vite-plus-core@0.1.12(terser@5.46.1)(typescript@5.9.3))(workbox-build@7.4.0)(workbox-window@7.4.0)
+        version: 1.2.0(@voidzero-dev/vite-plus-core@0.1.12(@types/node@25.6.2)(terser@5.46.1)(typescript@5.9.3))(workbox-build@7.4.0)(workbox-window@7.4.0)
       vite-plus:
         specifier: latest
-        version: 0.1.12(@voidzero-dev/vite-plus-core@0.1.12(terser@5.46.1)(typescript@5.9.3))(terser@5.46.1)(typescript@5.9.3)
+        version: 0.1.12(@types/node@25.6.2)(@voidzero-dev/vite-plus-core@0.1.12(@types/node@25.6.2)(terser@5.46.1)(typescript@5.9.3))(happy-dom@20.9.0)(terser@5.46.1)(typescript@5.9.3)
 
 packages:
 
@@ -999,11 +1002,20 @@ packages:
   '@types/estree@1.0.8':
     resolution: {integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==}
 
+  '@types/node@25.6.2':
+    resolution: {integrity: sha512-sokuT28dxf9JT5Kady1fsXOvI4HVpjZa95NKT5y9PNTIrs2AsobR4GFAA90ZG8M+nxVRLysCXsVj6eGC7Vbrlw==}
+
   '@types/resolve@1.20.2':
     resolution: {integrity: sha512-60BCwRFOZCQhDncwQdxxeOEEkbc5dIMccYLwbxsS4TUNeVECQ/pBJ0j09mrHOl/JJvpRPGwO9SvE4nR2Nb/a4Q==}
 
   '@types/trusted-types@2.0.7':
     resolution: {integrity: sha512-ScaPdn1dQczgbl0QFTeTOmVHFULt394XJgOQNoyVhZ6r2vLnMLJfBPd53SB52T/3G36VI1/g2MZaX0cwDuXsfw==}
+
+  '@types/whatwg-mimetype@3.0.2':
+    resolution: {integrity: sha512-c2AKvDT8ToxLIOUlN51gTiHXflsfIFisS4pO7pDPoKouJCESkhZnEy623gwP9laCy5lnLDAw1vAzu2vM2YLOrA==}
+
+  '@types/ws@8.18.1':
+    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
   '@vitejs/plugin-vue@6.0.5':
     resolution: {integrity: sha512-bL3AxKuQySfk1iGcBsQnoRVexTPJq0Z/ixFVM8OhVJAP6ZXXXLtM7NFKWhLl30Kg7uTBqIaPXbh+nuQCuBDedg==}
@@ -1487,6 +1499,10 @@ packages:
 
   graceful-fs@4.2.11:
     resolution: {integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==}
+
+  happy-dom@20.9.0:
+    resolution: {integrity: sha512-GZZ9mKe8r646NUAf/zemnGbjYh4Bt8/MqASJY+pSm5ZDtc3YQox+4gsLI7yi1hba6o+eCsGxpHn5+iEVn31/FQ==}
+    engines: {node: '>=20.0.0'}
 
   has-bigints@1.1.0:
     resolution: {integrity: sha512-R3pbpkcIqv2Pm3dUwgjclDRVmWpTJW2DcMzcIhEXEx1oh/CEMObMm3KLmRJOdvhM7o4uQBnwr8pzRK2sJWIqfg==}
@@ -2150,6 +2166,9 @@ packages:
     resolution: {integrity: sha512-nWJ91DjeOkej/TA8pXQ3myruKpKEYgqvpw9lz4OPHj/NWFNluYrjbz9j01CJ8yKQd2g4jFoOkINCTW2I5LEEyw==}
     engines: {node: '>= 0.4'}
 
+  undici-types@7.19.2:
+    resolution: {integrity: sha512-qYVnV5OEm2AW8cJMCpdV20CDyaN3g0AjDlOGf1OW4iaDEx8MwdtChUp4zu4H0VP3nDRF/8RKWH+IPp9uW0YGZg==}
+
   unicode-canonical-property-names-ecmascript@2.0.1:
     resolution: {integrity: sha512-dA8WbNeb2a6oQzAQ55YlT5vQAWGV9WXOsi3SskE3bcCdM0P4SDd+24zS/OCacdRq5BkdsRj9q3Pg6YyQoxIGqg==}
     engines: {node: '>=4'}
@@ -2211,6 +2230,10 @@ packages:
 
   webidl-conversions@4.0.2:
     resolution: {integrity: sha512-YQ+BmxuTgd6UXZW3+ICGfyqRyHXVlD5GtQr5+qjiNW7bF0cqrzX500HVXPBOvgXb5YnzDd+h0zqyv61KUD7+Sg==}
+
+  whatwg-mimetype@3.0.0:
+    resolution: {integrity: sha512-nt+N2dzIutVRxARx1nghPKGv1xHikU7HKdfafKkLNLindmPU/ch3U31NOCGGA/dmPcmb1VlofO0vnKAcsm0o/Q==}
+    engines: {node: '>=12'}
 
   whatwg-url@7.1.0:
     resolution: {integrity: sha512-WUu7Rg1DroM7oQvGWfOiAK21n74Gg+T4elXEQYkOhtyLeWiJFoOGLXPKI/9gzIie9CtwVLm8wtw6YJdKyxSjeg==}
@@ -3244,23 +3267,34 @@ snapshots:
 
   '@types/estree@1.0.8': {}
 
+  '@types/node@25.6.2':
+    dependencies:
+      undici-types: 7.19.2
+
   '@types/resolve@1.20.2': {}
 
   '@types/trusted-types@2.0.7': {}
 
-  '@vitejs/plugin-vue@6.0.5(@voidzero-dev/vite-plus-core@0.1.12(terser@5.46.1)(typescript@5.9.3))(vue@3.5.30(typescript@5.9.3))':
+  '@types/whatwg-mimetype@3.0.2': {}
+
+  '@types/ws@8.18.1':
+    dependencies:
+      '@types/node': 25.6.2
+
+  '@vitejs/plugin-vue@6.0.5(@voidzero-dev/vite-plus-core@0.1.12(@types/node@25.6.2)(terser@5.46.1)(typescript@5.9.3))(vue@3.5.30(typescript@5.9.3))':
     dependencies:
       '@rolldown/pluginutils': 1.0.0-rc.2
-      vite: '@voidzero-dev/vite-plus-core@0.1.12(terser@5.46.1)(typescript@5.9.3)'
+      vite: '@voidzero-dev/vite-plus-core@0.1.12(@types/node@25.6.2)(terser@5.46.1)(typescript@5.9.3)'
       vue: 3.5.30(typescript@5.9.3)
 
-  '@voidzero-dev/vite-plus-core@0.1.12(terser@5.46.1)(typescript@5.9.3)':
+  '@voidzero-dev/vite-plus-core@0.1.12(@types/node@25.6.2)(terser@5.46.1)(typescript@5.9.3)':
     dependencies:
       '@oxc-project/runtime': 0.115.0
       '@oxc-project/types': 0.115.0
       lightningcss: 1.32.0
       postcss: 8.5.8
     optionalDependencies:
+      '@types/node': 25.6.2
       fsevents: 2.3.3
       terser: 5.46.1
       typescript: 5.9.3
@@ -3277,11 +3311,11 @@ snapshots:
   '@voidzero-dev/vite-plus-linux-x64-gnu@0.1.12':
     optional: true
 
-  '@voidzero-dev/vite-plus-test@0.1.12(@voidzero-dev/vite-plus-core@0.1.12(terser@5.46.1)(typescript@5.9.3))(terser@5.46.1)(typescript@5.9.3)':
+  '@voidzero-dev/vite-plus-test@0.1.12(@types/node@25.6.2)(@voidzero-dev/vite-plus-core@0.1.12(@types/node@25.6.2)(terser@5.46.1)(typescript@5.9.3))(happy-dom@20.9.0)(terser@5.46.1)(typescript@5.9.3)':
     dependencies:
       '@standard-schema/spec': 1.1.0
       '@types/chai': 5.2.3
-      '@voidzero-dev/vite-plus-core': 0.1.12(terser@5.46.1)(typescript@5.9.3)
+      '@voidzero-dev/vite-plus-core': 0.1.12(@types/node@25.6.2)(terser@5.46.1)(typescript@5.9.3)
       es-module-lexer: 1.7.0
       obug: 2.1.1
       pixelmatch: 7.1.0
@@ -3291,8 +3325,11 @@ snapshots:
       tinybench: 2.9.0
       tinyexec: 1.0.4
       tinyglobby: 0.2.15
-      vite: '@voidzero-dev/vite-plus-core@0.1.12(terser@5.46.1)(typescript@5.9.3)'
+      vite: '@voidzero-dev/vite-plus-core@0.1.12(@types/node@25.6.2)(terser@5.46.1)(typescript@5.9.3)'
       ws: 8.19.0
+    optionalDependencies:
+      '@types/node': 25.6.2
+      happy-dom: 20.9.0
     transitivePeerDependencies:
       - '@arethetypeswrong/core'
       - '@tsdown/css'
@@ -3760,6 +3797,18 @@ snapshots:
   gopd@1.2.0: {}
 
   graceful-fs@4.2.11: {}
+
+  happy-dom@20.9.0:
+    dependencies:
+      '@types/node': 25.6.2
+      '@types/whatwg-mimetype': 3.0.2
+      '@types/ws': 8.18.1
+      entities: 7.0.1
+      whatwg-mimetype: 3.0.0
+      ws: 8.19.0
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   has-bigints@1.1.0: {}
 
@@ -4457,6 +4506,8 @@ snapshots:
       has-symbols: 1.1.0
       which-boxed-primitive: 1.1.1
 
+  undici-types@7.19.2: {}
+
   unicode-canonical-property-names-ecmascript@2.0.1: {}
 
   unicode-match-property-ecmascript@2.0.0:
@@ -4482,22 +4533,22 @@ snapshots:
       escalade: 3.2.0
       picocolors: 1.1.1
 
-  vite-plugin-pwa@1.2.0(@voidzero-dev/vite-plus-core@0.1.12(terser@5.46.1)(typescript@5.9.3))(workbox-build@7.4.0)(workbox-window@7.4.0):
+  vite-plugin-pwa@1.2.0(@voidzero-dev/vite-plus-core@0.1.12(@types/node@25.6.2)(terser@5.46.1)(typescript@5.9.3))(workbox-build@7.4.0)(workbox-window@7.4.0):
     dependencies:
       debug: 4.4.3
       pretty-bytes: 6.1.1
       tinyglobby: 0.2.15
-      vite: '@voidzero-dev/vite-plus-core@0.1.12(terser@5.46.1)(typescript@5.9.3)'
+      vite: '@voidzero-dev/vite-plus-core@0.1.12(@types/node@25.6.2)(terser@5.46.1)(typescript@5.9.3)'
       workbox-build: 7.4.0
       workbox-window: 7.4.0
     transitivePeerDependencies:
       - supports-color
 
-  vite-plus@0.1.12(@voidzero-dev/vite-plus-core@0.1.12(terser@5.46.1)(typescript@5.9.3))(terser@5.46.1)(typescript@5.9.3):
+  vite-plus@0.1.12(@types/node@25.6.2)(@voidzero-dev/vite-plus-core@0.1.12(@types/node@25.6.2)(terser@5.46.1)(typescript@5.9.3))(happy-dom@20.9.0)(terser@5.46.1)(typescript@5.9.3):
     dependencies:
       '@oxc-project/types': 0.115.0
-      '@voidzero-dev/vite-plus-core': 0.1.12(terser@5.46.1)(typescript@5.9.3)
-      '@voidzero-dev/vite-plus-test': 0.1.12(@voidzero-dev/vite-plus-core@0.1.12(terser@5.46.1)(typescript@5.9.3))(terser@5.46.1)(typescript@5.9.3)
+      '@voidzero-dev/vite-plus-core': 0.1.12(@types/node@25.6.2)(terser@5.46.1)(typescript@5.9.3)
+      '@voidzero-dev/vite-plus-test': 0.1.12(@types/node@25.6.2)(@voidzero-dev/vite-plus-core@0.1.12(@types/node@25.6.2)(terser@5.46.1)(typescript@5.9.3))(happy-dom@20.9.0)(terser@5.46.1)(typescript@5.9.3)
       cac: 6.7.14
       cross-spawn: 7.0.6
       oxfmt: 0.40.0
@@ -4550,6 +4601,8 @@ snapshots:
       typescript: 5.9.3
 
   webidl-conversions@4.0.2: {}
+
+  whatwg-mimetype@3.0.0: {}
 
   whatwg-url@7.1.0:
     dependencies:

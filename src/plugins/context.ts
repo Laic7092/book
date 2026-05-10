@@ -8,6 +8,7 @@ import type {
   PluginBootstrap,
   FooterAction,
   HeaderAction,
+  BookshelfMenuAction,
   CssAPI,
   PluginEventMap,
   CapabilityMap,
@@ -18,6 +19,7 @@ import type {
 } from "./types";
 import { getReaderHost } from "../core/reader-host";
 import { navigate as routerNavigate } from "../router";
+import { createServerClient } from "../core/api";
 import { useUIStore } from "../stores/ui";
 
 // ── PluginStorageAdapter implementation ──
@@ -91,6 +93,7 @@ export const registeredModals = shallowRef<Record<string, Component>>({});
 export const registeredOverlays = shallowRef<Record<string, Component>>({});
 export const registeredFooterActions = shallowRef<FooterAction[]>([]);
 export const registeredBookshelfWidgets = shallowRef<Component[]>([]);
+export const registeredBookshelfMenuActions = shallowRef<BookshelfMenuAction[]>([]);
 export const registeredContentTransformers = shallowRef<ContentTransformer[]>([]);
 export const registeredToolbarItems = shallowRef<ToolbarItem[]>([]);
 export const registeredHeaderActions = shallowRef<HeaderAction[]>([]);
@@ -120,6 +123,12 @@ export function createUISlots(): Omit<
     },
     registerBookshelfWidget(component: Component) {
       registeredBookshelfWidgets.value = [...registeredBookshelfWidgets.value, component];
+    },
+    registerBookshelfMenuAction(action: BookshelfMenuAction) {
+      const existing = registeredBookshelfMenuActions.value.filter((a) => a.id !== action.id);
+      const actions = [...existing, action];
+      actions.sort((a, b) => a.order - b.order);
+      registeredBookshelfMenuActions.value = actions;
     },
     registerToolbarItem(item: ToolbarItem) {
       const existing = registeredToolbarItems.value.filter((i) => i.id !== item.id);
@@ -265,6 +274,7 @@ export function createPluginContext(id: string, bootstrap: PluginBootstrap): Plu
     readerHost: () => getReaderHost(),
     registerContentTransformer,
     navigate: routerNavigate,
+    server: createServerClient(),
   };
 }
 
@@ -337,6 +347,14 @@ export function createTrackedContext(id: string, bootstrap: PluginBootstrap): Tr
         );
       });
     },
+    registerBookshelfMenuAction(action) {
+      rawUi.registerBookshelfMenuAction(action);
+      cleanupFns.push(() => {
+        registeredBookshelfMenuActions.value = registeredBookshelfMenuActions.value.filter(
+          (a) => a.id !== action.id,
+        );
+      });
+    },
     registerToolbarItem(item) {
       rawUi.registerToolbarItem(item);
       cleanupFns.push(() => {
@@ -400,6 +418,7 @@ export function createTrackedContext(id: string, bootstrap: PluginBootstrap): Tr
       trackedTransformers.push(t);
     },
     navigate: routerNavigate,
+    server: createServerClient(),
     async runCleanup() {
       const unsubResults = await Promise.allSettled(
         eventUnsubs.map((fn) => {

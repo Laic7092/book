@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ModalHeader from "../../components/modals/ModalHeader.vue";
 import {
   THEME_OPTIONS,
   SCROLL_MODE_OPTIONS,
@@ -19,23 +20,7 @@ const emit = defineEmits<{
 
 <template>
   <div class="modal-content-inner">
-    <div class="modal-header">
-      <div class="header-title">
-        <h3>阅读设置</h3>
-      </div>
-      <button class="modal-close" @click="emit('close')">
-        <svg
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
-        >
-          <path d="M18 6L6 18M6 6l12 12" />
-        </svg>
-      </button>
-    </div>
+    <ModalHeader title="阅读设置" @close="emit('close')" />
 
     <div class="modal-body">
       <!-- 核心设置 -->
@@ -165,43 +150,6 @@ const emit = defineEmits<{
 </template>
 
 <style scoped>
-@import "../../styles/modal-shared.css";
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--modal-bg);
-  flex-shrink: 0;
-}
-
-.header-title h3 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--modal-text);
-}
-
-.modal-close {
-  padding: 6px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  cursor: pointer;
-  color: var(--text-secondary);
-  transition: all 150ms ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.modal-close:hover {
-  background: var(--hover-bg);
-  color: var(--modal-text);
-}
-
 .modal-body {
   padding: 16px 20px 24px;
 }
@@ -248,7 +196,7 @@ const emit = defineEmits<{
   align-items: center;
   gap: 6px;
   padding: 10px 8px;
-  border: 1.5px solid var(--border);
+  border: 1.5px solid var(--border-color);
   border-radius: 8px;
   background: var(--modal-bg);
   cursor: pointer;
@@ -258,20 +206,20 @@ const emit = defineEmits<{
 }
 
 .theme-btn:hover {
-  border-color: var(--border);
-  background: var(--hover-bg);
+  border-color: var(--border-color);
+  background: var(--bg-secondary);
 }
 
 .theme-btn.active {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
 }
 
 .theme-preview {
   width: 32px;
   height: 32px;
   border-radius: 6px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-color);
 }
 
 .theme-preview.theme-light {
@@ -287,7 +235,7 @@ const emit = defineEmits<{
 .size-btn {
   flex: 1;
   padding: 10px;
-  border: 1.5px solid var(--border);
+  border: 1.5px solid var(--border-color);
   border-radius: 8px;
   background: var(--modal-bg);
   cursor: pointer;
@@ -298,13 +246,13 @@ const emit = defineEmits<{
 }
 
 .size-btn:hover {
-  border-color: var(--accent);
-  background: var(--hover-bg);
+  border-color: var(--color-accent);
+  background: var(--bg-secondary);
 }
 
 .size-btn.active {
-  border-color: var(--accent);
-  background: var(--accent);
+  border-color: var(--color-accent);
+  background: var(--color-accent);
   color: white;
 }
 
@@ -315,7 +263,7 @@ const emit = defineEmits<{
   align-items: center;
   gap: 4px;
   padding: 12px;
-  border: 1.5px solid var(--border);
+  border: 1.5px solid var(--border-color);
   border-radius: 8px;
   background: var(--modal-bg);
   cursor: pointer;
@@ -323,13 +271,13 @@ const emit = defineEmits<{
 }
 
 .mode-btn:hover {
-  border-color: var(--border);
-  background: var(--hover-bg);
+  border-color: var(--border-color);
+  background: var(--bg-secondary);
 }
 
 .mode-btn.active {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
 }
 
 .mode-btn span:first-of-type {
@@ -351,7 +299,7 @@ const emit = defineEmits<{
   width: 100%;
   padding: 14px 16px;
   margin-top: 20px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-color);
   border-radius: 10px;
   background: var(--bg-elevated, var(--modal-bg));
   cursor: pointer;
@@ -363,8 +311,8 @@ const emit = defineEmits<{
 }
 
 .typography-btn:hover {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
 }
 
 .typography-btn .arrow-icon {
@@ -383,7 +331,7 @@ const emit = defineEmits<{
   align-items: center;
   justify-content: center;
   padding: 10px;
-  border: 1.5px solid var(--border);
+  border: 1.5px solid var(--border-color);
   border-radius: 8px;
   background: var(--modal-bg);
   cursor: pointer;
@@ -393,12 +341,12 @@ const emit = defineEmits<{
 }
 
 .anim-btn:hover {
-  border-color: var(--border);
-  background: var(--hover-bg);
+  border-color: var(--border-color);
+  background: var(--bg-secondary);
 }
 
 .anim-btn.active {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
 }
 </style>

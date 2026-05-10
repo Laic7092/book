@@ -134,8 +134,6 @@ const emit = defineEmits<{
 </template>
 
 <style scoped>
-@import "../../styles/modal-shared.css";
-
 .modal-body {
   padding: 16px 20px 24px;
 }

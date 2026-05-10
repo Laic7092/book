@@ -32,43 +32,49 @@ function highlightMatch(context: string): string {
 
 <template>
   <div class="modal-content-inner">
-    <div class="search-header-fixed">
-      <ModalHeader title="Search" @close="emit('close')" />
-      <div class="search-box-wrapper">
-        <div class="search-box">
-          <input
-            :value="api.searchQuery"
-            @input="handleSearchInput(($event.target as HTMLInputElement).value)"
-            type="text"
-            placeholder="Search in book..."
-            class="search-input"
-          />
-          <button class="search-submit" @click="api.doSearch()">
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
+    <ModalHeader title="Search" @close="emit('close')">
+      <template #extra>
+        <div class="search-box-wrapper">
+          <div class="search-row">
+            <input
+              :value="api.searchQuery"
+              @input="handleSearchInput(($event.target as HTMLInputElement).value)"
+              type="text"
+              placeholder="Search in book..."
+              class="search-input"
+            />
+            <button class="search-submit" @click="api.doSearch()" aria-label="Search">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <path d="M21 21l-4.3-4.3" />
+              </svg>
+            </button>
+          </div>
+          <div class="search-results-info" v-if="api.searchResults.length > 0">
+            <span class="results-count"
+              >{{ api.searchResults.length }} result{{
+                api.searchResults.length !== 1 ? "s" : ""
+              }}</span
             >
-              <circle cx="11" cy="11" r="8" />
-              <path d="M21 21l-4.35-4.35" />
-            </svg>
-          </button>
+            <button
+              class="clear-highlights"
+              @click="api.clearHighlights()"
+              v-if="api.hasHighlights"
+            >
+              Clear
+            </button>
+          </div>
         </div>
-        <div class="search-results-info" v-if="api.searchResults.length > 0">
-          <span class="results-count"
-            >{{ api.searchResults.length }} result{{
-              api.searchResults.length !== 1 ? "s" : ""
-            }}</span
-          >
-          <button class="clear-highlights" @click="api.clearHighlights()" v-if="api.hasHighlights">
-            Clear highlights
-          </button>
-        </div>
-      </div>
-    </div>
+      </template>
+    </ModalHeader>
     <div class="modal-body scroll-body">
       <ul class="search-results">
         <li
@@ -92,124 +98,78 @@ function highlightMatch(context: string): string {
 </template>
 
 <style scoped>
-@import "../../styles/modal-shared.css";
-
-.search-header-fixed {
-  flex-shrink: 0;
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--modal-bg);
-  z-index: 10;
-}
-
 .search-box-wrapper {
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-subtle);
+  padding: 14px 20px 16px;
 }
 
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 18px 22px;
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--modal-bg);
-  flex-shrink: 0;
-}
-
-.modal-header h3 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 19px;
-  font-weight: 500;
-  color: var(--modal-text);
-}
-
-.modal-close {
-  padding: 6px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  cursor: pointer;
-  color: var(--text-secondary);
-  transition: all 150ms ease;
-}
-
-.modal-close:hover {
-  background: var(--hover-bg);
-  color: var(--modal-text);
-}
-
-.search-box {
+.search-row {
   display: flex;
   gap: 8px;
-  border-bottom: 1px solid var(--border-subtle);
 }
 
 .search-input {
   flex: 1;
-  padding: 12px 16px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  font-size: 16px;
-  background: var(--hover-bg);
-  color: var(--modal-text);
+  padding: 10px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 9px;
+  font-size: 14px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
   font-family: var(--font-ui);
-}
-
-.search-input::placeholder {
-  color: var(--text-secondary);
-  opacity: 0.7;
+  outline: none;
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 .search-input:focus {
-  outline: none;
-  border-color: var(--accent);
-  background: var(--modal-bg);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-soft);
 }
 
 .search-submit {
-  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
   border: none;
-  border-radius: 10px;
-  background: var(--accent);
-  color: #ffffff;
+  border-radius: 9px;
+  background: var(--color-accent);
+  color: #fff;
   cursor: pointer;
-  transition: all 150ms ease;
+  transition: background var(--transition-fast);
 }
 
 .search-submit:hover {
-  background: color-mix(in srgb, var(--accent) 85%, black);
+  background: var(--color-accent-hover);
 }
 
 .search-results-info {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--border-subtle);
+  margin-top: 12px;
 }
 
 .results-count {
-  font-size: 13px;
-  color: var(--text-secondary);
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .clear-highlights {
-  padding: 7px 14px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  padding: 4px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
   background: transparent;
-  color: var(--accent);
+  color: var(--color-accent);
   font-size: 12px;
-  font-weight: 500;
   cursor: pointer;
-  transition: all 150ms ease;
   font-family: var(--font-ui);
+  transition: all var(--transition-fast);
 }
 
 .clear-highlights:hover {
-  background: var(--hover-bg);
+  background: var(--color-accent-soft);
 }
 
 .search-results {
@@ -221,15 +181,15 @@ function highlightMatch(context: string): string {
 .search-result {
   padding: 14px;
   cursor: pointer;
-  border-radius: 10px;
-  transition: all 150ms ease;
+  border-radius: 9px;
+  transition: all var(--transition-fast);
   margin-bottom: 6px;
   border: 1px solid var(--border-subtle);
 }
 
 .search-result:hover {
-  background: var(--hover-bg);
-  border-color: var(--border);
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
 }
 
 .result-header {
@@ -242,15 +202,15 @@ function highlightMatch(context: string): string {
 .result-chapter {
   font-size: 13px;
   font-weight: 600;
-  color: var(--reader-text);
+  color: var(--text-primary);
 }
 
 .result-index {
   font-size: 11px;
-  color: var(--text-secondary);
-  background: var(--hover-bg);
+  color: var(--text-muted);
+  background: var(--bg-secondary);
   padding: 3px 9px;
-  border-radius: 10px;
+  border-radius: 8px;
   font-weight: 600;
 }
 
@@ -266,17 +226,17 @@ function highlightMatch(context: string): string {
 }
 
 .search-mark {
-  background: color-mix(in srgb, var(--accent) 25%, transparent);
-  color: var(--accent);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: 3px;
   font-weight: 600;
 }
 
 .no-results {
   text-align: center;
   padding: 40px 20px;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   font-size: 14px;
 }
 </style>

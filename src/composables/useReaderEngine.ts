@@ -153,7 +153,7 @@ export function useReaderEngine(
   watch(
     [rewrittenLoadedContent, pluginStateVersion, () => readerStore.currentBook?.id],
     () => {
-      refreshTransformedContent();
+      void refreshTransformedContent();
     },
     { immediate: true },
   );
@@ -231,7 +231,7 @@ export function useReaderEngine(
             (ready) => {
               if (ready) {
                 stop();
-                onReady();
+                void onReady();
               }
             },
           );
@@ -408,7 +408,7 @@ export function useReaderEngine(
 
     if (targetChapter.id === readerStore.currentChapter?.id) {
       if (isPaginationMode.value) {
-        waitForPaginationReady().then(() => {
+        void waitForPaginationReady().then(() => {
           scrollToAnchor();
           navStack.push({ chapterId: targetChapter.id, page: pagination.currentPage.value });
         });
@@ -419,7 +419,7 @@ export function useReaderEngine(
       return;
     }
 
-    handleSelectChapter(targetChapter.id).then(async () => {
+    void handleSelectChapter(targetChapter.id).then(async () => {
       if (!anchor) {
         navStack.push({
           chapterId: targetChapter.id,
@@ -589,8 +589,8 @@ export function useReaderEngine(
       if (isPaginationMode.value) {
         const w = window.innerWidth;
         const x = e.clientX;
-        if (x < w * TAP_ZONE_LEFT) prevPage();
-        else if (x > w * TAP_ZONE_RIGHT) nextPage();
+        if (x < w * TAP_ZONE_LEFT) void prevPage();
+        else if (x > w * TAP_ZONE_RIGHT) void nextPage();
         else uiStore.toggleControls();
       } else {
         uiStore.toggleControls();

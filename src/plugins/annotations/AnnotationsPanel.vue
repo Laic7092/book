@@ -164,8 +164,6 @@ function formatDate(ts: number): string {
 </template>
 
 <style scoped>
-@import "../../styles/modal-shared.css";
-
 .filter-bar {
   display: flex;
   gap: 4px;

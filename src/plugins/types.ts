@@ -3,6 +3,7 @@ import type { Pinia } from "pinia";
 import type { BookParser, SearchResult } from "../core/types";
 import type { ReaderSettings } from "./settings/types";
 import type { ReaderHost } from "../core/reader-host";
+import type { ServerClient } from "../core/api";
 
 // ── Search API (defined here so core doesn't need to know about search) ──
 
@@ -57,6 +58,19 @@ export interface FooterAction {
   order: number;
 }
 
+/** A menu item in the bookshelf menu-popover, registered by a plugin. */
+export interface BookshelfMenuAction {
+  id: string;
+  order: number;
+  label: string;
+  /** SVG icon path data (inner `<path>` or `<circle>` elements). */
+  icon: string;
+  /** If set, clicking opens this modal name. */
+  modal?: string;
+  /** If set and no modal, called directly on click. */
+  onClick?: () => void;
+}
+
 /**
  * Header toolbar action declared by a plugin.
  * ReaderHeader builds its buttons from these dynamically.
@@ -102,6 +116,8 @@ export interface UISlots {
   registerFooterAction(action: FooterAction): void;
   /** Register a widget rendered in the bookshelf (e.g. stats bar). */
   registerBookshelfWidget(component: Component): void;
+  /** Register a menu item in the bookshelf menu-popover. */
+  registerBookshelfMenuAction(action: BookshelfMenuAction): void;
   /** Register an item in the reader right-edge toolbar (e.g. auto-read, TTS). */
   registerToolbarItem(item: ToolbarItem): void;
   /** Register an action button in the reader header (e.g. settings gear). */
@@ -141,6 +157,8 @@ export interface PluginContext {
   registerContentTransformer(transformer: ContentTransformer): void;
   /** Navigate to a route. */
   navigate: (url: string, replace?: boolean) => void;
+  /** Access Node capabilities (net, fs, …) through the proxy server. */
+  server: ServerClient;
 }
 
 export interface PluginBootstrap {

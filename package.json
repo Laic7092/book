@@ -18,6 +18,7 @@
     "vue": "^3.5.30"
   },
   "devDependencies": {
+    "happy-dom": "^20.9.0",
     "typescript": "~5.9.3",
     "vite": "npm:@voidzero-dev/vite-plus-core@latest",
     "vite-plugin-pwa": "^1.2.0",
