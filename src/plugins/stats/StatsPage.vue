@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from "vue";
-import { getAllStats, getSummaryStats } from "./engine";
+import { getStatsEngine } from "./engine";
 import { useBookshelfStore } from "../../stores/bookshelf";
 import { getBookGradient, getInitial } from "../../config/colors";
 import type { BookReadingStats, Book } from "../../core/types";
@@ -64,7 +64,8 @@ const totalChaptersAcrossBooks = computed(() =>
 async function load() {
   loading.value = true;
   try {
-    const [s, stats] = await Promise.all([getSummaryStats(), getAllStats()]);
+    const eng = getStatsEngine();
+    const [s, stats] = await Promise.all([eng.getSummaryStats(), eng.getAllStats()]);
     summary.value = s;
     allStats.value = stats;
   } catch {

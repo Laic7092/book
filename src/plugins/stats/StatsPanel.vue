@@ -3,16 +3,17 @@ import { ref, onMounted, computed } from "vue";
 import type { BookReadingStats } from "../../core/types";
 import { formatDuration, formatRelativeTime, formatHour } from "../../utils/time";
 import ModalHeader from "../../components/modals/ModalHeader.vue";
-import { getReaderHost, getStats } from "./engine";
+import { getStatsEngine } from "./engine";
 
+const eng = getStatsEngine();
+const host = eng.getReaderHost();
 const stats = ref<BookReadingStats | null>(null);
-const host = getReaderHost();
 const totalChapters = computed(() => host?.getChapters().length ?? 0);
 
 onMounted(async () => {
   const bookId = host?.getCurrentBookId();
   if (bookId) {
-    stats.value = await getStats(bookId);
+    stats.value = await eng.getStats(bookId);
   }
 });
 

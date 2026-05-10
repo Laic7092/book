@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue";
-import { getSummaryStats } from "./engine";
+import { getStatsEngine } from "./engine";
 import { formatDuration } from "../../utils/time";
 import { setStatsRefreshHandler } from "./refresh";
 
@@ -16,7 +16,8 @@ interface SummaryStats {
 const stats = ref<SummaryStats | null>(null);
 
 async function load() {
-  stats.value = await getSummaryStats().catch(() => null);
+  const eng = getStatsEngine();
+  stats.value = await eng.getSummaryStats().catch(() => null);
 }
 
 onMounted(() => {

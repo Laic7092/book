@@ -4,6 +4,7 @@ import type { Book, ParsedBook } from "../core/types";
 import { STORES, dbPut, dbGet, dbGetAll, dbTransaction } from "./db";
 import type { BookParser } from "../core/types";
 import { getParserForFormat } from "../plugins/registry";
+import { saveCoverBlob } from "./covers";
 
 /** In-flight dedup: prevents concurrent extraction of the same chapter */
 const extractionInProgress = new Map<string, Promise<string>>();
@@ -44,6 +45,21 @@ export async function saveBook(parsedBook: ParsedBook, parser: BookParser): Prom
   // Format-specific raw data storage (for lazy extraction)
   if (parsedBook.rawData) {
     await parser.saveRawData?.(parsedBook.book.id, parsedBook.rawData, parsedBook.book.fileSize);
+  }
+
+  // Cache cover image so bookshelf can display it without the parser
+  if (parsedBook.book.coverUrl && parser.resolveResourceUrl) {
+    try {
+      const url = await parser.resolveResourceUrl(parsedBook.book.id, parsedBook.book.coverUrl);
+      if (url) {
+        const res = await fetch(url);
+        const blob = await res.blob();
+        await saveCoverBlob(parsedBook.book.id, blob);
+        URL.revokeObjectURL(url);
+      }
+    } catch {
+      // Non-critical: bookshelf will fall back to gradient cover
+    }
   }
 }
 

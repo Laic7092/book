@@ -2,10 +2,11 @@
 import { computed, ref } from "vue";
 import type { Annotation } from "../../core/types";
 import ModalHeader from "../../components/modals/ModalHeader.vue";
-import { getReaderHost, useAnnotationsStore } from "./store";
+import { useAnnotationStore, getAnnotationHost, useAnnotationFilters } from "./index";
 
-const annotationsStore = useAnnotationsStore();
-const host = getReaderHost();
+const store = useAnnotationStore();
+const host = getAnnotationHost();
+const { currentBookId } = useAnnotationFilters();
 
 const emit = defineEmits<{
   (e: "close"): void;
@@ -16,13 +17,16 @@ function handleNavigate(annotation: Annotation) {
 }
 
 function handleDelete(id: string) {
-  annotationsStore.removeAnnotation(id);
+  store.remove(id);
 }
 
 type Filter = "all" | "highlight" | "underline";
 const filter = ref<Filter>("all");
 
-const annotations = computed(() => annotationsStore.allAnnotations);
+// Derive book-scoped annotations from the full entity store cache
+const annotations = computed(() =>
+  store.items.value.filter((a) => a.bookId === currentBookId.value),
+);
 
 const filtered = computed(() => {
   if (filter.value === "all") return annotations.value;

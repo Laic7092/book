@@ -1,10 +1,15 @@
 import { ref } from "vue";
 import type { ReaderSettings } from "./types";
 import type { IEventBus, PluginEventMap } from "../types";
+import type { PluginStorageAdapter } from "../types";
 import { DEFAULT_SETTINGS } from "./defaults";
-import * as storage from "./settings-storage";
 
-export function createSettingsState(events?: IEventBus<PluginEventMap>) {
+const SETTINGS_KEY = "reader-settings";
+
+export function createSettingsState(
+  storage: PluginStorageAdapter,
+  events?: IEventBus<PluginEventMap>,
+) {
   const settings = ref<ReaderSettings>({ ...DEFAULT_SETTINGS });
   const isInitialized = ref(false);
 
@@ -15,7 +20,7 @@ export function createSettingsState(events?: IEventBus<PluginEventMap>) {
     async init() {
       if (isInitialized.value) return;
       try {
-        const stored = await storage.getSettings();
+        const stored = await storage.get<ReaderSettings>(SETTINGS_KEY);
         if (stored) {
           settings.value = { ...DEFAULT_SETTINGS, ...stored };
         }
@@ -28,7 +33,7 @@ export function createSettingsState(events?: IEventBus<PluginEventMap>) {
     async update(updates: Partial<ReaderSettings>) {
       settings.value = { ...settings.value, ...updates };
       try {
-        await storage.saveSettings(settings.value);
+        await storage.put(SETTINGS_KEY, settings.value, Date.now());
       } catch (err) {
         console.error("[Settings] Failed to save settings:", err);
       }
@@ -39,7 +44,7 @@ export function createSettingsState(events?: IEventBus<PluginEventMap>) {
 
     async reset() {
       settings.value = { ...DEFAULT_SETTINGS };
-      await storage.saveSettings(settings.value);
+      await storage.put(SETTINGS_KEY, settings.value, Date.now());
     },
   };
 }

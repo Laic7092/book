@@ -35,7 +35,7 @@ export const settingsPlugin: Plugin = {
   name: "Settings",
   version: "1.0.0",
   async setup(ctx) {
-    const state = createSettingsState(ctx.events);
+    const state = createSettingsState(ctx.storage, ctx.events);
 
     function syncToHost() {
       const s = state.settings.value;

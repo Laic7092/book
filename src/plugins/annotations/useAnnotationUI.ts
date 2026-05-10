@@ -1,23 +1,32 @@
-import { ref, watch } from "vue";
+import { ref, watch, computed } from "vue";
 import type { Annotation } from "../../core/types";
-import { getReaderHost } from "./store";
-import { useAnnotationsStore } from "./store";
+import {
+  getAnnotationHost,
+  useAnnotationStore,
+  useAnnotationFilters,
+  createAnnotation,
+} from "./index";
 import { useAnnotationRenderer } from "./useAnnotationRenderer";
 import { generateCfiFromRange } from "../../utils/epub-cfi";
 
 export function useAnnotationUI() {
-  const host = getReaderHost();
-  const store = useAnnotationsStore();
+  const host = getAnnotationHost();
+  const store = useAnnotationStore();
+  const { currentBookId, currentChapterId } = useAnnotationFilters();
 
   const renderer = useAnnotationRenderer(() => host?.getDocument() ?? null);
 
-  // Re-render highlights whenever local annotations change (covers panel delete, popover delete, etc.)
-  watch(
-    () => store.annotations,
-    () => {
-      renderer.applyToContent(store.annotations);
-    },
+  // Derive chapter-scoped view from the full entity store cache.
+  const annotationsForChapter = computed(() =>
+    store.items.value.filter(
+      (a) => a.bookId === currentBookId.value && a.chapterId === currentChapterId.value,
+    ),
   );
+
+  // Re-render highlights whenever chapter annotations change.
+  watch(annotationsForChapter, () => {
+    renderer.applyToContent(annotationsForChapter.value);
+  });
 
   // Toolbar state
   const showToolbar = ref(false);
@@ -71,7 +80,7 @@ export function useAnnotationUI() {
         showToolbar.value = true;
       },
       onAnnotationClick: (annotationId, rect) => {
-        const annotation = store.annotations.find((a) => a.id === annotationId);
+        const annotation = annotationsForChapter.value.find((a) => a.id === annotationId);
         if (!annotation) return;
         popoverAnnotation.value = annotation;
         popoverPosition.value = { top: rect.top, left: rect.left, height: rect.height };
@@ -81,32 +90,33 @@ export function useAnnotationUI() {
   }
 
   function applyAnnotations() {
-    renderer.applyToContent(store.annotations);
+    renderer.applyToContent(annotationsForChapter.value);
   }
 
   // Set up listeners once the iframe is ready
   host?.onReady(async () => {
     setupListeners();
 
-    // Load annotations for the current chapter (already loaded before onReady fired)
-    const currentChapterId = host.getCurrentChapter()?.id;
-    if (currentChapterId && host.getCurrentBookId()) {
-      await store.loadAnnotationsForChapter(host.getCurrentBookId()!, currentChapterId);
+    // Update chapter filter and reload annotations for the current chapter
+    const currentChId = host.getCurrentChapter()?.id;
+    if (currentChId && host.getCurrentBookId()) {
+      currentChapterId.value = currentChId;
+      await store.reload();
       applyAnnotations();
     }
 
     // Re-apply annotations when chapter changes
     host.onChapterChange(async (chapterId) => {
-      await store.loadAnnotationsForChapter(host.getCurrentBookId() || "", chapterId);
+      currentChapterId.value = chapterId;
+      await store.reload();
       applyAnnotations();
     });
   });
 
-  // Clean up on host cleanup
+  // Clean up on host cleanup — just remove listeners, store is managed by plugin lifecycle.
   host?.registerCleanup(() => {
     listenerCleanup?.();
     renderer.cleanup();
-    store.reset();
   });
 
   // ── CRUD handlers ──
@@ -116,14 +126,16 @@ export function useAnnotationUI() {
     if (!sel || !host?.getCurrentChapter()) return;
     showToolbar.value = false;
     showNoteInput.value = false;
-    await store.addAnnotation(
-      host.getCurrentBookId()!,
-      host.getCurrentChapter()!.id,
-      "highlight",
-      sel.startCfi,
-      sel.endCfi,
-      color,
-      sel.text,
+    await store.add(
+      createAnnotation(
+        host.getCurrentBookId()!,
+        host.getCurrentChapter()!.id,
+        "highlight",
+        sel.startCfi,
+        sel.endCfi,
+        color,
+        sel.text,
+      ),
     );
     applyAnnotations();
     pendingSelection.value = null;
@@ -133,15 +145,16 @@ export function useAnnotationUI() {
     const sel = pendingSelection.value;
     if (!sel || !host?.getCurrentChapter()) return;
     showToolbar.value = false;
-    await store.addAnnotation(
-      host.getCurrentBookId()!,
-
-      host.getCurrentChapter()!.id,
-      "underline",
-      sel.startCfi,
-      sel.endCfi,
-      "#60a5fa",
-      sel.text,
+    await store.add(
+      createAnnotation(
+        host.getCurrentBookId()!,
+        host.getCurrentChapter()!.id,
+        "underline",
+        sel.startCfi,
+        sel.endCfi,
+        "#60a5fa",
+        sel.text,
+      ),
     );
     applyAnnotations();
     pendingSelection.value = null;
@@ -156,16 +169,17 @@ export function useAnnotationUI() {
     if (!sel || !host?.getCurrentChapter()) return;
     showToolbar.value = false;
     showNoteInput.value = false;
-    await store.addAnnotation(
-      host.getCurrentBookId()!,
-
-      host.getCurrentChapter()!.id,
-      "highlight",
-      sel.startCfi,
-      sel.endCfi,
-      "#fbbf24",
-      sel.text,
-      noteText,
+    await store.add(
+      createAnnotation(
+        host.getCurrentBookId()!,
+        host.getCurrentChapter()!.id,
+        "highlight",
+        sel.startCfi,
+        sel.endCfi,
+        "#fbbf24",
+        sel.text,
+        noteText,
+      ),
     );
     applyAnnotations();
     pendingSelection.value = null;
@@ -177,17 +191,17 @@ export function useAnnotationUI() {
   }
 
   async function handleUpdateNote(id: string, note: string) {
-    await store.updateAnnotation(id, { note } as Partial<Annotation>);
+    await store.update(id, { note } as Partial<Annotation>);
     showPopover.value = false;
   }
 
   async function handleUpdateColor(id: string, color: string) {
-    await store.updateAnnotation(id, { color } as Partial<Annotation>);
+    await store.update(id, { color } as Partial<Annotation>);
     applyAnnotations();
   }
 
   async function handleDeleteAnnotation(id: string) {
-    await store.removeAnnotation(id);
+    await store.remove(id);
     showPopover.value = false;
     applyAnnotations();
   }

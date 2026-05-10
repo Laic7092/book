@@ -3,7 +3,7 @@
 import { defineStore } from "pinia";
 import type { Book, Folder } from "../core/types";
 import { dbGetAll, STORES } from "../storage/db";
-import { getParserForFormat } from "../plugins/registry";
+import { getCoverBlob, deleteCoverBlob } from "../storage/covers";
 import { pluginEvents } from "../plugins/context";
 import * as booksStore from "../storage/books";
 import * as folderStore from "../storage/folders";
@@ -54,10 +54,9 @@ export const useBookshelfStore = defineStore("bookshelf", {
 
         for (const book of this.books) {
           if (book.coverUrl && !this.coverUrls.has(book.id)) {
-            const parser = getParserForFormat(book.format);
-            const url = await parser?.resolveResourceUrl?.(book.id, book.coverUrl);
-            if (url) {
-              this.coverUrls.set(book.id, url);
+            const blob = await getCoverBlob(book.id);
+            if (blob) {
+              this.coverUrls.set(book.id, URL.createObjectURL(blob));
             }
           }
         }
@@ -94,6 +93,8 @@ export const useBookshelfStore = defineStore("bookshelf", {
         URL.revokeObjectURL(coverUrl);
         this.coverUrls.delete(bookId);
       }
+      // Clean up cached cover blob
+      deleteCoverBlob(bookId).catch(() => {});
       this.books = this.books.filter((b) => b.id !== bookId);
     },
 

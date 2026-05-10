@@ -2,10 +2,9 @@ import StatsPanel from "./StatsPanel.vue";
 import StatsPage from "./StatsPage.vue";
 import StatsBar from "./StatsBar.vue";
 import { triggerStatsRefresh } from "./refresh";
-import * as engine from "./engine";
+import { createStatsEngine, setStatsEngine } from "./engine";
 import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
-import { setStatsAdapter, setReaderHost } from "./engine";
 
 export const loadOn = "reader" as const;
 
@@ -15,13 +14,13 @@ export const statsPlugin: Plugin = {
   name: "Reading Statistics",
   version: "1.0.0",
   setup(ctx) {
-    setStatsAdapter(ctx.storage);
-    setReaderHost(ctx.readerHost);
+    const eng = createStatsEngine(ctx.storage, ctx.readerHost);
+    setStatsEngine(eng);
 
-    ctx.events.on("book:opened", ({ bookId }) => engine.startSession(bookId));
-    ctx.events.on("book:closed", ({ bookId, chapterId }) => engine.endSession(bookId, chapterId));
+    ctx.events.on("book:opened", ({ bookId }) => eng.startSession(bookId));
+    ctx.events.on("book:closed", ({ bookId, chapterId }) => eng.endSession(bookId, chapterId));
     ctx.events.on("book:deleted", ({ bookId }) => {
-      void engine.deleteStats(bookId).then(() => {
+      void eng.deleteStats(bookId).then(() => {
         triggerStatsRefresh();
       });
     });
@@ -50,7 +49,6 @@ export const statsPlugin: Plugin = {
     });
   },
   teardown() {
-    setStatsAdapter(null);
-    setReaderHost(null);
+    setStatsEngine(null);
   },
 };

@@ -2,13 +2,21 @@
 import { computed } from "vue";
 import type { Bookmark } from "../../core/types";
 import ModalHeader from "../../components/modals/ModalHeader.vue";
-import { getReaderHost, useBookmarksStore } from "./store";
+import { compareCfi } from "../../utils/epub-cfi";
+import { useBookmarkStore, getBookmarkHost, addBookmarkFromHost } from "./index";
 
-const bookmarksStore = useBookmarksStore();
-const host = getReaderHost();
+const store = useBookmarkStore();
+const host = getBookmarkHost();
+
+const currentBookId = computed(() => host?.getCurrentBookId() ?? null);
 
 const visibleBookmarks = computed(() =>
-  bookmarksStore.bookmarks.filter((b) => !b.id.startsWith("__progress__")),
+  [...store.items.value]
+    .filter((b) => b.bookId === currentBookId.value && !b.id.startsWith("__progress__"))
+    .sort((a, b) => {
+      if (a.cfi !== b.cfi) return compareCfi(a.cfi, b.cfi);
+      return b.createdAt - a.createdAt;
+    }),
 );
 
 const emit = defineEmits<{
@@ -20,12 +28,12 @@ function handleNavigate(bookmark: Bookmark) {
 }
 
 async function handleAdd() {
-  await bookmarksStore.addBookmarkFromHost();
+  await addBookmarkFromHost();
 }
 
 function handleDelete(bookmarkId: string, event: MouseEvent) {
   event.stopPropagation();
-  bookmarksStore.removeBookmark(bookmarkId);
+  store.remove(bookmarkId);
 }
 
 function formatDate(timestamp: number): string {
