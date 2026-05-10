@@ -1,0 +1,1 @@
+var e=`__plugin`;export{e as t};
