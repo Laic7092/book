@@ -194,4 +194,17 @@ export interface Plugin {
 
   /** Called when the plugin is disabled. Clean up registrations, state, timers. */
   teardown?: (context: PluginContext) => void | Promise<void>;
+
+  /**
+   * Optional capability check. Called before setup() with the same context.
+   * Return false to prevent the plugin from activating — it will be hidden
+   * from the plugin management list and setup() will be skipped.
+   */
+  canActivate?: (context: PluginContext) => boolean | Promise<boolean>;
+
+  /**
+   * Shown in logs / dev info when canActivate returns false.
+   * Example: "Requires backend server" / "Network unavailable"
+   */
+  activationFailedReason?: string;
 }

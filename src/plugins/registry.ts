@@ -23,6 +23,10 @@ import type { BookParser } from "../core/types";
 interface ManagedPlugin {
   plugin: Plugin;
   enabled: boolean;
+  /** false when canActivate() failed — plugin skipped, hidden from list. */
+  available: boolean;
+  /** Reason why available is false, from plugin.activationFailedReason. */
+  availableReason?: string;
   setupError?: Error;
 }
 
@@ -115,7 +119,7 @@ function resolveDepGraph(): DepGraphResult {
 // ── Registration ──
 
 export function registerPlugin(p: Plugin): void {
-  managedPlugins.set(p.id, { plugin: p, enabled: isEnabled(p) });
+  managedPlugins.set(p.id, { plugin: p, enabled: isEnabled(p), available: true });
 }
 
 // ── Initialization ──
@@ -161,6 +165,28 @@ export async function initializePlugins(bootstrap?: PluginBootstrap): Promise<vo
       console.warn(`[Plugin ${id}] Skipping: dependency "${missingDep}" is disabled or errored`);
       mp.enabled = false;
       continue;
+    }
+
+    // Optional capability check before setup
+    const ctxForCheck = pluginContexts.get(id);
+    if (mp.plugin.canActivate && !ctxForCheck) {
+      const checkCtx = createTrackedContext(id, bs);
+      try {
+        const ok = await Promise.resolve(mp.plugin.canActivate(checkCtx));
+        if (!ok) {
+          mp.available = false;
+          mp.availableReason = mp.plugin.activationFailedReason ?? "Capability check failed";
+          console.warn(`[Plugin ${id}] Skipped: ${mp.availableReason}`);
+          checkCtx.runCleanup();
+          continue;
+        }
+      } catch (err) {
+        mp.available = false;
+        mp.availableReason = mp.plugin.activationFailedReason ?? `Error: ${err}`;
+        console.warn(`[Plugin ${id}] canActivate() threw:`, err);
+        checkCtx.runCleanup();
+        continue;
+      }
     }
 
     await setupPluginInternal(id, bs);
@@ -212,6 +238,26 @@ export async function setupPlugin(id: string): Promise<void> {
   if (!storedBootstrap) {
     console.warn(`[Plugin ${id}] Cannot setup: bootstrap not available`);
     return;
+  }
+
+  // Re-run canActivate if the plugin was previously hidden
+  if (mp.available === false && mp.plugin.canActivate) {
+    const checkCtx = createTrackedContext(id, storedBootstrap);
+    try {
+      const ok = await Promise.resolve(mp.plugin.canActivate(checkCtx));
+      if (!ok) {
+        checkCtx.runCleanup();
+        console.warn(`[Plugin ${id}] Still unavailable: ${mp.availableReason}`);
+        return;
+      }
+      mp.available = true;
+      mp.availableReason = undefined;
+      checkCtx.runCleanup();
+    } catch (err) {
+      checkCtx.runCleanup();
+      console.warn(`[Plugin ${id}] canActivate() re-threw:`, err);
+      return;
+    }
   }
 
   // Reset dynamic capabilities for this plugin by rebuilding from remaining contexts
@@ -290,7 +336,12 @@ export async function loadPluginStates(): Promise<void> {
 // ── Queries ──
 
 export function getAllPlugins(): readonly Plugin[] {
-  return [...managedPlugins.values()].map((mp) => mp.plugin);
+  return [...managedPlugins.values()].filter((mp) => mp.available !== false).map((mp) => mp.plugin);
+}
+
+/** Count of plugins hidden due to failed canActivate(). */
+export function getUnavailablePluginCount(): number {
+  return [...managedPlugins.values()].filter((mp) => mp.available === false).length;
 }
 
 export function isPluginEnabled(id: string): boolean {
