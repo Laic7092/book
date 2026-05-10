@@ -1,6 +1,5 @@
 import { ref } from "vue";
-import AnnotationsPanel from "./AnnotationsPanel.vue";
-import AnnotationOverlay from "./AnnotationOverlay.vue";
+// Async components — loaded on demand
 import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
 import { createEntityStore, type EntityStore } from "../store-factory";
@@ -85,8 +84,8 @@ export const annotationsPlugin: Plugin = {
       _currentChapterId.value = chapterId;
     });
 
-    ctx.ui.registerModal("annotations", AnnotationsPanel);
-    ctx.ui.registerOverlay("annotations", AnnotationOverlay);
+    ctx.ui.registerModal("annotations", () => import("./AnnotationsPanel.vue"));
+    ctx.ui.registerOverlay("annotations", () => import("./AnnotationOverlay.vue"));
     ctx.ui.registerFooterAction({
       id: "annotations",
       position: "menu",

@@ -1,5 +1,6 @@
 import { ref, type Component } from "vue";
 import type { Plugin, FooterAction, BookshelfMenuAction, PluginBootstrap } from "./types";
+import { PLUGIN_BRAND } from "./types";
 import { STORES, dbPut, dbGet } from "../storage/db";
 import {
   createTrackedContext,
@@ -32,6 +33,9 @@ interface ManagedPlugin {
 
 const managedPlugins = new Map<string, ManagedPlugin>();
 const pluginContexts = new Map<string, TrackedContext>();
+
+/** Populated by loader.ts — maps pluginId → lazy module loader for stub upgrade. */
+export const pluginModuleLoaders = new Map<string, () => Promise<Record<string, unknown>>>();
 
 /** Incremented every time plugin state changes; used by UI computeds to track reactivity */
 export const pluginStateVersion = ref(0);
@@ -282,9 +286,40 @@ export async function setPluginEnabled(id: string, on: boolean): Promise<void> {
       console.warn(`[Plugin ${id}] Cannot enable: dependency "${missingDep}" is disabled`);
       return;
     }
+
+    // If this is a stub (registered from meta, no setup), load the real module first
+    if (!mp.plugin.setup && pluginModuleLoaders.has(id)) {
+      const loader = pluginModuleLoaders.get(id)!;
+      pluginModuleLoaders.delete(id);
+      const mod = await loader();
+      let upgraded = false;
+      for (const val of Object.values(mod)) {
+        if (
+          typeof val === "object" &&
+          val !== null &&
+          (val as Record<string, unknown>)[PLUGIN_BRAND] === true
+        ) {
+          const realPlugin = val as unknown as Plugin;
+          // Preserve the disabled flag — registerPlugin sets it from realPlugin,
+          // but we're about to enable it, so set enabled: true first
+          realPlugin.enabled = true;
+          registerPlugin(realPlugin);
+          upgraded = true;
+          break;
+        }
+      }
+      if (!upgraded) {
+        console.error(`[Plugins] Failed to find branded export in module for "${id}"`);
+        return;
+      }
+    }
+
+    // Re-fetch in case stub was upgraded (registerPlugin replaces the ManagedPlugin entry)
+    const current = managedPlugins.get(id);
+    if (!current) return;
     await setupPlugin(id);
-    mp.enabled = true;
-    mp.plugin.enabled = true;
+    current.enabled = true;
+    current.plugin.enabled = true;
   } else if (!on && mp.enabled) {
     // Check if any enabled plugin depends on this one
     const dependent = [...managedPlugins.values()].find(

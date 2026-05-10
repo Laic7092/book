@@ -1,4 +1,3 @@
-import BookmarksPanel from "./BookmarksPanel.vue";
 import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
 import { createEntityStore, type EntityStore } from "../store-factory";
@@ -178,7 +177,7 @@ export const bookmarksPlugin: Plugin = {
       void loadBookmarks(bookId);
     });
 
-    ctx.ui.registerModal("bookmarks", BookmarksPanel);
+    ctx.ui.registerModal("bookmarks", () => import("./BookmarksPanel.vue"));
     ctx.ui.registerFooterAction({
       id: "bookmarks",
       position: "bar",

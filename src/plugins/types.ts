@@ -5,6 +5,9 @@ import type { ReaderSettings } from "./settings/types";
 import type { ReaderHost } from "../core/reader-host";
 import type { ServerClient } from "../core/api";
 
+/** Scene a plugin loads during. */
+export type Scene = "app" | "book-import" | "bookshelf" | "reader";
+
 // ── Search API (defined here so core doesn't need to know about search) ──
 
 export interface SearchApi {
@@ -111,11 +114,11 @@ export interface ToolbarItem {
 }
 
 export interface UISlots {
-  registerModal(name: string, component: Component): void;
-  registerOverlay(name: string, component: Component): void;
+  registerModal(name: string, component: Component | (() => Promise<Component>)): void;
+  registerOverlay(name: string, component: Component | (() => Promise<Component>)): void;
   registerFooterAction(action: FooterAction): void;
   /** Register a widget rendered in the bookshelf (e.g. stats bar). */
-  registerBookshelfWidget(component: Component): void;
+  registerBookshelfWidget(component: Component | (() => Promise<Component>)): void;
   /** Register a menu item in the bookshelf menu-popover. */
   registerBookshelfMenuAction(action: BookshelfMenuAction): void;
   /** Register an item in the reader right-edge toolbar (e.g. auto-read, TTS). */
@@ -123,7 +126,7 @@ export interface UISlots {
   /** Register an action button in the reader header (e.g. settings gear). */
   registerHeaderAction(action: HeaderAction): void;
   /** Register a full-page component navigable via /page/<name>. */
-  registerPage(name: string, component: Component): void;
+  registerPage(name: string, component: Component | (() => Promise<Component>)): void;
   /** Open a modal by name (delegates to uiStore). */
   openModal(name: string): void;
   /** Set theme class on document.body + .reader-view-container. Auto-cleaned on teardown. */

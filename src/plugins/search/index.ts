@@ -1,6 +1,4 @@
 import { reactive } from "vue";
-import SearchPanel from "./SearchPanel.vue";
-import SearchFooterContent from "./SearchFooterContent.vue";
 import { useReaderSearch } from "./useReaderSearch";
 import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
@@ -21,8 +19,8 @@ export const searchPlugin: Plugin = {
       ctx.capabilities.unregister("searchApis", api);
     });
 
-    ctx.ui.registerModal("search", SearchPanel);
-    ctx.ui.registerOverlay("search-nav", SearchFooterContent);
+    ctx.ui.registerModal("search", () => import("./SearchPanel.vue"));
+    ctx.ui.registerOverlay("search-nav", () => import("./SearchFooterContent.vue"));
     ctx.ui.registerFooterAction({
       id: "search",
       position: "menu",

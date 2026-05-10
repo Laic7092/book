@@ -1,7 +1,6 @@
 import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
 import { createSourceManager, type SourceManager } from "./sources";
-import BookSourcesPanel from "./BookSourcesPanel.vue";
 
 export const loadOn = "bookshelf" as const;
 
@@ -17,6 +16,7 @@ export const bookSourcesPlugin: Plugin = {
   name: "书源导入",
   version: "0.1.0",
   canActivate: async () => {
+    return false;
     try {
       const res = await fetch("/api/health");
       return res.ok;
@@ -28,7 +28,7 @@ export const bookSourcesPlugin: Plugin = {
   setup(ctx) {
     _manager = createSourceManager(ctx.server);
 
-    ctx.ui.registerModal("book-sources", BookSourcesPanel);
+    ctx.ui.registerModal("book-sources", () => import("./BookSourcesPanel.vue"));
     ctx.ui.registerBookshelfMenuAction({
       id: "book-sources",
       order: 55,

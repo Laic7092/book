@@ -1,4 +1,3 @@
-import PluginsPanel from "./PluginsPanel.vue";
 import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
 
@@ -11,6 +10,6 @@ export const corePlugin: Plugin = {
   version: "1.0.0",
   core: true,
   setup(ctx) {
-    ctx.ui.registerModal("plugins", PluginsPanel);
+    ctx.ui.registerModal("plugins", () => import("./PluginsPanel.vue"));
   },
 };

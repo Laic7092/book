@@ -1,4 +1,4 @@
-import { shallowRef } from "vue";
+import { shallowRef, defineAsyncComponent } from "vue";
 import type { Component } from "vue";
 import { openDB, STORES } from "../storage/db";
 import type {
@@ -99,21 +99,25 @@ export const registeredToolbarItems = shallowRef<ToolbarItem[]>([]);
 export const registeredHeaderActions = shallowRef<HeaderAction[]>([]);
 export const registeredPages = shallowRef<Record<string, Component>>({});
 
+function resolveComponent(v: Component | (() => Promise<Component>)): Component {
+  return typeof v === "function" ? defineAsyncComponent(v as never) : v;
+}
+
 export function createUISlots(): Omit<
   UISlots,
   "openModal" | "setTheme" | "injectIframeStyle" | "removeIframeStyle"
 > {
   return {
-    registerModal(name: string, component: Component) {
+    registerModal(name: string, component: Component | (() => Promise<Component>)) {
       registeredModals.value = {
         ...registeredModals.value,
-        [name]: component,
+        [name]: resolveComponent(component),
       };
     },
-    registerOverlay(name: string, component: Component) {
+    registerOverlay(name: string, component: Component | (() => Promise<Component>)) {
       registeredOverlays.value = {
         ...registeredOverlays.value,
-        [name]: component,
+        [name]: resolveComponent(component),
       };
     },
     registerFooterAction(action: FooterAction) {
@@ -122,8 +126,11 @@ export function createUISlots(): Omit<
       actions.sort((a, b) => a.order - b.order);
       registeredFooterActions.value = actions;
     },
-    registerBookshelfWidget(component: Component) {
-      registeredBookshelfWidgets.value = [...registeredBookshelfWidgets.value, component];
+    registerBookshelfWidget(component: Component | (() => Promise<Component>)) {
+      registeredBookshelfWidgets.value = [
+        ...registeredBookshelfWidgets.value,
+        resolveComponent(component),
+      ];
     },
     registerBookshelfMenuAction(action: BookshelfMenuAction) {
       const existing = registeredBookshelfMenuActions.value.filter((a) => a.id !== action.id);
@@ -143,10 +150,10 @@ export function createUISlots(): Omit<
       actions.sort((a, b) => a.order - b.order);
       registeredHeaderActions.value = actions;
     },
-    registerPage(name: string, component: Component) {
+    registerPage(name: string, component: Component | (() => Promise<Component>)) {
       registeredPages.value = {
         ...registeredPages.value,
-        [name]: component,
+        [name]: resolveComponent(component),
       };
     },
   };
@@ -323,7 +330,8 @@ export function createTrackedContext(id: string, bootstrap: PluginBootstrap): Tr
 
   const ui: UISlots = {
     registerModal(name, component) {
-      rawUi.registerModal(name, component);
+      const resolved = resolveComponent(component);
+      rawUi.registerModal(name, resolved);
       cleanupFns.push(() => {
         const copy = { ...registeredModals.value };
         delete copy[name];
@@ -331,7 +339,8 @@ export function createTrackedContext(id: string, bootstrap: PluginBootstrap): Tr
       });
     },
     registerOverlay(name, component) {
-      rawUi.registerOverlay(name, component);
+      const resolved = resolveComponent(component);
+      rawUi.registerOverlay(name, resolved);
       cleanupFns.push(() => {
         const copy = { ...registeredOverlays.value };
         delete copy[name];
@@ -347,10 +356,11 @@ export function createTrackedContext(id: string, bootstrap: PluginBootstrap): Tr
       });
     },
     registerBookshelfWidget(component) {
-      rawUi.registerBookshelfWidget(component);
+      const resolved = resolveComponent(component);
+      rawUi.registerBookshelfWidget(resolved);
       cleanupFns.push(() => {
         registeredBookshelfWidgets.value = registeredBookshelfWidgets.value.filter(
-          (c) => c !== component,
+          (c) => c !== resolved,
         );
       });
     },
@@ -377,7 +387,8 @@ export function createTrackedContext(id: string, bootstrap: PluginBootstrap): Tr
       });
     },
     registerPage(name, component) {
-      rawUi.registerPage(name, component);
+      const resolved = resolveComponent(component);
+      rawUi.registerPage(name, resolved);
       cleanupFns.push(() => {
         const copy = { ...registeredPages.value };
         delete copy[name];

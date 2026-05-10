@@ -108,7 +108,8 @@ export const useReaderStore = defineStore("reader", {
           throw createReaderError("Book not found", ErrorCode.BOOK_NOT_FOUND);
         }
 
-        await loadPluginsFor("book-import");
+        await loadPluginsFor("reader");
+
         const parser = getParserForFormat(book.format);
         if (!parser) {
           throw createReaderError(
@@ -136,8 +137,6 @@ export const useReaderStore = defineStore("reader", {
 
         this.currentBook = book;
 
-        // Load reader plugins then emit so they can react
-        await loadPluginsFor("reader");
         void pluginEvents.emit("book:opened", { bookId });
 
         return { book, chapters };

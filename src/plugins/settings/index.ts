@@ -7,8 +7,6 @@ import {
   generateBaseCSS,
   generateTypographyCSS,
 } from "../../reader-engine/reader-styles";
-import SettingsPanel from "./SettingsPanel.vue";
-import TypographyPanel from "./TypographyPanel.vue";
 
 let settingsState: SettingsState | null = null;
 
@@ -65,8 +63,8 @@ export const settingsPlugin: Plugin = {
     });
 
     // Register modals
-    ctx.ui.registerModal("settings", SettingsPanel);
-    ctx.ui.registerModal("typographySettings", TypographyPanel);
+    ctx.ui.registerModal("settings", () => import("./SettingsPanel.vue"));
+    ctx.ui.registerModal("typographySettings", () => import("./TypographyPanel.vue"));
 
     // Register header gear icon
     ctx.ui.registerHeaderAction({

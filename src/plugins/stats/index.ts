@@ -1,6 +1,3 @@
-import StatsPanel from "./StatsPanel.vue";
-import StatsPage from "./StatsPage.vue";
-import StatsBar from "./StatsBar.vue";
 import { triggerStatsRefresh } from "./refresh";
 import { createStatsEngine, setStatsEngine } from "./engine";
 import type { Plugin } from "../types";
@@ -25,9 +22,9 @@ export const statsPlugin: Plugin = {
       });
     });
 
-    ctx.ui.registerBookshelfWidget(StatsBar);
-    ctx.ui.registerModal("stats", StatsPanel);
-    ctx.ui.registerPage("stats", StatsPage);
+    ctx.ui.registerBookshelfWidget(() => import("./StatsBar.vue"));
+    ctx.ui.registerModal("stats", () => import("./StatsPanel.vue"));
+    ctx.ui.registerPage("stats", () => import("./StatsPage.vue"));
     ctx.ui.registerFooterAction({
       id: "stats",
       position: "menu",

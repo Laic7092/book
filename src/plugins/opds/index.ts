@@ -1,4 +1,3 @@
-import OpdsPanel from "./OpdsPanel.vue";
 import type { Plugin, PluginContext } from "../types";
 import { PLUGIN_BRAND } from "../types";
 
@@ -14,6 +13,7 @@ export const opdsPlugin: Plugin = {
   name: "OPDS Catalog",
   version: "0.1.0",
   canActivate: async () => {
+    return false;
     try {
       const res = await fetch("/api/health");
       return res.ok;
@@ -24,7 +24,7 @@ export const opdsPlugin: Plugin = {
   activationFailedReason: "后端服务未运行（OPDS 需要服务端代理网络请求）",
   setup(ctx) {
     pluginContext = ctx;
-    ctx.ui.registerModal("opds", OpdsPanel);
+    ctx.ui.registerModal("opds", () => import("./OpdsPanel.vue"));
     ctx.ui.registerBookshelfMenuAction({
       id: "opds",
       order: 50,
