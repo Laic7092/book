@@ -109,7 +109,7 @@ function setRef(el: HTMLElement | null, chapterId: string) {
 
 .toc-list {
   list-style: none;
-  padding: 12px 14px;
+  padding: 0 14px;
   margin: 0;
 }
 

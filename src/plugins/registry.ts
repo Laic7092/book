@@ -11,6 +11,7 @@ import {
   registeredToolbarItems,
   registeredHeaderActions,
   registeredContentTransformers,
+  registeredPages,
   dynamicCapabilities,
   type TrackedContext,
 } from "./context";
@@ -324,6 +325,10 @@ export function getToolbarItems(): ToolbarItem[] {
 
 export function getHeaderActions(): HeaderAction[] {
   return [...registeredHeaderActions.value];
+}
+
+export function getPageComponent(name: string): Component | undefined {
+  return registeredPages.value[name];
 }
 
 // ── Capability collectors ──

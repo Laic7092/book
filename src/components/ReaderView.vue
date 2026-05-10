@@ -158,8 +158,8 @@ function closeModal() {
   top: 50%;
   transform: translateY(-50%);
   z-index: var(--z-chrome);
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
   border: 1px solid var(--border);
   background: var(--bg-elevated, #fff);
@@ -168,15 +168,27 @@ function closeModal() {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.1),
+    0 1px 4px rgba(0, 0, 0, 0.06);
   -webkit-tap-highlight-color: transparent;
-  opacity: 0.5;
-  transition: opacity 200ms ease;
+  opacity: 0.55;
+  backdrop-filter: blur(12px);
+  transition:
+    opacity 200ms ease,
+    transform 200ms ease,
+    border-color 200ms ease,
+    color 200ms ease,
+    box-shadow 200ms ease;
 }
 .history-btn:hover {
   opacity: 1;
   border-color: var(--accent);
   color: var(--accent);
+  transform: translateY(-50%) scale(1.08);
+  box-shadow:
+    0 6px 20px rgba(0, 0, 0, 0.14),
+    0 2px 6px rgba(0, 0, 0, 0.08);
 }
 .history-back {
   left: max(12px, env(safe-area-inset-left, 0));

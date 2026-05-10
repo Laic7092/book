@@ -64,6 +64,7 @@ function cancelRename() {
 // ── Folder dropdown state ──
 const folderDropdownBookId = ref<string | null>(null);
 const folderDropdownOpen = ref(false);
+const folderDropdownPos = ref({ x: 0, y: 0 });
 
 function toggleFolderDropdown(bookId: string, e: MouseEvent) {
   e.stopPropagation();
@@ -72,6 +73,12 @@ function toggleFolderDropdown(bookId: string, e: MouseEvent) {
   } else {
     folderDropdownBookId.value = bookId;
     folderDropdownOpen.value = true;
+    const btn = e.currentTarget as HTMLElement;
+    const rect = btn.getBoundingClientRect();
+    folderDropdownPos.value = {
+      x: rect.left,
+      y: rect.bottom + 4,
+    };
   }
 }
 
@@ -145,8 +152,17 @@ function onDocumentClick() {
 // ── Existing code below ──
 const sortBy = ref<"recent" | "title-asc" | "title-desc" | "author-asc" | "added">("recent");
 const showMenu = ref(false);
+const menuBtnRef = ref<HTMLElement | null>(null);
+const menuPos = ref({ top: 0, right: 0 });
 
 function toggleMenu() {
+  if (!showMenu.value && menuBtnRef.value) {
+    const rect = menuBtnRef.value.getBoundingClientRect();
+    menuPos.value = {
+      top: rect.bottom + 6,
+      right: window.innerWidth - rect.right,
+    };
+  }
   showMenu.value = !showMenu.value;
 }
 
@@ -372,6 +388,7 @@ onMounted(() => {
           </label>
           <div class="menu-wrapper">
             <button
+              ref="menuBtnRef"
               class="btn-menu"
               :class="{ open: showMenu }"
               @click.stop="toggleMenu"
@@ -392,7 +409,12 @@ onMounted(() => {
               </svg>
             </button>
             <transition name="menu-pop">
-              <div v-if="showMenu" class="menu-popover" @click.stop>
+              <div
+                v-if="showMenu"
+                class="menu-popover"
+                :style="{ top: menuPos.top + 'px', right: menuPos.right + 'px' }"
+                @click.stop
+              >
                 <div class="menu-section">
                   <div class="menu-label">View</div>
                   <button
@@ -708,6 +730,20 @@ onMounted(() => {
                     bookInitials.get(book.id)
                   }}</span>
                   <span class="cover-format">{{ book.format.toUpperCase() }}</span>
+                  <span v-if="book.lastReadAt" class="cover-read-badge" title="Reading started">
+                    <svg
+                      width="10"
+                      height="10"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="3"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  </span>
                 </div>
                 <div class="book-info">
                   <h3
@@ -730,11 +766,30 @@ onMounted(() => {
                   <p class="book-author" :class="{ unknown: !book.author }">
                     {{ book.author || "Unknown author" }}
                   </p>
-                  <div v-if="book.lastReadAt" class="book-meta">
-                    <span class="meta-dot"></span>
-                    <span class="meta-date">{{
-                      new Date(book.lastReadAt).toLocaleDateString()
-                    }}</span>
+                  <div class="book-card-footer">
+                    <div v-if="book.folderId" class="book-folder-tag">
+                      <svg
+                        width="10"
+                        height="10"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                      >
+                        <path
+                          d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2v11z"
+                        />
+                      </svg>
+                      <span>{{
+                        bookshelfStore.folders.find((f) => f.id === book.folderId)?.name
+                      }}</span>
+                    </div>
+                    <div v-if="book.lastReadAt" class="book-meta">
+                      <span class="meta-dot"></span>
+                      <span class="meta-date">{{
+                        new Date(book.lastReadAt).toLocaleDateString()
+                      }}</span>
+                    </div>
                   </div>
                 </div>
                 <button
@@ -805,6 +860,20 @@ onMounted(() => {
                 bookInitials.get(book.id)
               }}</span>
               <span class="cover-format">{{ book.format.toUpperCase() }}</span>
+              <span v-if="book.lastReadAt" class="cover-read-badge" title="Reading started">
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="3"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </span>
             </div>
             <div class="book-info">
               <h3
@@ -827,24 +896,30 @@ onMounted(() => {
               <p class="book-author" :class="{ unknown: !book.author }">
                 {{ book.author || "Unknown author" }}
               </p>
-              <div v-if="book.folderId" class="book-folder-tag">
-                <svg
-                  width="10"
-                  height="10"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                >
-                  <path
-                    d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2v11z"
-                  />
-                </svg>
-                <span>{{ bookshelfStore.folders.find((f) => f.id === book.folderId)?.name }}</span>
-              </div>
-              <div v-if="book.lastReadAt" class="book-meta">
-                <span class="meta-dot"></span>
-                <span class="meta-date">{{ new Date(book.lastReadAt).toLocaleDateString() }}</span>
+              <div class="book-card-footer">
+                <div v-if="book.folderId" class="book-folder-tag">
+                  <svg
+                    width="10"
+                    height="10"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path
+                      d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2v11z"
+                    />
+                  </svg>
+                  <span>{{
+                    bookshelfStore.folders.find((f) => f.id === book.folderId)?.name
+                  }}</span>
+                </div>
+                <div v-if="book.lastReadAt" class="book-meta">
+                  <span class="meta-dot"></span>
+                  <span class="meta-date">{{
+                    new Date(book.lastReadAt).toLocaleDateString()
+                  }}</span>
+                </div>
               </div>
             </div>
             <button
@@ -912,10 +987,29 @@ onMounted(() => {
             <span v-else class="list-cover-initial" aria-hidden="true">{{
               bookInitials.get(book.id)
             }}</span>
+            <span v-if="book.lastReadAt" class="list-cover-read-badge" title="Reading started">
+              <svg
+                width="8"
+                height="8"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="3"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            </span>
           </div>
           <div class="list-info">
             <h3 class="list-title">{{ book.title }}</h3>
-            <p class="list-author">{{ book.author || "Unknown author" }}</p>
+            <div class="list-details">
+              <p class="list-author">{{ book.author || "Unknown author" }}</p>
+              <span v-if="book.folderId" class="list-folder-tag">{{
+                bookshelfStore.folders.find((f) => f.id === book.folderId)?.name
+              }}</span>
+            </div>
           </div>
           <div class="list-meta">
             <span class="list-format">{{ book.format.toUpperCase() }}</span>
@@ -923,6 +1017,24 @@ onMounted(() => {
               new Date(book.lastReadAt).toLocaleDateString()
             }}</span>
           </div>
+          <button
+            class="btn-folder btn-folder-list"
+            @click="toggleFolderDropdown(book.id, $event)"
+            title="Move to folder"
+            aria-label="Move to folder"
+            tabindex="0"
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2v11z" />
+            </svg>
+          </button>
           <button
             class="btn-delete"
             @click="confirmDelete(book.id, $event)"
@@ -1021,7 +1133,12 @@ onMounted(() => {
     <ModalWrapper :modal-type="uiStore.activeModal" @close="closeModal" />
 
     <!-- Folder assignment dropdown -->
-    <div v-if="folderDropdownOpen" class="folder-dropdown" @click.stop>
+    <div
+      v-if="folderDropdownOpen"
+      class="folder-dropdown"
+      :style="{ left: folderDropdownPos.x + 'px', top: folderDropdownPos.y + 'px' }"
+      @click.stop
+    >
       <div class="folder-dropdown-header">Move to folder</div>
       <button
         class="folder-dropdown-item"
@@ -1299,8 +1416,6 @@ onMounted(() => {
 
 .menu-popover {
   position: fixed;
-  top: 62px;
-  right: 48px;
   min-width: 200px;
   padding: 6px;
   background: var(--bg-elevated);
@@ -1520,6 +1635,7 @@ onMounted(() => {
 
 .empty-symbol {
   margin-bottom: 28px;
+  animation: floatSymbol 3s ease-in-out infinite;
 }
 
 .empty-symbol-inner {
@@ -1540,6 +1656,16 @@ onMounted(() => {
   color: var(--color-accent);
   background: var(--color-accent-soft);
   transform: scale(1.03);
+}
+
+@keyframes floatSymbol {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
 }
 
 .empty-title {
@@ -1604,8 +1730,10 @@ onMounted(() => {
 }
 
 .book-card:hover {
-  transform: translateY(-5px);
-  box-shadow: var(--shadow-lg);
+  transform: translateY(-6px);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.1),
+    0 2px 8px rgba(0, 0, 0, 0.06);
   border-color: transparent;
 }
 
@@ -1639,8 +1767,9 @@ onMounted(() => {
 .book-card:hover .book-cover {
   transform: scale(1.04);
   box-shadow:
-    var(--shadow-md),
-    0 8px 20px rgba(0, 0, 0, 0.18);
+    0 4px 16px rgba(0, 0, 0, 0.12),
+    0 12px 28px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .cover-image {
@@ -1677,6 +1806,47 @@ onMounted(() => {
   backdrop-filter: blur(6px);
   letter-spacing: 0.04em;
   transition: background var(--transition-fast);
+}
+
+.cover-read-badge {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.93);
+  color: #16a34a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(4px);
+}
+
+/* Subtle paper texture on covers */
+.book-cover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(255, 255, 255, 0.015) 2px,
+      rgba(255, 255, 255, 0.015) 4px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 0, 0, 0.01) 2px,
+      rgba(0, 0, 0, 0.01) 4px
+    );
+  pointer-events: none;
+  opacity: 0.5;
 }
 
 /* Info */
@@ -1718,8 +1888,15 @@ onMounted(() => {
 .book-meta {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 4px;
+  gap: 5px;
+}
+
+.book-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  min-height: 16px;
 }
 
 .meta-dot {
@@ -1805,9 +1982,19 @@ onMounted(() => {
   outline-offset: 2px;
 }
 
-.book-list-item:hover .btn-delete {
+.book-list-item:hover .btn-delete,
+.book-list-item:hover .btn-folder-list {
   opacity: 1;
   transform: scale(1);
+}
+
+.btn-folder-list {
+  position: relative;
+  top: auto;
+  right: auto;
+  opacity: 0;
+  transform: scale(0.85);
+  flex-shrink: 0;
 }
 
 .list-cover {
@@ -1839,12 +2026,34 @@ onMounted(() => {
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
 }
 
+.list-cover-read-badge {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  color: #16a34a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
 .list-info {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.list-details {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .list-title {
@@ -1865,6 +2074,20 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.list-folder-tag {
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  padding: 1px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100px;
 }
 
 .list-meta {
@@ -1922,10 +2145,13 @@ onMounted(() => {
   align-items: center;
   gap: 11px;
   padding: 13px 17px;
-  background: rgba(31, 26, 23, 0.9);
+  background: rgba(31, 26, 23, 0.92);
   color: #f7f5f2;
   border-radius: 14px;
-  box-shadow: var(--shadow-lg);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.18),
+    0 2px 8px rgba(0, 0, 0, 0.1);
   font-family: var(--font-ui);
   z-index: 3000;
   backdrop-filter: blur(16px) saturate(180%);
@@ -1996,23 +2222,26 @@ onMounted(() => {
 .confirm-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1001;
-  animation: fadeIn 0.2s ease-out;
-  backdrop-filter: blur(4px);
+  animation: fadeIn 0.25s ease-out;
+  backdrop-filter: blur(6px);
 }
 
 .confirm-dialog {
   background: var(--bg-primary);
-  border-radius: 14px;
+  border-radius: 16px;
   padding: 28px;
   max-width: 340px;
   width: 90%;
   animation: scaleIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
   border: 1px solid var(--border-color);
+  box-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.15),
+    0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .confirm-title {
@@ -2038,8 +2267,8 @@ onMounted(() => {
 .confirm-btn {
   flex: 1;
   padding: 11px 16px;
-  border-radius: 9px;
-  border: none;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -2051,15 +2280,18 @@ onMounted(() => {
 
 .confirm-btn:hover {
   background: var(--bg-tertiary);
+  border-color: var(--color-accent-muted);
 }
 
 .confirm-danger {
   background: #dc2626;
   color: #fff;
+  border-color: #dc2626;
 }
 
 .confirm-danger:hover {
   background: #b91c1c !important;
+  border-color: #b91c1c;
 }
 
 /* ═══════════════════════════════════════════════
@@ -2162,7 +2394,6 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 4px;
-  margin-top: 6px;
   font-size: 10px;
   color: var(--text-muted);
   line-height: 1;
@@ -2232,9 +2463,6 @@ onMounted(() => {
   border: 1px solid var(--border-color);
   border-radius: 12px;
   box-shadow: var(--shadow-lg);
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
 }
 
 .folder-dropdown-header {

@@ -4,6 +4,7 @@ import Bookshelf from "./components/Bookshelf.vue";
 import { useReaderStore } from "./stores/reader";
 import { useUIStore } from "./stores/ui";
 import { currentRoute, navigate } from "./router";
+import { getPageComponent } from "./plugins/registry";
 
 const ReaderView = defineAsyncComponent(() => import("./components/ReaderView.vue"));
 const FixedLayoutView = defineAsyncComponent(() => import("./components/FixedLayoutView.vue"));
@@ -14,6 +15,11 @@ const uiStore = useUIStore();
 const isFixedLayout = computed(() => {
   const fmt = readerStore.currentBook?.format;
   return fmt === "pdf" || fmt === "cbz";
+});
+
+const pageComponent = computed(() => {
+  if (currentRoute.name !== "page") return null;
+  return getPageComponent(currentRoute.params.pageName) || null;
 });
 
 watch(
@@ -42,8 +48,12 @@ watch(
 
 <template>
   <Transition name="page">
-    <Bookshelf v-if="currentRoute.name !== 'reader'" key="bookshelf" />
-    <template v-else key="reader">
+    <component
+      v-if="currentRoute.name === 'page' && pageComponent"
+      :is="pageComponent"
+      key="page"
+    />
+    <template v-else-if="currentRoute.name === 'reader'" key="reader">
       <FixedLayoutView
         v-if="readerStore.currentBook && isFixedLayout"
         :book="readerStore.currentBook"
@@ -51,6 +61,7 @@ watch(
       <ReaderView v-else-if="readerStore.currentBook" :book="readerStore.currentBook" />
       <div v-else class="reader-loading" />
     </template>
+    <Bookshelf v-else key="bookshelf" />
   </Transition>
 </template>
 

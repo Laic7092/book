@@ -129,7 +129,7 @@ const formatLabel = (type: string, title?: string): string => {
   <div class="modal-content-inner">
     <ModalHeader title="OPDS Catalog" @close="emit('close')" />
 
-    <div class="modal-body scroll-body">
+    <div class="modal-body scroll-body" style="padding: 20px">
       <!-- URL input -->
       <div class="opds-url-bar">
         <svg

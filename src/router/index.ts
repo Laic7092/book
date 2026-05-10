@@ -1,7 +1,7 @@
 import { reactive } from "vue";
 
 export interface Route {
-  name: "bookshelf" | "reader";
+  name: "bookshelf" | "reader" | "page";
   params: Record<string, string>;
 }
 
@@ -20,8 +20,10 @@ function toUrl(appPath: string): string {
 
 function matchAppPath(appPath: string): Route {
   if (appPath === "/") return { name: "bookshelf", params: {} };
-  const m = appPath.match(/^\/reader\/([^/]+)$/);
-  if (m) return { name: "reader", params: { bookId: m[1] } };
+  const readerM = appPath.match(/^\/reader\/([^/]+)$/);
+  if (readerM) return { name: "reader", params: { bookId: readerM[1] } };
+  const pageM = appPath.match(/^\/page\/([^/]+)$/);
+  if (pageM) return { name: "page", params: { pageName: pageM[1] } };
   return { name: "bookshelf", params: {} };
 }
 

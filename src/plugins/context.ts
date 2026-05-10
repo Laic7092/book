@@ -97,6 +97,7 @@ export const registeredBookshelfMenuActions = shallowRef<BookshelfMenuAction[]>(
 export const registeredContentTransformers = shallowRef<ContentTransformer[]>([]);
 export const registeredToolbarItems = shallowRef<ToolbarItem[]>([]);
 export const registeredHeaderActions = shallowRef<HeaderAction[]>([]);
+export const registeredPages = shallowRef<Record<string, Component>>({});
 
 export function createUISlots(): Omit<
   UISlots,
@@ -141,6 +142,12 @@ export function createUISlots(): Omit<
       const actions = [...existing, action];
       actions.sort((a, b) => a.order - b.order);
       registeredHeaderActions.value = actions;
+    },
+    registerPage(name: string, component: Component) {
+      registeredPages.value = {
+        ...registeredPages.value,
+        [name]: component,
+      };
     },
   };
 }
@@ -367,6 +374,14 @@ export function createTrackedContext(id: string, bootstrap: PluginBootstrap): Tr
         registeredHeaderActions.value = registeredHeaderActions.value.filter(
           (a) => a.id !== action.id,
         );
+      });
+    },
+    registerPage(name, component) {
+      rawUi.registerPage(name, component);
+      cleanupFns.push(() => {
+        const copy = { ...registeredPages.value };
+        delete copy[name];
+        registeredPages.value = copy;
       });
     },
     openModal: (name) => {

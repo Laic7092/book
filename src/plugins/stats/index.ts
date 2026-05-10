@@ -1,4 +1,5 @@
 import StatsPanel from "./StatsPanel.vue";
+import StatsPage from "./StatsPage.vue";
 import StatsBar from "./StatsBar.vue";
 import { triggerStatsRefresh } from "./refresh";
 import * as engine from "./engine";
@@ -27,6 +28,7 @@ export const statsPlugin: Plugin = {
 
     ctx.ui.registerBookshelfWidget(StatsBar);
     ctx.ui.registerModal("stats", StatsPanel);
+    ctx.ui.registerPage("stats", StatsPage);
     ctx.ui.registerFooterAction({
       id: "stats",
       position: "menu",
@@ -34,6 +36,17 @@ export const statsPlugin: Plugin = {
       icon: '<path d="M12 20V10M18 20V4M6 20v-4" />',
       modal: "stats",
       order: 40,
+    });
+
+    // Bookshelf menu action → full stats page
+    ctx.ui.registerBookshelfMenuAction({
+      id: "stats-page",
+      order: 50,
+      label: "Reading Stats",
+      icon: '<path d="M12 20V10M18 20V4M6 20v-4" />',
+      onClick: () => {
+        ctx.navigate("/page/stats");
+      },
     });
   },
   teardown() {

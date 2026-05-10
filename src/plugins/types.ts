@@ -122,6 +122,8 @@ export interface UISlots {
   registerToolbarItem(item: ToolbarItem): void;
   /** Register an action button in the reader header (e.g. settings gear). */
   registerHeaderAction(action: HeaderAction): void;
+  /** Register a full-page component navigable via /page/<name>. */
+  registerPage(name: string, component: Component): void;
   /** Open a modal by name (delegates to uiStore). */
   openModal(name: string): void;
   /** Set theme class on document.body + .reader-view-container. Auto-cleaned on teardown. */
