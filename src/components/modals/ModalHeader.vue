@@ -11,7 +11,10 @@ const emit = defineEmits<{
 <template>
   <div class="modal-header">
     <div class="modal-header-row">
-      <h3>{{ title }}</h3>
+      <div class="modal-header-left">
+        <slot name="prefix" />
+        <h3>{{ title }}</h3>
+      </div>
       <button class="modal-close" @click="emit('close')" aria-label="Close">
         <svg
           width="20"
@@ -42,6 +45,12 @@ const emit = defineEmits<{
   justify-content: space-between;
   align-items: center;
   padding: 16px 20px;
+}
+
+.modal-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .modal-header h3 {
