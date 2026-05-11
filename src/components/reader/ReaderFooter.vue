@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, nextTick } from "vue";
-import { getFooterActions, pluginStateVersion } from "../../plugins/registry";
+import { getFooterActions, pluginStateVersion } from "../../plugins/manager/registry";
 
 defineProps<{
   showControls: boolean;

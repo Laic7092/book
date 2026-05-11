@@ -2,7 +2,7 @@
 import type { Chapter } from "../../core/types";
 import TableOfContents from "./TableOfContents.vue";
 import { computed } from "vue";
-import { getModalComponents, pluginStateVersion } from "../../plugins/registry";
+import { getModalComponents, pluginStateVersion } from "../../plugins/manager/registry";
 
 const pluginModals = computed(() => {
   void pluginStateVersion.value;

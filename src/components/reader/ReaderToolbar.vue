@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { getToolbarItems, pluginStateVersion } from "../../plugins/registry";
+import { getToolbarItems, pluginStateVersion } from "../../plugins/manager/registry";
 import { useUIStore } from "../../stores/ui";
 
 const uiStore = useUIStore();

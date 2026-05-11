@@ -34,23 +34,69 @@ interface Plugin {
 }
 ```
 
-### meta.ts — 场景声明
+### meta.ts — 插件元数据（构建时扫描）
 
-每个插件目录下的 `meta.ts` 仅导出一个 `loadOn` 字段，决定该插件在哪个场景下加载：
+每个插件目录下的 `meta.ts` 声明插件的加载场景、名称等元数据。Vite 插件在**构建时**扫描所有 `meta.ts`，生成 `src/plugins/plugin-manifest.ts`，运行时不再做 glob 扫描。
 
 ```ts
-// meta.ts
+// 普通插件 meta.ts
 export const loadOn = "reader" as const;
+export const pluginId = "annotations";
+export const name = "Annotations";
+
+// 解析器插件 meta.ts（多场景 + 格式声明）
+export const loadOn = ["book-import", "reader"] as const;
+export const pluginId = "epub";
+export const name = "EPUB Parser";
+export const formats = ["epub"]; // ← 标记支持的格式，用于按需加载
 ```
 
-**场景类型**：`"app" | "book-import" | "bookshelf" | "reader"`
+**字段说明**：
 
-| 场景          | 触发时机   | 典型插件                                 |
-| ------------- | ---------- | ---------------------------------------- |
-| `app`         | 应用启动时 | —                                        |
-| `book-import` | 导入书籍时 | epub, txt-parser, cbz-parser, pdf-parser |
-| `bookshelf`   | 书架界面   | last-book                                |
-| `reader`      | 进入阅读器 | 大部分功能插件                           |
+| 字段       | 必填 | 说明                                                                    |
+| ---------- | ---- | ----------------------------------------------------------------------- |
+| `loadOn`   | ✓    | 场景或场景数组，`"app" \| "book-import" \| "bookshelf" \| "reader"`     |
+| `pluginId` | ✓    | 插件唯一标识，与目录名一致                                              |
+| `name`     | ✓    | 显示名                                                                  |
+| `formats`  | ×    | 解析器插件标记支持的格式（如 `["epub"]`），用于按格式按需加载，见第五节 |
+
+| 场景          | 触发时机   | 插件                                                                                                            |
+| ------------- | ---------- | --------------------------------------------------------------------------------------------------------------- |
+| `app`         | 应用启动时 | last-book                                                                                                       |
+| `book-import` | 导入书籍时 | （已移除，解析器改为按格式按需加载）                                                                            |
+| `bookshelf`   | 书架界面   | book-sources, manager, opds                                                                                     |
+| `reader`      | 进入阅读器 | 9 个功能插件（annotations, auto-read, bookmarks, progress-bar, reading-progress, search, settings, stats, tts） |
+
+> **注意**：解析器插件（epub, cbz-parser, pdf-parser, txt-parser）不再通过场景加载，而是通过 `loadParserForFormat()` 按格式按需加载，见第五节。
+
+### 构建时插件清单
+
+`vite.config.ts` 内置了 `pluginManifest()` 插件，在构建时扫描所有 `src/plugins/*/meta.ts`，生成 `src/plugins/plugin-manifest.ts`：
+
+```ts
+// 自动生成的 plugin-manifest.ts
+export interface PluginManifestEntry {
+  pluginId: string;
+  loadOn: string | string[];
+  name: string;
+  dir: string;
+  formats?: string[]; // 解析器插件特有
+}
+
+export const pluginManifest: PluginManifestEntry[] = [
+  { pluginId: "annotations", name: "Annotations", loadOn: "reader", dir: "annotations" },
+  {
+    pluginId: "epub",
+    name: "EPUB Parser",
+    loadOn: ["book-import", "reader"],
+    dir: "epub",
+    formats: ["epub"],
+  },
+  // ...
+];
+```
+
+运行时 `loader.ts` 和 `PluginsPanel.vue` 直接引用该 manifest，不再做 `import.meta.glob` 运行时扫描。
 
 ### index.ts — 插件导出
 
@@ -227,24 +273,55 @@ interface ContentTransformer {
 
 ## 四、加载流程
 
-### 1. 编译时扫描
+### 1. 构建时扫描 → 运行时 manifest
 
-`loader.ts` 使用 Vite 的 `import.meta.glob` 在编译时扫描所有 `*/meta.ts`：
+Vite 插件 `pluginManifest()` 在构建时扫描所有 `src/plugins/*/meta.ts`，生成 `plugin-manifest.ts`。`loader.ts` 直接 import 该 manifest，不做运行时 glob。
 
 ```ts
-const metas = import.meta.glob<{ loadOn: Scene }>("./*/meta.ts", { eager: true });
-const pluginLoaders = import.meta.glob("./*/index.ts"); // 懒加载
+// loader.ts
+import { pluginManifest } from "./plugin-manifest";
+const pluginLoaders = import.meta.glob("./*/index.ts"); // 仅对 index.ts 做懒加载
 ```
 
-### 2. 场景触发
+### 2. 场景触发 + 统一 stub 注册
 
 ```ts
-loadPluginsFor("reader"); // 加载所有 loadOn === "reader" 的插件
+await loadPluginsFor("reader");
+```
+
+`ensureSceneMap()` 的执行流程：
+
+1. 从 `getAllPluginStates()` 读取所有插件的启用/禁用状态（来自 manager 插件的 entity store）
+2. 遍历 manifest 中的每个插件，**先全部注册一个 stub**（含 id、name、enabled 状态），保证插件面板立即可见
+3. 对**已禁用的插件**跳过场景加载，保留 loader 以备启用时升级
+4. 对**解析器插件**跳过场景加载（改为通过 `loadParserForFormat()` 按格式加载）
+5. 其余插件按 `loadOn` 分配到场景任务队列
+
+场景触发时：
+
+```ts
+loadPluginsFor("reader");
 ```
 
 - 每个场景只加载一次（`loaded` Set 去重）
-- 场景内所有插件**并行加载**（`Promise.all`）
-- 加载顺序：`import index.ts` → `registerPlugin()` → `loadPluginStates()` → `initializePlugins()`
+- 场景内所有非解析器插件**并行加载**
+- 加载顺序：`import index.ts` → `registerPlugin(真实插件)` → `loadPluginStates()` → `initializePlugins()`
+
+### 3. 解析器按需加载
+
+解析器不再通过场景加载，而是通过 `loadParserForFormat(format)` 按格式按需加载：
+
+```ts
+// reader.ts — 打开书籍时只加载匹配的解析器
+await loadParserForFormat(book.format); // 如 "epub"
+const parser = getParserForFormat(book.format);
+
+// 导入书籍时同理
+const format = file.name.split(".").pop()?.toLowerCase();
+if (format) await loadParserForFormat(format);
+```
+
+这样做避免了打开 `.epub` 时加载 cbz/pdf/txt 解析器（含 pdfjs-dist 等重型依赖）。
 
 ### 3. 初始化
 
@@ -267,7 +344,7 @@ loadPluginsFor("reader"); // 加载所有 loadOn === "reader" 的插件
 - **核心插件**不可禁用
 - **启用**：检查依赖是否全部可用 → `setupPlugin(id)` → 更新状态 → 持久化
 - **禁用**：检查是否有其他插件依赖它 → `teardownPlugin(id)` → 更新状态 → 持久化
-- 持久化到 IndexedDB `settings` 表的 `__plugin_states__` 键
+- 持久化通过 `manager/plugin-states.ts` 中的 `createEntityStore`，写入 IndexedDB `plugin_store` 表（`["manager", "plugin-state:<id>"]`）
 
 ---
 
@@ -424,11 +501,32 @@ export const readingProgressPlugin: Plugin = {
 
 ```ts
 // settings/index.ts
+import { createEntityStore } from "../store-factory";
+
+// 用一个 entity 存储整个设置对象
+type SettingsEntity = { id: string } & ReaderSettings;
+const ENTITY_ID = "reader-settings";
+
 export const settingsPlugin: Plugin = {
   id: "settings",
   async setup(ctx) {
-    const state = createSettingsState(ctx.events);
-    await state.init();
+    const store = createEntityStore<SettingsEntity>(ctx.storage, "setting");
+    // 从 IndexedDB 加载已有设置
+    await new Promise<void>((resolve) => {
+      const stop = watch(
+        () => store.loaded.value,
+        (v) => {
+          if (v) {
+            stop();
+            resolve();
+          }
+        },
+      );
+    });
+    const cached = store.getById(ENTITY_ID);
+    const settings = ref<ReaderSettings>(
+      cached ? { ...DEFAULT_SETTINGS, ...omitId(cached) } : { ...DEFAULT_SETTINGS },
+    );
 
     // 监听 reader 挂载事件同步设置
     ctx.events.on("reader:mounted", syncToHost);
@@ -460,20 +558,22 @@ export const settingsPlugin: Plugin = {
 
 ## 九、所有已注册插件一览
 
-| 插件 ID            | 名称               | 场景                  | 核心 | 提供能力                                                           |
-| ------------------ | ------------------ | --------------------- | ---- | ------------------------------------------------------------------ |
-| `epub`             | EPUB Parser        | book-import           | ✓    | parser (epub)                                                      |
-| `txt-parser`       | TXT Parser         | (无，factory.ts 直载) | ✓    | parser (txt)                                                       |
-| `cbz-parser`       | CBZ Parser         | book-import           |      | parser (cbz)                                                       |
-| `pdf-parser`       | PDF Parser         | book-import           |      | parser (pdf)                                                       |
-| `core`             | Core               | bookshelf             | ✓    | plugins 管理面板 modal                                             |
-| `search`           | Full-Text Search   | reader                |      | searchApi, modal, overlay, footer action                           |
-| `stats`            | Reading Statistics | reader                |      | modal, bookshelf widget, footer action                             |
-| `settings`         | Settings           | reader                |      | modal (2个), header action, content transformer, iframe CSS, theme |
-| `annotations`      | Annotations        | reader                |      | modal, overlay, footer action                                      |
-| `bookmarks`        | Bookmarks          | reader                |      | modal, footer action                                               |
-| `progress-bar`     | Progress Bar       | reader                |      | overlay                                                            |
-| `auto-read`        | Auto Read          | reader                |      | toolbar item                                                       |
-| `tts`              | Text to Speech     | reader                |      | toolbar item                                                       |
-| `reading-progress` | Reading Progress   | reader                |      | 自动保存/恢复阅读位置                                              |
-| `last-book`        | Last Book Restore  | bookshelf             |      | 自动恢复上次打开的书籍                                             |
+| 插件 ID            | 名称               | 场景              | 场景标签           | 核心 | 提供能力                                                           |
+| ------------------ | ------------------ | ----------------- | ------------------ | ---- | ------------------------------------------------------------------ |
+| `epub`             | EPUB Parser        | 按需 (格式: epub) | 书籍解析, 阅读体验 | ✓    | parser (epub)                                                      |
+| `txt-parser`       | TXT Parser         | 按需 (格式: txt)  | 书籍解析, 阅读体验 | ✓    | parser (txt)                                                       |
+| `cbz-parser`       | CBZ Parser         | 按需 (格式: cbz)  | 书籍解析, 阅读体验 |      | parser (cbz)                                                       |
+| `pdf-parser`       | PDF Parser         | 按需 (格式: pdf)  | 书籍解析, 阅读体验 |      | parser (pdf)                                                       |
+| `book-sources`     | 书源导入           | bookshelf         | 书架功能           |      | OPDS 书源管理                                                      |
+| `manager`          | Manager            | bookshelf         | 书架功能           | ✓    | 插件管理面板 modal                                                 |
+| `opds`             | OPDS Catalog       | bookshelf         | 书架功能           |      | OPDS 目录浏览                                                      |
+| `search`           | Full-Text Search   | reader            | 阅读体验           |      | searchApi, modal, overlay, footer action                           |
+| `stats`            | Reading Statistics | reader            | 阅读体验           |      | modal, bookshelf widget, footer action                             |
+| `settings`         | Settings           | reader            | 阅读体验           |      | modal (2个), header action, content transformer, iframe CSS, theme |
+| `annotations`      | Annotations        | reader            | 阅读体验           |      | modal, overlay, footer action                                      |
+| `bookmarks`        | Bookmarks          | reader            | 阅读体验           |      | modal, footer action                                               |
+| `progress-bar`     | Progress Bar       | reader            | 阅读体验           |      | overlay                                                            |
+| `auto-read`        | Auto Read          | reader            | 阅读体验           |      | toolbar item                                                       |
+| `tts`              | Text to Speech     | reader            | 阅读体验           |      | toolbar item                                                       |
+| `reading-progress` | Reading Progress   | reader            | 阅读体验           |      | 自动保存/恢复阅读位置                                              |
+| `last-book`        | Last Book Restore  | app               | 启动加载           |      | 自动恢复上次打开的书籍                                             |

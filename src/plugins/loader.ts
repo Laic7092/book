@@ -3,7 +3,7 @@ import {
   initializePlugins,
   loadPluginStates,
   pluginModuleLoaders,
-} from "./registry";
+} from "./manager/registry";
 import { PLUGIN_BRAND } from "./types";
 import type { Plugin, Scene } from "./types";
 import { getAllPluginStates } from "./manager/plugin-states";
@@ -61,17 +61,21 @@ async function ensureSceneMap(): Promise<void> {
     const manifestEntry = pluginManifest.find((m) => m.dir === meta.dir);
     const isParser = manifestEntry ? !!manifestEntry.formats?.length : false;
 
-    // Register a stub for disabled plugins, then skip the import
-    if (meta.pluginId && states?.[meta.pluginId] === false) {
+    // Always register a stub from manifest metadata so the plugin is visible in the panel
+    if (meta.pluginId) {
       registerPlugin({
         [PLUGIN_BRAND]: true as const,
         id: meta.pluginId,
         name: meta.name ?? meta.pluginId,
         version: "0.0.0",
-        enabled: false,
+        enabled: states?.[meta.pluginId] !== false,
         core: false,
       });
-      pluginModuleLoaders.set(meta.pluginId, loader);
+    }
+
+    // If disabled, store the loader for later and skip scene loading
+    if (meta.pluginId && states?.[meta.pluginId] === false) {
+      if (loader) pluginModuleLoaders.set(meta.pluginId, loader);
       continue;
     }
 

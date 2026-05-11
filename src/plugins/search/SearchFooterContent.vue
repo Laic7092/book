@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, watch, onUnmounted } from "vue";
-import { getSearchApis } from "../registry";
+import { getSearchApis } from "../manager/registry";
 import { useUIStore } from "../../stores/ui";
 
 const uiStore = useUIStore();

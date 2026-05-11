@@ -13,7 +13,7 @@ import {
   getBookshelfWidgets,
   getBookshelfMenuActions,
   pluginStateVersion,
-} from "../plugins/registry";
+} from "../plugins/manager/registry";
 import { loadPluginsFor } from "../plugins/loader";
 import { navigate } from "../router";
 

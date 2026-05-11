@@ -9,7 +9,6 @@ export const epubPlugin: Plugin = {
   id: "epub",
   name: "EPUB Parser",
   version: "1.0.0",
-  core: true,
   setup(ctx) {
     ctx.capabilities.register("parsers", parser);
   },

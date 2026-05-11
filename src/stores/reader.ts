@@ -3,7 +3,7 @@
 import { defineStore } from "pinia";
 import type { Book, Chapter, ParsedBook, BookParser } from "../core/types";
 import { ErrorCode, createReaderError } from "../core/errors";
-import { getParsers, getParserForFormat } from "../plugins/registry";
+import { getParsers, getParserForFormat } from "../plugins/manager/registry";
 import { loadPluginsFor, loadParserForFormat } from "../plugins/loader";
 import { pluginEvents } from "../plugins/context";
 import * as booksStore from "../storage/books";

@@ -5,7 +5,7 @@ import { createPinia } from "pinia";
 import App from "./App.vue";
 import "./styles/index.css";
 
-import { setBootstrap } from "./plugins/registry";
+import { setBootstrap } from "./plugins/manager/registry";
 import { loadPluginsFor } from "./plugins/loader";
 
 const app = createApp(App);

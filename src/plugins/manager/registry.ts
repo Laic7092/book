@@ -1,7 +1,7 @@
 import { ref, type Component } from "vue";
-import type { Plugin, FooterAction, BookshelfMenuAction, PluginBootstrap } from "./types";
-import { PLUGIN_BRAND } from "./types";
-import { saveAllPluginStates, getAllPluginStates } from "./manager/plugin-states";
+import type { Plugin, FooterAction, BookshelfMenuAction, PluginBootstrap } from "../types";
+import { PLUGIN_BRAND } from "../types";
+import { saveAllPluginStates, getAllPluginStates } from "./plugin-states";
 import {
   createTrackedContext,
   registeredModals,
@@ -15,9 +15,9 @@ import {
   registeredPages,
   dynamicCapabilities,
   type TrackedContext,
-} from "./context";
-import type { ContentTransformer, SearchApi, ToolbarItem, HeaderAction } from "./types";
-import type { BookParser } from "../core/types";
+} from "../context";
+import type { ContentTransformer, SearchApi, ToolbarItem, HeaderAction } from "../types";
+import type { BookParser } from "../../core/types";
 
 // ── Internal state ──
 
@@ -433,8 +433,8 @@ export function getContentTransformers(): ContentTransformer[] {
   return [...registeredContentTransformers.value];
 }
 
-export { applyContentTransformers } from "./context";
+export { applyContentTransformers } from "../context";
 
 // ── Plugin event bus (re-export for convenience) ──
 
-export { pluginEvents } from "./context";
+export { pluginEvents } from "../context";

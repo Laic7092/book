@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import ModalHeader from "../../components/modals/ModalHeader.vue";
-import { getAllPlugins, setPluginEnabled, pluginStateVersion } from "../../plugins/registry";
+import {
+  getAllPlugins,
+  setPluginEnabled,
+  pluginStateVersion,
+} from "../../plugins/manager/registry";
 import { pluginManifest } from "../../plugins/plugin-manifest";
 import type { Plugin } from "../../plugins/types";
 
@@ -24,7 +28,6 @@ const sceneCount = new Map<string, number>();
 for (const meta of pluginManifest) {
   if (!meta.loadOn) continue;
   pluginSceneMap.set(meta.dir, meta.loadOn);
-
   const scenes = Array.isArray(meta.loadOn) ? meta.loadOn : [meta.loadOn];
   for (const s of scenes) {
     sceneCount.set(s, (sceneCount.get(s) ?? 0) + 1);
@@ -40,7 +43,7 @@ interface FilterPill {
 }
 
 const filterPills = computed<FilterPill[]>(() => {
-  const pills: FilterPill[] = [{ key: "all", label: "全部" }];
+  const pills: FilterPill[] = [{ key: "all", label: "全部", count: pluginManifest.length }];
   for (const key of SCENE_ORDER) {
     const meta = SCENE_META[key];
     if (meta && sceneCount.has(key)) {
@@ -69,7 +72,6 @@ const filteredPlugins = computed(() => {
   });
 });
 
-/** Return scene label(s) for a plugin, for badge display. */
 function getSceneLabels(pluginId: string): string[] {
   const scenes = pluginSceneMap.get(pluginId);
   if (!scenes) return [];
@@ -122,12 +124,7 @@ defineEmits<{ close: [] }>();
       </button>
     </div>
 
-    <!-- Plugin list -->
     <div class="plugin-body">
-      <p class="plugin-hint">
-        核心插件（带 <span class="core-badge-sm">核心</span> 标记）不可禁用。关闭后即时生效。
-      </p>
-
       <div class="plugin-list">
         <div
           v-for="p in filteredPlugins"
@@ -241,8 +238,6 @@ defineEmits<{ close: [] }>();
   color: var(--accent);
 }
 
-/* ── Plugin list ── */
-
 .plugin-list {
   display: flex;
   flex-direction: column;
@@ -300,8 +295,6 @@ defineEmits<{ close: [] }>();
   white-space: nowrap;
 }
 
-/* ── Core badge ── */
-
 .core-badge {
   font-size: 11px;
   font-weight: 600;
@@ -311,12 +304,19 @@ defineEmits<{ close: [] }>();
   border-radius: 10px;
 }
 
-/* ── Scene badges ── */
-
 .scene-badges {
   display: inline-flex;
   gap: 4px;
   flex-wrap: wrap;
+}
+
+/* ── Empty state ── */
+
+.empty-tab {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 14px;
+  padding: 40px 0;
 }
 
 .scene-badge {
@@ -329,17 +329,6 @@ defineEmits<{ close: [] }>();
   border: 1px solid var(--border-color);
   white-space: nowrap;
 }
-
-/* ── Empty state ── */
-
-.empty-tab {
-  text-align: center;
-  color: var(--text-muted);
-  font-size: 14px;
-  padding: 40px 0;
-}
-
-/* ── Toggle ── */
 
 .toggle {
   position: relative;

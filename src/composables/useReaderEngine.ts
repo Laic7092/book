@@ -14,7 +14,7 @@ import {
   getHeaderActions,
   pluginStateVersion,
   applyContentTransformers,
-} from "../plugins/registry";
+} from "../plugins/manager/registry";
 import { pluginEvents } from "../plugins/context";
 import { getChapterContent as fetchChapterContent } from "../storage/books";
 import type { Chapter } from "../core/types";

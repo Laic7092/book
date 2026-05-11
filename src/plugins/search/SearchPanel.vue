@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { SearchResult } from "../../core/types";
 import ModalHeader from "../../components/modals/ModalHeader.vue";
-import { getSearchApis } from "../registry";
+import { getSearchApis } from "../manager/registry";
 
 const emit = defineEmits<{ (e: "close"): void }>();
 

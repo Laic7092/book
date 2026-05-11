@@ -3,7 +3,7 @@
 import type { Book, ParsedBook } from "../core/types";
 import { STORES, dbPut, dbGet, dbGetAll, dbTransaction } from "./db";
 import type { BookParser } from "../core/types";
-import { getParserForFormat } from "../plugins/registry";
+import { getParserForFormat } from "../plugins/manager/registry";
 import { saveCoverBlob } from "./covers";
 
 /** In-flight dedup: prevents concurrent extraction of the same chapter */
