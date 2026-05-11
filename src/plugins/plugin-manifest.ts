@@ -39,14 +39,14 @@ export const pluginManifest: PluginManifestEntry[] = [
   {
     pluginId: "cbz-parser",
     name: "CBZ Parser",
-    loadOn: ["book-import", "reader"],
+    loadOn: ["book-import"],
     dir: "cbz-parser",
     formats: ["cbz"],
   },
   {
     pluginId: "epub",
     name: "EPUB Parser",
-    loadOn: ["book-import", "reader"],
+    loadOn: ["book-import"],
     dir: "epub",
     formats: ["epub"],
   },
@@ -71,7 +71,7 @@ export const pluginManifest: PluginManifestEntry[] = [
   {
     pluginId: "pdf-parser",
     name: "PDF Parser",
-    loadOn: ["book-import", "reader"],
+    loadOn: ["book-import"],
     dir: "pdf-parser",
     formats: ["pdf"],
   },
@@ -114,7 +114,7 @@ export const pluginManifest: PluginManifestEntry[] = [
   {
     pluginId: "txt-parser",
     name: "TXT Parser",
-    loadOn: ["book-import", "reader"],
+    loadOn: ["book-import"],
     dir: "txt-parser",
     formats: ["txt"],
   },
