@@ -3,10 +3,10 @@ import { PLUGIN_BRAND } from "../types";
 
 export const loadOn = "reader" as const;
 
-export const corePlugin: Plugin = {
+export const managerPlugin: Plugin = {
   [PLUGIN_BRAND]: true as const,
-  id: "core",
-  name: "Core",
+  id: "manager",
+  name: "Manager",
   version: "1.0.0",
   core: true,
   setup(ctx) {

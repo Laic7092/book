@@ -6,7 +6,7 @@ import {
 } from "./registry";
 import { PLUGIN_BRAND } from "./types";
 import type { Plugin, Scene } from "./types";
-import { STORES, dbGet } from "../storage/db";
+import { getAllPluginStates } from "./manager/plugin-states";
 import { pluginManifest } from "./plugin-manifest";
 
 function isPlugin(obj: unknown): obj is Plugin {
@@ -50,13 +50,8 @@ async function ensureSceneMap(): Promise<void> {
   if (sceneMapReady) return;
   sceneMapReady = true;
 
-  // Pre-load enable states once — queried from DB directly since
-  // managedPlugins entries don't exist until scene tasks run.
-  const stored = await dbGet<{ value: Record<string, boolean> }>(
-    STORES.SETTINGS,
-    "__plugin_states__",
-  );
-  const states = stored?.value ?? null;
+  // Pre-load enable states from the manager plugin's entity store
+  const states = await getAllPluginStates();
 
   for (const meta of metas) {
     const loader = pluginLoaders[`./${meta.dir}/index.ts`];

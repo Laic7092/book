@@ -36,8 +36,17 @@ export function createPluginStorageAdapter(pluginId: string): PluginStorageAdapt
     const store = tx.objectStore(SN);
     return new Promise((resolve, reject) => {
       const req = fn(store);
-      req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
+      tx.onerror = () => reject(tx.error ?? new Error("transaction aborted"));
+      if (mode === "readonly") {
+        req.onsuccess = () => resolve(req.result);
+      } else {
+        // For readwrite, wait for tx.oncomplete to ensure data is committed to disk
+        req.onsuccess = () => {
+          /* data queued, wait for commit */
+        };
+        tx.oncomplete = () => resolve(req.result);
+      }
     });
   }
 

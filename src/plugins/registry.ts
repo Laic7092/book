@@ -1,7 +1,7 @@
 import { ref, type Component } from "vue";
 import type { Plugin, FooterAction, BookshelfMenuAction, PluginBootstrap } from "./types";
 import { PLUGIN_BRAND } from "./types";
-import { STORES, dbPut, dbGet } from "../storage/db";
+import { saveAllPluginStates, getAllPluginStates } from "./manager/plugin-states";
 import {
   createTrackedContext,
   registeredModals,
@@ -43,8 +43,6 @@ export const pluginStateVersion = ref(0);
 function bump() {
   pluginStateVersion.value++;
 }
-
-const PLUGIN_STATES_KEY = "__plugin_states__";
 
 function isEnabled(p: Plugin): boolean {
   return p.enabled !== false;
@@ -346,19 +344,13 @@ function savePluginStates(): void {
   for (const [id, mp] of managedPlugins) {
     states[id] = mp.enabled;
   }
-  dbPut(STORES.SETTINGS, {
-    key: PLUGIN_STATES_KEY,
-    value: states,
-  }).catch(() => {});
+  void saveAllPluginStates(states);
 }
 
 export async function loadPluginStates(): Promise<void> {
-  const stored = await dbGet<{ value: Record<string, boolean> }>(
-    STORES.SETTINGS,
-    PLUGIN_STATES_KEY,
-  );
-  if (!stored?.value) return;
-  for (const [id, on] of Object.entries(stored.value)) {
+  const stored = await getAllPluginStates();
+  if (!stored) return;
+  for (const [id, on] of Object.entries(stored)) {
     const mp = managedPlugins.get(id);
     if (mp) {
       mp.enabled = on;

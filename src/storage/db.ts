@@ -6,7 +6,6 @@ const DB_VERSION = 10;
 export const STORES = {
   BOOKS: "books",
   CHAPTERS: "chapters",
-  SETTINGS: "settings",
   RESOURCES: "resources",
   ZIPS: "zips",
   /** v9: isolated per-plugin key-value storage. Compound key: [pluginId, key]. */
@@ -71,11 +70,6 @@ export async function openDB(): Promise<IDBDatabase> {
 
       // v2: title field added (optional, no index needed)
       // v3: order field added for proper chapter sorting
-
-      // Settings store
-      if (!db.objectStoreNames.contains(STORES.SETTINGS)) {
-        db.createObjectStore(STORES.SETTINGS, { keyPath: "key" });
-      }
 
       // Resources store (v4): stores EPUB resources (images, CSS, fonts)
       if (!db.objectStoreNames.contains(STORES.RESOURCES)) {
@@ -201,8 +195,4 @@ export async function dbGetAllFromIndex<T>(
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
-}
-
-export async function initSettings(settings: { key: string; value: unknown }): Promise<void> {
-  await dbPut(STORES.SETTINGS, settings);
 }

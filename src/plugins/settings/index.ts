@@ -1,31 +1,46 @@
-import { watch } from "vue";
+import { ref, watch } from "vue";
 import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
-import { createSettingsState, type SettingsState } from "./api";
+import { createEntityStore, type EntityStore } from "../store-factory";
+import type { ReaderSettings } from "./types";
+import { DEFAULT_SETTINGS } from "./defaults";
 import {
   generateThemeCSS,
   generateBaseCSS,
   generateTypographyCSS,
 } from "../../reader-engine/reader-styles";
 
-let settingsState: SettingsState | null = null;
+// ── State ──
 
-export function getSettingsState(): SettingsState | null {
-  return settingsState;
+type SettingsEntity = { id: string } & ReaderSettings;
+const ENTITY_ID = "reader-settings";
+
+let _store: EntityStore<SettingsEntity> | null = null;
+const _settings = ref<ReaderSettings>({ ...DEFAULT_SETTINGS });
+
+export function getSettingsState() {
+  if (!_store) return null;
+  return {
+    settings: _settings,
+    async update(updates: Partial<ReaderSettings>) {
+      _settings.value = { ..._settings.value, ...updates };
+      await _store!.add({ id: ENTITY_ID, ..._settings.value });
+    },
+  };
 }
+
+// ── CSS builder ──
 
 const GEAR_ICON =
   '<path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>';
 
 export const loadOn = "reader" as const;
 
-function buildFullCSS(settings: SettingsState["settings"]["value"]): string {
-  return (
-    generateBaseCSS() +
-    generateThemeCSS(settings.theme, settings.contrast) +
-    generateTypographyCSS(settings)
-  );
+function buildFullCSS(s: ReaderSettings): string {
+  return generateBaseCSS() + generateThemeCSS(s.theme, s.contrast) + generateTypographyCSS(s);
 }
+
+// ── Plugin ──
 
 export const settingsPlugin: Plugin = {
   [PLUGIN_BRAND]: true as const,
@@ -33,25 +48,48 @@ export const settingsPlugin: Plugin = {
   name: "Settings",
   version: "1.0.0",
   async setup(ctx) {
-    const state = createSettingsState(ctx.storage, ctx.events);
+    const store = createEntityStore<SettingsEntity>(ctx.storage, "setting");
+    _store = store;
+
+    // Wait for initial cache load from IndexedDB
+    if (!store.loaded.value) {
+      await new Promise<void>((resolve) => {
+        const stop = watch(
+          () => store.loaded.value,
+          (loaded) => {
+            if (loaded) {
+              stop();
+              resolve();
+            }
+          },
+        );
+      });
+    }
+
+    // Restore saved settings or initialize with defaults
+    const cached = store.getById(ENTITY_ID);
+    if (cached) {
+      const { id: _, ...rest } = cached;
+      _settings.value = { ...DEFAULT_SETTINGS, ...rest };
+    } else {
+      await store.add({ id: ENTITY_ID, ...DEFAULT_SETTINGS });
+      _settings.value = { ...DEFAULT_SETTINGS };
+    }
+
+    const s = _settings;
 
     function syncToHost() {
-      const s = state.settings.value;
-      ctx.ui.setTheme(s.theme);
-      ctx.ui.injectIframeStyle("typography", buildFullCSS(s));
+      ctx.ui.setTheme(s.value.theme);
+      ctx.ui.injectIframeStyle("typography", buildFullCSS(s.value));
       const host = ctx.readerHost();
       if (host) {
-        host.setScrollMode(s.scrollMode ?? "pagination");
-        host.setPageMargin(s.margin);
+        host.setScrollMode(s.value.scrollMode ?? "pagination");
+        host.setPageMargin(s.value.margin);
       }
     }
 
-    // Register listener BEFORE async init — reader may mount during the await
+    // Register listener BEFORE sync — reader may mount during the await
     ctx.events.on("reader:mounted", syncToHost);
-
-    await state.init();
-    settingsState = state;
-    const s = state.settings;
 
     // Content transformer for chapter typography
     ctx.registerContentTransformer({
@@ -95,7 +133,6 @@ export const settingsPlugin: Plugin = {
       },
     );
 
-    // Margin → sync pagination column calculation
     watch(
       () => s.value.margin,
       (margin) => {
@@ -104,7 +141,6 @@ export const settingsPlugin: Plugin = {
       },
     );
 
-    // Typography changes → re-inject iframe CSS
     watch(
       () => [
         s.value.fontSize,
@@ -123,7 +159,7 @@ export const settingsPlugin: Plugin = {
     );
 
     ctx.onCleanup(() => {
-      settingsState = null;
+      _store = null;
     });
   },
 };
