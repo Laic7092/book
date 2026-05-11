@@ -21,9 +21,7 @@ var e={light:{background:`#ffffff`,text:`#333333`},dark:{background:`#1a1a1a`,te
       overflow-wrap: break-word;
       hyphens: auto;
       -webkit-hyphens: auto;
-      margin: 24px;
-      touch-action: pan-y;
-      will-change: transform;
+      margin: var(--page-margin, 24px);
     }
 
     body.reader-content h1,
@@ -72,9 +70,28 @@ var e={light:{background:`#ffffff`,text:`#333333`},dark:{background:`#1a1a1a`,te
       text-align: center;
     }
 
-    /* 垂直滚动模式：底部留白供进度条 */
-    body.reader-content.vertical-content {
+    /* ── Mode-specific layout ── */
+
+    html[data-mode="paginated"] {
+      overflow: hidden;
+    }
+    html[data-mode="paginated"] body.reader-content {
+      column-width: calc(100dvw - 2 * var(--page-margin, 24px));
+      column-gap: calc(2 * var(--page-margin, 24px));
+      column-fill: auto;
+      height: calc(100dvh - 2 * var(--page-margin, 24px));
+      overflow: visible;
+      transform: translateX(calc(-1 * var(--current-page, 0) * 100dvw));
+    }
+
+    html[data-mode="scroll"] {
+      overflow-y: auto;
+    }
+    html[data-mode="scroll"] body.reader-content {
+      touch-action: pan-y;
+      will-change: transform;
       padding-bottom: 40vh;
+      margin: var(--page-margin, 24px);
     }
   `}function r(e){return e.customTypography??!1?`
     body.reader-content {
@@ -83,7 +100,6 @@ var e={light:{background:`#ffffff`,text:`#333333`},dark:{background:`#1a1a1a`,te
       line-height: ${e.lineHeight};
       letter-spacing: ${e.letterSpacing||0}em;
       text-align: ${e.textAlign||`left`};
-      margin: ${e.margin||24}px;
     }
 
     body.reader-content p {
@@ -99,15 +115,4 @@ var e={light:{background:`#ffffff`,text:`#333333`},dark:{background:`#1a1a1a`,te
       body.reader-content {
         font-size: ${e.fontSize}px;
       }
-    `}function i(e,t,n){return`
-    html {
-      overflow: hidden;
-    }
-    body.reader-content {
-      column-width: ${e}px;
-      column-gap: ${n}px;
-      column-fill: auto;
-      height: ${t}px;
-      overflow: visible;
-    }
-  `}export{r as i,i as n,t as r,n as t};
+    `}export{t as n,r,n as t};
