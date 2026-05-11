@@ -17,6 +17,8 @@ import {
 import { loadPluginsFor } from "../plugins/loader";
 import { navigate } from "../router";
 
+loadPluginsFor("bookshelf");
+
 const emit = defineEmits<{
   (e: "book:delete", bookId: string): void;
 }>();
@@ -290,7 +292,6 @@ const bookInitials = computed(() => {
 onMounted(() => {
   bookshelfStore.loadBooks();
   bookshelfStore.loadFolders();
-  loadPluginsFor("bookshelf");
   document.addEventListener("click", onDocumentClick);
 });
 </script>
@@ -1431,13 +1432,16 @@ onMounted(() => {
 .menu-pop-enter-active {
   transition: all 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 }
+
 .menu-pop-leave-active {
   transition: all 0.12s ease-in;
 }
+
 .menu-pop-enter-from {
   opacity: 0;
   transform: translateY(-6px) scale(0.96);
 }
+
 .menu-pop-leave-to {
   opacity: 0;
   transform: translateY(-4px) scale(0.97);
@@ -1609,6 +1613,7 @@ onMounted(() => {
   100% {
     transform: translateY(0);
   }
+
   50% {
     transform: translateY(-6px);
   }
@@ -2347,6 +2352,7 @@ onMounted(() => {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -2357,6 +2363,7 @@ onMounted(() => {
     opacity: 0;
     transform: translateY(14px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -2368,6 +2375,7 @@ onMounted(() => {
     opacity: 0;
     transform: scale(0.92);
   }
+
   to {
     opacity: 1;
     transform: scale(1);
@@ -2379,6 +2387,7 @@ onMounted(() => {
 .fade-leave-active {
   transition: all var(--transition-base);
 }
+
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
@@ -2392,13 +2401,16 @@ onMounted(() => {
   .bookshelf {
     padding: 28px 28px 0;
   }
+
   .bookshelf-content {
     padding-bottom: 28px;
   }
+
   .book-grid {
     grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
     gap: 24px;
   }
+
   .stats-bar {
     padding-left: 0;
   }
@@ -2412,46 +2424,59 @@ onMounted(() => {
   .bookshelf {
     padding: 20px 16px 0;
   }
+
   .bookshelf-content {
     padding-bottom: 20px;
   }
+
   .bookshelf-header {
     margin-bottom: 18px;
     padding-bottom: 14px;
   }
+
   .header-bar {
     gap: 10px;
   }
+
   .bookshelf-title {
     font-size: 19px;
   }
+
   .header-brand .header-mark {
     display: none;
   }
+
   .btn-add span {
     display: none;
   }
+
   .btn-add {
     padding: 8px 10px;
   }
+
   .stats-bar {
     flex-wrap: wrap;
     gap: 8px 14px;
     padding-left: 0;
   }
+
   .stat-sep {
     display: none;
   }
+
   .book-grid {
     grid-template-columns: repeat(2, 1fr);
     gap: 14px;
   }
+
   .list-meta {
     display: none;
   }
+
   .shelf-header {
     margin-bottom: 14px;
   }
+
   .shelf-letter {
     font-size: 22px;
   }
