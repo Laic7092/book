@@ -46,6 +46,8 @@ export interface BookChapter {
 function detectType(rule: string): "jsoup" | "xpath" | "regex-allinone" {
   if (rule.startsWith("//") || rule.startsWith("@XPath:")) return "xpath";
   if (rule.startsWith(":")) return "regex-allinone";
+  // 新增：单属性/单元素 XPath (如 @href, dd/text())
+  if (/^@\w+$|^[a-z0-9]+(\/.+)?$/.test(rule) && rule.includes("/")) return "xpath";
   return "jsoup";
 }
 
@@ -177,24 +179,47 @@ function evalXPathNodes(root: Node, xpath: string): Node[] {
   const doc =
     root.nodeType === Node.DOCUMENT_NODE ? (root as Document) : (root.ownerDocument ?? document);
 
-  // Scope to element context: // → .//   and   / → ./
-  const scoped =
-    root.nodeType === Node.ELEMENT_NODE && !xpath.startsWith(".")
-      ? `.${xpath.startsWith("/") ? "" : "/"}${xpath}`
-      : xpath;
+  try {
+    // 对于属性 XPath（@href），用 evaluate 获取 STRING_TYPE 也可
+    const scoped =
+      root.nodeType === Node.ELEMENT_NODE && !xpath.startsWith(".")
+        ? `.${xpath.startsWith("/") ? "" : "/"}${xpath}`
+        : xpath;
 
-  const result = doc.evaluate(scoped, root, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
-  const nodes: Node[] = [];
-  for (let i = 0; i < result.snapshotLength; i++) {
-    const n = result.snapshotItem(i);
-    if (n) nodes.push(n);
+    // 先判断是否为纯属性 XPath（以 @ 开头且只有属性）
+    if (/^@[^/]+$/.test(xpath.trim())) {
+      // 直接获取属性值
+      if (root.nodeType === Node.ELEMENT_NODE) {
+        const attrName = xpath.trim().slice(1);
+        const value = (root as Element).getAttribute(attrName);
+        // @ts-ignore
+        return value ? [new Attr(attrName, value)] : [];
+      }
+    }
+
+    const result = doc.evaluate(scoped, root, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+    const nodes: Node[] = [];
+    for (let i = 0; i < result.snapshotLength; i++) {
+      const n = result.snapshotItem(i);
+      if (n) nodes.push(n);
+    }
+    return nodes;
+  } catch (e) {
+    console.error("XPath evaluation error", xpath, e);
+    return [];
   }
-  return nodes;
 }
 
 function extractXPathValues(root: Node, xpath: string): string[] {
   const doc =
     root.nodeType === Node.DOCUMENT_NODE ? (root as Document) : (root.ownerDocument ?? document);
+
+  // 处理纯属性 XPath（如 @href）
+  if (/^@[^/]+$/.test(xpath.trim()) && root.nodeType === Node.ELEMENT_NODE) {
+    const attrName = xpath.trim().slice(1);
+    const value = (root as Element).getAttribute(attrName);
+    return value ? [value] : [];
+  }
 
   // Try STRING_TYPE first (handles /@content, /text() patterns)
   try {
@@ -346,12 +371,51 @@ export function parseChapterList(
   urlRule: string,
 ): BookChapter[] {
   const doc = new DOMParser().parseFromString(html, "text/html");
-  const listElements = applySteps(doc, parseRule(listRule)?.steps ?? []);
 
-  return listElements.map((el) => ({
-    name: querySingle(el, nameRule || "tag.a@text") || "",
-    url: querySingle(el, urlRule || "tag.a@href") || "",
-  }));
+  const parsed = parseRule(listRule);
+  if (!parsed) return [];
+
+  let listElements: Element[] = [];
+
+  if (parsed.type === "xpath" && parsed.xpath) {
+    // 使用 evalXPathNodes 获取章节链接元素
+    const nodes = evalXPathNodes(doc, parsed.xpath);
+    listElements = nodes.filter((n) => n instanceof Element) as Element[];
+  } else {
+    // JSOUP/CSS 模式
+    listElements = applySteps(doc, parsed.steps);
+  }
+
+  const seen = new Set<string>();
+
+  const chapters = listElements
+    .map((el) => {
+      let name = "";
+      let url = "";
+
+      if (nameRule && detectType(nameRule) === "xpath") {
+        const nodes = evalXPathNodes(el, nameRule);
+        name = nodes.map((n) => (n as Text).textContent?.trim() ?? "").join("") || "";
+      } else {
+        name = querySingle(el, nameRule || "tag.a@text") || "";
+      }
+
+      if (urlRule && detectType(urlRule) === "xpath") {
+        const nodes = evalXPathNodes(el, urlRule);
+        url = (nodes[0] as Attr)?.value ?? "";
+      } else {
+        url = querySingle(el, urlRule || "tag.a@href") || "";
+      }
+
+      return { name, url };
+    })
+    .filter((item) => {
+      if (seen.has(item.url)) return false;
+      seen.add(item.url);
+      return true;
+    });
+
+  return chapters;
 }
 
 // ── Content extraction ──

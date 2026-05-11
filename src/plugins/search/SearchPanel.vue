@@ -112,7 +112,7 @@ function highlightMatch(context: string): string {
   padding: 10px 14px;
   border: 1px solid var(--border-color);
   border-radius: 9px;
-  font-size: 14px;
+  font-size: 16px;
   background: var(--bg-secondary);
   color: var(--text-primary);
   font-family: var(--font-ui);

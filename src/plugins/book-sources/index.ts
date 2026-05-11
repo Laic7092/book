@@ -2,8 +2,6 @@ import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
 import { createSourceManager, type SourceManager } from "./sources";
 
-export const loadOn = "bookshelf" as const;
-
 let _manager: SourceManager | null = null;
 
 export function getSourceManager(): SourceManager | null {
@@ -15,16 +13,6 @@ export const bookSourcesPlugin: Plugin = {
   id: "book-sources",
   name: "书源导入",
   version: "0.1.0",
-  canActivate: async () => {
-    return false;
-    try {
-      const res = await fetch("/api/health");
-      return res.ok;
-    } catch {
-      return false;
-    }
-  },
-  activationFailedReason: "需要后端服务（书源通过网络代理获取数据）",
   setup(ctx) {
     _manager = createSourceManager(ctx.server);
 

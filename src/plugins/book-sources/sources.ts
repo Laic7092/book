@@ -14,6 +14,7 @@ import {
   extractContent,
   type BookSearchItem,
   type BookChapter,
+  querySingle,
 } from "../../utils/rule-parser";
 
 // ── Types ──
@@ -104,32 +105,34 @@ async function removePersistedSource(sourceUrl: string): Promise<void> {
 
 const BUILT_IN: LegadoSource[] = [
   {
-    bookSourceName: "采墨阁手机版",
-    bookSourceUrl: "https://m.caimoge.com",
+    bookSourceName: "顶点小说",
+    bookSourceUrl: "http://www.xsbook.org/",
     bookSourceGroup: "XPath; 正则",
-    searchUrl: '/search.html,{\n  "method": "POST",\n  "body": "searchkey={{key}}"\n}',
+    searchUrl: "/search44.html?searchkey={{key}}",
     ruleSearch: {
-      bookList: '//*[@id="sitebox"]/dl',
-      name: "//h3/a/text()",
-      author: "//dd[2]/text()",
-      coverUrl: "//img/@src",
+      bookList: "//div[@class='l rank']/div[@class='item']",
+      name: "//dt/a/text()",
+      author: "//div[@class='btm']/a[1]/text()",
+      coverUrl: "//div[@class='image']/img/@src",
       bookUrl: "//dt/a/@href",
-      kind: "//dd[2]/span/text()",
+      kind: "",
     },
     ruleBookInfo: {
-      name: '//*[@property="og:novel:book_name"]/@content',
-      author: '//*[@property="og:novel:author"]/@content',
-      coverUrl: '//*[@property="og:image"]/@content',
-      intro: '//*[@property="og:description"]/@content',
-      kind: '//*[@property="og:novel:category"]/@content',
+      name: "//*[@property='og:novel:book_name']/@content",
+      author: "//*[@property='og:novel:author']/@content",
+      coverUrl: "//*[@property='og:image']/@content",
+      intro: "//*[@property='og:description']/@content",
+      kind: "//*[@property='og:novel:category']/@content",
     },
     ruleToc: {
-      chapterList: ':href="(/read[^"]*html)">([^<]*)',
-      chapterName: "$2",
-      chapterUrl: "$1",
+      chapterList:
+        "//div[@id='list']/dl/dt[contains(text(),'全部章节目录')]/following-sibling::a[@rel='chapter']",
+      chapterName: "dd/text()",
+      chapterUrl: "@href",
     },
     ruleContent: {
-      content: '//*[@id="content"]',
+      content: "//div[@id='booktxt']",
+      nextContentUrl: "//a[contains(text(),'下一页')]/@href",
     },
   },
 ];
@@ -282,19 +285,33 @@ export function createSourceManager(server: ServerClient): SourceManager {
     },
 
     async getChapterContent(source: LegadoSource, chapterUrl: string): Promise<string> {
-      const html = await fetchHtml(chapterUrl);
+      // 1. 解析当前的请求 URL 用于处理相对链接
+      const currentFullUrl = resolveUrl(source, chapterUrl);
+
+      // 2. 获取第一页
+      let html = await fetchHtml(currentFullUrl);
       let content = extractContent(html, source.ruleContent.content);
       if (!content) return "";
 
-      // Apply replaceRegex if present (Legado-specific)
-      if (source.ruleContent.replaceRegex) {
-        const parts = source.ruleContent.replaceRegex.split("##");
-        try {
-          const pattern = parts[0] ? new RegExp(parts[0], "g") : null;
-          const replacement = parts[1] ?? "";
-          if (pattern) content = content.replace(pattern, replacement);
-        } catch {
-          /* ignore bad regex */
+      // 3. 分页拼装
+      const nextUrlRule = source.ruleContent.nextContentUrl;
+      if (nextUrlRule) {
+        let nextUrl = querySingle(new DOMParser().parseFromString(html, "text/html"), nextUrlRule);
+
+        // 防止无限循环，限制最多合并 50 页
+        let pageCount = 1;
+        const MAX_PAGES = 50;
+
+        while (nextUrl && pageCount < MAX_PAGES) {
+          // 将相对链接转为绝对链接
+          const nextFullUrl = new URL(nextUrl, currentFullUrl).href;
+
+          html = await fetchHtml(nextFullUrl);
+          const nextContent = extractContent(html, source.ruleContent.content);
+          if (nextContent) content += nextContent;
+
+          nextUrl = querySingle(new DOMParser().parseFromString(html, "text/html"), nextUrlRule);
+          pageCount++;
         }
       }
 
