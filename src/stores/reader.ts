@@ -4,7 +4,7 @@ import { defineStore } from "pinia";
 import type { Book, Chapter, ParsedBook, BookParser } from "../core/types";
 import { ErrorCode, createReaderError } from "../core/errors";
 import { getParsers, getParserForFormat } from "../plugins/registry";
-import { loadPluginsFor } from "../plugins/loader";
+import { loadPluginsFor, loadParserForFormat } from "../plugins/loader";
 import { pluginEvents } from "../plugins/context";
 import * as booksStore from "../storage/books";
 import { assertValidBookFile, validateBookId } from "../utils/validation";
@@ -71,7 +71,12 @@ export const useReaderStore = defineStore("reader", {
       this.error = null;
 
       try {
-        await loadPluginsFor("book-import");
+        // Load only the parser for this file's format instead of all parsers
+        const ext = file.name.split(".").pop()?.toLowerCase();
+        const format = ext && ext in EXTENSION_MIME_MAP ? ext : null;
+        if (format) {
+          await loadParserForFormat(format);
+        }
         const parser = getParserForFile(file);
         if (!parser) {
           throw createReaderError(
@@ -109,6 +114,8 @@ export const useReaderStore = defineStore("reader", {
         }
 
         await loadPluginsFor("reader");
+        // Load only the parser matching the book's format
+        await loadParserForFormat(book.format);
 
         const parser = getParserForFormat(book.format);
         if (!parser) {

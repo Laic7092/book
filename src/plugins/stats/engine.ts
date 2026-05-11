@@ -128,7 +128,7 @@ export function createStatsEngine(storage: PluginStorageAdapter, getHost: () => 
     const chaptersCompleted = new Set(allBookSessions.flatMap((s) => s.chaptersRead)).size;
 
     // Active hours histogram
-    const activeHours: number[] = new Array(24).fill(0);
+    const activeHours: number[] = Array.from({ length: 24 }, () => 0);
     for (const s of allBookSessions) {
       const hour = new Date(s.startTime).getHours();
       activeHours[hour]++;

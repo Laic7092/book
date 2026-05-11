@@ -2,31 +2,53 @@
 import { ref, computed } from "vue";
 import ModalHeader from "../../components/modals/ModalHeader.vue";
 import { getAllPlugins, setPluginEnabled, pluginStateVersion } from "../../plugins/registry";
+import { pluginManifest } from "../../plugins/plugin-manifest";
 import type { Plugin } from "../../plugins/types";
 
-// ── Scene to label mapping ──
+// ── Scene metadata ──
 
-const metas = import.meta.glob<{ loadOn: string }>("../../plugins/*/meta.ts", { eager: true });
+const SCENE_META: Record<string, { label: string }> = {
+  "book-import": { label: "书籍解析" },
+  bookshelf: { label: "书架功能" },
+  reader: { label: "阅读体验" },
+  app: { label: "启动加载" },
+};
 
-const pluginSceneMap = new Map<string, string>();
-for (const [path, meta] of Object.entries(metas)) {
-  const dir = path.split("/").slice(-2, -1)[0]; // e.g. "annotations"
-  if (meta.loadOn) {
-    pluginSceneMap.set(dir, meta.loadOn);
+const SCENE_ORDER = ["book-import", "bookshelf", "reader", "app"];
+
+// ── Scene map built from manifest ──
+
+const pluginSceneMap = new Map<string, string | string[]>();
+const sceneCount = new Map<string, number>();
+
+for (const meta of pluginManifest) {
+  if (!meta.loadOn) continue;
+  pluginSceneMap.set(meta.dir, meta.loadOn);
+
+  const scenes = Array.isArray(meta.loadOn) ? meta.loadOn : [meta.loadOn];
+  for (const s of scenes) {
+    sceneCount.set(s, (sceneCount.get(s) ?? 0) + 1);
   }
 }
 
-const TAB_CONFIG: { key: string; label: string }[] = [
-  { key: "book-import", label: "书籍解析" },
-  { key: "bookshelf", label: "书架功能" },
-  { key: "reader", label: "阅读体验" },
-];
+// ── Filter pills ──
 
-const SCENE_LABELS: Record<string, string> = {
-  "book-import": "书籍解析",
-  bookshelf: "书架功能",
-  reader: "阅读体验",
-};
+interface FilterPill {
+  key: string;
+  label: string;
+  count?: number;
+}
+
+const filterPills = computed<FilterPill[]>(() => {
+  const pills: FilterPill[] = [{ key: "all", label: "全部" }];
+  for (const key of SCENE_ORDER) {
+    const meta = SCENE_META[key];
+    if (meta && sceneCount.has(key)) {
+      pills.push({ key, label: meta.label, count: sceneCount.get(key) });
+    }
+  }
+  return pills;
+});
 
 // ── Plugin list ──
 
@@ -35,11 +57,27 @@ const allPlugins = computed(() => {
   return getAllPlugins();
 });
 
-const activeTab = ref(TAB_CONFIG[0]?.key ?? "reader");
+const activeFilter = ref("all");
 
-const filteredPlugins = computed(() =>
-  allPlugins.value.filter((p) => pluginSceneMap.get(p.id) === activeTab.value),
-);
+const filteredPlugins = computed(() => {
+  const af = activeFilter.value;
+  if (af === "all") return allPlugins.value;
+  return allPlugins.value.filter((p) => {
+    const scenes = pluginSceneMap.get(p.id);
+    if (Array.isArray(scenes)) return scenes.includes(af);
+    return scenes === af;
+  });
+});
+
+/** Return scene label(s) for a plugin, for badge display. */
+function getSceneLabels(pluginId: string): string[] {
+  const scenes = pluginSceneMap.get(pluginId);
+  if (!scenes) return [];
+  const arr = Array.isArray(scenes) ? scenes : [scenes];
+  return arr.map((s) => SCENE_META[s]?.label ?? s);
+}
+
+// ── Toggle logic ──
 
 const toggling = ref<Set<string>>(new Set());
 
@@ -70,22 +108,24 @@ defineEmits<{ close: [] }>();
   <div class="modal-content-inner">
     <ModalHeader title="插件管理" @close="$emit('close')" />
 
-    <!-- Tabs -->
-    <div class="plugin-tabs">
+    <!-- Filter pills -->
+    <div class="filter-bar">
       <button
-        v-for="tab in TAB_CONFIG"
-        :key="tab.key"
-        class="tab-btn"
-        :class="{ active: activeTab === tab.key }"
-        @click="activeTab = tab.key"
+        v-for="pill in filterPills"
+        :key="pill.key"
+        class="pill"
+        :class="{ active: activeFilter === pill.key }"
+        @click="activeFilter = pill.key"
       >
-        {{ tab.label }}
+        {{ pill.label }}
+        <span v-if="pill.count != null" class="pill-count">{{ pill.count }}</span>
       </button>
     </div>
 
+    <!-- Plugin list -->
     <div class="plugin-body">
       <p class="plugin-hint">
-        核心插件（带 <span class="core-badge-sm">核心</span> 标记）不可禁用。 关闭后即时生效。
+        核心插件（带 <span class="core-badge-sm">核心</span> 标记）不可禁用。关闭后即时生效。
       </p>
 
       <div class="plugin-list">
@@ -100,9 +140,16 @@ defineEmits<{ close: [] }>();
               {{ p.name }}
               <span v-if="isCore(p)" class="core-badge">核心</span>
             </span>
-            <span class="plugin-id">{{ p.id }} · v{{ p.version }}</span>
+            <span class="plugin-id-line">
+              <span class="plugin-id">{{ p.id }} · v{{ p.version }}</span>
+              <span class="scene-badges">
+                <span v-for="label in getSceneLabels(p.id)" :key="label" class="scene-badge">{{
+                  label
+                }}</span>
+              </span>
+            </span>
           </div>
-          <div class="toggle" @click.prevent="toggle(p.id)">
+          <div v-if="!isCore(p)" class="toggle" @click.prevent="toggle(p.id)">
             <input type="checkbox" :checked="isEnabled(p)" @change="toggle(p.id)" />
             <span class="toggle-track">
               <span class="toggle-thumb" />
@@ -117,36 +164,63 @@ defineEmits<{ close: [] }>();
 </template>
 
 <style scoped>
-.plugin-tabs {
+/* ── Filter pills ── */
+
+.filter-bar {
   display: flex;
-  gap: 0;
+  gap: 8px;
+  padding: 12px 20px;
   border-bottom: 1px solid var(--border-color);
-  padding: 0 20px;
+  flex-wrap: wrap;
 }
 
-.tab-btn {
-  flex: 1;
-  padding: 12px 16px;
-  font-size: 14px;
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-size: 13px;
   font-weight: 500;
+  border-radius: 20px;
+  border: 1px solid var(--border-color);
+  background: transparent;
   color: var(--text-muted);
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
   cursor: pointer;
   transition:
+    background 150ms,
     color 150ms,
     border-color 150ms;
 }
 
-.tab-btn:hover {
+.pill:hover {
+  background: var(--hover-bg);
   color: var(--text-primary);
 }
 
-.tab-btn.active {
-  color: var(--color-accent);
-  border-bottom-color: var(--color-accent);
+.pill.active {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
 }
+
+.pill-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.pill.active .pill-count {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* ── Plugin body ── */
 
 .plugin-body {
   flex: 1;
@@ -166,6 +240,8 @@ defineEmits<{ close: [] }>();
   font-weight: 600;
   color: var(--accent);
 }
+
+/* ── Plugin list ── */
 
 .plugin-list {
   display: flex;
@@ -199,7 +275,8 @@ defineEmits<{ close: [] }>();
 .plugin-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+  min-width: 0;
 }
 
 .plugin-name {
@@ -210,10 +287,20 @@ defineEmits<{ close: [] }>();
   gap: 8px;
 }
 
+.plugin-id-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .plugin-id {
   font-size: 12px;
   color: var(--text-muted);
+  white-space: nowrap;
 }
+
+/* ── Core badge ── */
 
 .core-badge {
   font-size: 11px;
@@ -224,6 +311,27 @@ defineEmits<{ close: [] }>();
   border-radius: 10px;
 }
 
+/* ── Scene badges ── */
+
+.scene-badges {
+  display: inline-flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.scene-badge {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 8px;
+  border-radius: 8px;
+  background: var(--hover-bg);
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  white-space: nowrap;
+}
+
+/* ── Empty state ── */
+
 .empty-tab {
   text-align: center;
   color: var(--text-muted);
@@ -231,11 +339,14 @@ defineEmits<{ close: [] }>();
   padding: 40px 0;
 }
 
-/* Toggle */
+/* ── Toggle ── */
+
 .toggle {
   position: relative;
   display: flex;
   align-items: center;
+  flex-shrink: 0;
+  margin-left: 12px;
 }
 
 .toggle input {

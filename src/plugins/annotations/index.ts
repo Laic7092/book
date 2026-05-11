@@ -74,7 +74,7 @@ export const annotationsPlugin: Plugin = {
 
     ctx.events.on("book:opened", ({ bookId }) => {
       _currentBookId.value = bookId;
-      _store?.reload();
+      void _store?.reload();
     });
     ctx.events.on("book:closed", () => {
       _currentBookId.value = null;

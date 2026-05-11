@@ -78,7 +78,7 @@ export function createEntityStore<T extends { id: string }>(
   }
 
   // Kick off initial load (non-blocking).
-  loadAll();
+  void loadAll();
 
   return {
     items: _itemsRef as Readonly<Ref<readonly T[]>>,

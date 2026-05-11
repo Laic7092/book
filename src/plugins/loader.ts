@@ -7,6 +7,7 @@ import {
 import { PLUGIN_BRAND } from "./types";
 import type { Plugin, Scene } from "./types";
 import { STORES, dbGet } from "../storage/db";
+import { pluginManifest } from "./plugin-manifest";
 
 function isPlugin(obj: unknown): obj is Plugin {
   return (
@@ -22,7 +23,7 @@ function isPlugin(obj: unknown): obj is Plugin {
 // ── Meta collected eagerly at import time ──
 
 interface PluginMeta {
-  loadOn: Scene | Scene[];
+  loadOn: string | string[];
   pluginId?: string;
   name?: string;
   /** Path relative to src/plugins/, e.g. "annotations/index.ts" */
@@ -32,17 +33,11 @@ interface PluginMeta {
 const metas: PluginMeta[] = [];
 const pluginLoaders = import.meta.glob<Record<string, unknown>>("./*/index.ts");
 
-const eagerMetas = import.meta.glob<{ loadOn: Scene | Scene[]; pluginId?: string; name?: string }>(
-  "./*/meta.ts",
-  { eager: true },
-);
-
-for (const [path, raw] of Object.entries(eagerMetas)) {
-  if (!raw.loadOn || (Array.isArray(raw.loadOn) && raw.loadOn.length === 0)) continue;
-  const dir = path.split("/").slice(-2, -1)[0];
-  const loader = pluginLoaders[`./${dir}/index.ts`];
+for (const meta of pluginManifest) {
+  if (!meta.loadOn || (Array.isArray(meta.loadOn) && meta.loadOn.length === 0)) continue;
+  const loader = pluginLoaders[`./${meta.dir}/index.ts`];
   if (!loader) continue;
-  metas.push({ loadOn: raw.loadOn, pluginId: raw.pluginId, name: raw.name, dir });
+  metas.push({ loadOn: meta.loadOn, pluginId: meta.pluginId, name: meta.name, dir: meta.dir });
 }
 
 // ── Lazy scene map built once we know enable states ──
@@ -67,6 +62,10 @@ async function ensureSceneMap(): Promise<void> {
     const loader = pluginLoaders[`./${meta.dir}/index.ts`];
     if (!loader) continue;
 
+    // Check if this is a parser plugin (has formats in manifest)
+    const manifestEntry = pluginManifest.find((m) => m.dir === meta.dir);
+    const isParser = manifestEntry ? !!manifestEntry.formats?.length : false;
+
     // Register a stub for disabled plugins, then skip the import
     if (meta.pluginId && states?.[meta.pluginId] === false) {
       registerPlugin({
@@ -81,7 +80,11 @@ async function ensureSceneMap(): Promise<void> {
       continue;
     }
 
-    const scenes = Array.isArray(meta.loadOn) ? meta.loadOn : [meta.loadOn];
+    // Parser plugins are loaded on-demand via loadParserForFormat, not via scene
+    if (isParser) continue;
+
+    // The manifest values are guaranteed to be valid Scene values
+    const scenes = (Array.isArray(meta.loadOn) ? meta.loadOn : [meta.loadOn]) as Scene[];
     for (const scene of scenes) {
       if (!sceneMap.has(scene)) sceneMap.set(scene, []);
       sceneMap.get(scene)!.push(async () => {
@@ -104,4 +107,25 @@ export async function loadPluginsFor(scene: Scene): Promise<void> {
 
   const tasks = sceneMap.get(scene) || [];
   await Promise.all(tasks.map((fn) => fn()));
+}
+
+// ── On-demand parser loading ──
+
+/**
+ * Load only the parser plugin that handles the given file format.
+ * Uses the build-time manifest to find the right plugin without loading all parsers.
+ */
+export async function loadParserForFormat(format: string): Promise<void> {
+  const entry = pluginManifest.find((m) => m.formats?.includes(format));
+  if (!entry) return;
+
+  const loader = pluginLoaders[`./${entry.dir}/index.ts`];
+  if (!loader) return;
+
+  const mod = await loader();
+  for (const exportValue of Object.values(mod)) {
+    if (isPlugin(exportValue)) registerPlugin(exportValue);
+  }
+  await loadPluginStates();
+  await initializePlugins();
 }

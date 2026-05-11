@@ -181,14 +181,14 @@ export async function initializePlugins(bootstrap?: PluginBootstrap): Promise<vo
           mp.available = false;
           mp.availableReason = mp.plugin.activationFailedReason ?? "Capability check failed";
           console.warn(`[Plugin ${id}] Skipped: ${mp.availableReason}`);
-          checkCtx.runCleanup();
+          void checkCtx.runCleanup();
           continue;
         }
       } catch (err) {
         mp.available = false;
-        mp.availableReason = mp.plugin.activationFailedReason ?? `Error: ${err}`;
+        mp.availableReason = mp.plugin.activationFailedReason ?? `Error: ${String(err)}`;
         console.warn(`[Plugin ${id}] canActivate() threw:`, err);
-        checkCtx.runCleanup();
+        void checkCtx.runCleanup();
         continue;
       }
     }
@@ -250,15 +250,15 @@ export async function setupPlugin(id: string): Promise<void> {
     try {
       const ok = await Promise.resolve(mp.plugin.canActivate(checkCtx));
       if (!ok) {
-        checkCtx.runCleanup();
+        void checkCtx.runCleanup();
         console.warn(`[Plugin ${id}] Still unavailable: ${mp.availableReason}`);
         return;
       }
       mp.available = true;
       mp.availableReason = undefined;
-      checkCtx.runCleanup();
+      void checkCtx.runCleanup();
     } catch (err) {
-      checkCtx.runCleanup();
+      void checkCtx.runCleanup();
       console.warn(`[Plugin ${id}] canActivate() re-threw:`, err);
       return;
     }
