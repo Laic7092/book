@@ -78,13 +78,17 @@ export const settingsPlugin: Plugin = {
 
     const s = _settings;
 
+    function getEffectiveMargin() {
+      return s.value.customTypography ? s.value.margin : DEFAULT_SETTINGS.margin;
+    }
+
     function syncToHost() {
       ctx.ui.setTheme(s.value.theme);
       ctx.ui.injectIframeStyle("typography", buildFullCSS(s.value));
       const host = ctx.readerHost();
       if (host) {
-        host.setScrollMode(s.value.scrollMode ?? "pagination");
-        host.setPageMargin(s.value.margin);
+        host.setReadingMode(s.value.readingMode ?? "pagination");
+        host.setPageMargin(getEffectiveMargin());
       }
     }
 
@@ -126,18 +130,18 @@ export const settingsPlugin: Plugin = {
     );
 
     watch(
-      () => s.value.scrollMode,
+      () => s.value.readingMode,
       (mode) => {
         const host = ctx.readerHost();
-        if (host) host.setScrollMode(mode ?? "pagination");
+        if (host) host.setReadingMode(mode ?? "pagination");
       },
     );
 
     watch(
-      () => s.value.margin,
-      (margin) => {
+      () => [s.value.margin, s.value.customTypography] as const,
+      ([margin, enabled]) => {
         const host = ctx.readerHost();
-        if (host) host.setPageMargin(margin);
+        if (host) host.setPageMargin(enabled ? margin : DEFAULT_SETTINGS.margin);
       },
     );
 

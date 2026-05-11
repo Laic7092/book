@@ -64,9 +64,7 @@ export function generateBaseCSS(): string {
       overflow-wrap: break-word;
       hyphens: auto;
       -webkit-hyphens: auto;
-      margin: 24px;
-      touch-action: pan-y;
-      will-change: transform;
+      margin: var(--page-margin, 24px);
     }
 
     body.reader-content h1,
@@ -115,9 +113,28 @@ export function generateBaseCSS(): string {
       text-align: center;
     }
 
-    /* 垂直滚动模式：底部留白供进度条 */
-    body.reader-content.vertical-content {
+    /* ── Mode-specific layout ── */
+
+    html[data-mode="paginated"] {
+      overflow: hidden;
+    }
+    html[data-mode="paginated"] body.reader-content {
+      column-width: calc(100dvw - 2 * var(--page-margin, 24px));
+      column-gap: calc(2 * var(--page-margin, 24px));
+      column-fill: auto;
+      height: calc(100dvh - 2 * var(--page-margin, 24px));
+      overflow: visible;
+      transform: translateX(calc(-1 * var(--current-page, 0) * 100dvw));
+    }
+
+    html[data-mode="scroll"] {
+      overflow-y: auto;
+    }
+    html[data-mode="scroll"] body.reader-content {
+      touch-action: pan-y;
+      will-change: transform;
       padding-bottom: 40vh;
+      margin: var(--page-margin, 24px);
     }
   `;
 }
@@ -147,7 +164,6 @@ export function generateTypographyCSS(settings: ReaderSettings): string {
       line-height: ${settings.lineHeight};
       letter-spacing: ${settings.letterSpacing || 0}em;
       text-align: ${settings.textAlign || "left"};
-      margin: ${settings.margin || 24}px;
     }
 
     body.reader-content p {
@@ -158,29 +174,6 @@ export function generateTypographyCSS(settings: ReaderSettings): string {
     body.reader-content .chapter-heading {
       margin-bottom: 1em;
       border-bottom: 1px solid var(--border-subtle);
-    }
-  `;
-}
-
-// ============================================================
-// 分页模式：CSS columns 列布局
-// ============================================================
-
-/**
- * 生成分页模式的 CSS columns 样式
- * html 设为横向滚动容器，body 使用 column-width 自动分列
- */
-export function generatePaginationCSS(columnWidth: number, height: number, gap: number): string {
-  return `
-    html {
-      overflow: hidden;
-    }
-    body.reader-content {
-      column-width: ${columnWidth}px;
-      column-gap: ${gap}px;
-      column-fill: auto;
-      height: ${height}px;
-      overflow: visible;
     }
   `;
 }

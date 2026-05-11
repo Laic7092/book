@@ -304,9 +304,22 @@ export function createPluginContext(id: string, bootstrap: PluginBootstrap): Plu
 function createTrackedCss(cleanupFns: (() => void | Promise<void>)[]): CssAPI {
   const raw = createCssAPI();
   const injectedStyles: string[] = [];
+  let lastTheme: string | null = null;
 
   return {
     setTheme(theme: string) {
+      if (lastTheme === null) {
+        cleanupFns.push(() => {
+          if (lastTheme) {
+            document.body.classList.remove(`theme-${lastTheme}`);
+            const container = document.querySelector(".reader-view-container");
+            if (container) {
+              container.classList.remove(`theme-${lastTheme}`);
+            }
+          }
+        });
+      }
+      lastTheme = theme;
       raw.setTheme(theme);
     },
     injectIframeStyle(id: string, css: string) {

@@ -12,7 +12,7 @@ export const PAGE_CHANGE_COOLDOWN_MS = 300;
 
 // Debounce and throttle delays
 export const DEBOUNCE_DELAY = 1000;
-export const SCROLL_SAVE_DELAY = 1000;
+export const PROGRESS_SAVE_DELAY = 1000;
 export const TOAST_DURATION = 3000;
 
 // Chapter loading constants

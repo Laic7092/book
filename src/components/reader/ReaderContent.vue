@@ -1,23 +1,17 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, nextTick, computed } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
 import { useIframeRenderer } from "../../composables/useIframeRenderer";
-import { generatePaginationCSS } from "../../reader-engine/reader-styles";
 
 const props = defineProps<{
   content: string;
   isPaginationMode: boolean;
-  scrollOffset?: number;
+  currentPage?: number;
   chapterLoading?: boolean;
   loadedChapters?: Array<{ chapterId: string; title: string; content: string }>;
   epubResources?: HTMLElement[];
   pageMargin?: number;
   onLinkClick?: (href: string) => void;
-  onColumnLayout?: (data: {
-    columnWidth: number;
-    gap: number;
-    scrollWidth: number;
-    iframeWidth: number;
-  }) => void;
+  onColumnLayout?: (data: { contentWidth: number; iframeWidth: number }) => void;
   onChaptersChanged?: () => void;
   onIframeReady?: () => void;
 }>();
@@ -25,8 +19,8 @@ const props = defineProps<{
 const containerRef = ref<HTMLElement | null>(null);
 const iframeRef = ref<HTMLIFrameElement | null>(null);
 
-const rendererOptions = computed(() => ({
-  isPaginationMode: props.isPaginationMode,
+const rendererOptions = computed<{ initialMode: "scroll" | "paginated" }>(() => ({
+  initialMode: props.isPaginationMode ? "paginated" : "scroll",
 }));
 
 const {
@@ -37,8 +31,11 @@ const {
   clearSyncedResources,
   getArticle,
   getDocument,
-  scrollToChapter,
-  restoreScrollPosition,
+  paginateToChapter,
+  restorePosition,
+  setMode,
+  setPage,
+  setPageMargin,
   cleanup,
 } = useIframeRenderer(
   iframeRef,
@@ -49,23 +46,6 @@ const {
 let resizeObserver: ResizeObserver | null = null;
 let columnMeasureTimer: ReturnType<typeof setTimeout> | null = null;
 
-function getPaginationStyleEl(): HTMLStyleElement | null {
-  const doc = getDocument();
-  return doc?.getElementById("pagination-style") as HTMLStyleElement | null;
-}
-
-function injectColumnCSS() {
-  const styleEl = getPaginationStyleEl();
-  if (!styleEl) return;
-  const iframe = iframeRef.value;
-  if (!iframe) return;
-  const m = props.pageMargin ?? 24;
-  const cw = iframe.clientWidth - m * 2;
-  const ch = iframe.clientHeight - m * 2;
-  const gap = m * 2;
-  styleEl.textContent = generatePaginationCSS(cw, ch, gap);
-}
-
 function measureColumns() {
   if (columnMeasureTimer) clearTimeout(columnMeasureTimer);
   columnMeasureTimer = setTimeout(() => {
@@ -74,13 +54,10 @@ function measureColumns() {
     requestAnimationFrame(() => {
       const iframe = iframeRef.value;
       if (!iframe) return;
-      const m = props.pageMargin ?? 24;
-      const cw = iframe.clientWidth - m * 2;
-      const gap = m * 2;
-      const scrollWidth = doc.body.scrollWidth || 0;
+      const contentWidth = doc.body.scrollWidth || 0;
       const iframeWidth = iframe.clientWidth || 0;
-      if (cw > 0) {
-        props.onColumnLayout?.({ columnWidth: cw, gap, scrollWidth, iframeWidth });
+      if (iframeWidth > 0) {
+        props.onColumnLayout?.({ contentWidth, iframeWidth });
       }
     });
   }, 150);
@@ -90,7 +67,12 @@ function handleLoad() {
   const doc = getDocument();
   if (!doc) return;
 
-  injectColumnCSS();
+  const mode = props.isPaginationMode ? "paginated" : "scroll";
+  setMode(mode);
+  setPageMargin(props.pageMargin ?? 24);
+  if (props.currentPage !== undefined) {
+    setPage(props.currentPage);
+  }
   measureColumns();
 
   if (props.loadedChapters) {
@@ -111,7 +93,6 @@ watch(
     if (chapters?.length) {
       updateContent(chapters.map((ch) => ch.content).join(""));
       nextTick(() => {
-        injectColumnCSS();
         measureColumns();
         props.onChaptersChanged?.();
       });
@@ -125,7 +106,6 @@ watch(
     if (html) {
       updateContent(html);
       nextTick(() => {
-        injectColumnCSS();
         measureColumns();
         props.onChaptersChanged?.();
       });
@@ -143,31 +123,30 @@ watch(
 );
 
 watch([() => props.isPaginationMode, isReady], ([mode, ready]) => {
-  if (ready && mode) {
-    nextTick(injectColumnCSS);
+  if (ready) {
+    setMode(mode ? "paginated" : "scroll");
+    if (mode) {
+      nextTick(measureColumns);
+    }
   }
 });
 
 watch(
   () => props.pageMargin,
-  () => {
-    if (props.isPaginationMode && isReady.value) {
-      nextTick(() => {
-        injectColumnCSS();
-        measureColumns();
-      });
+  (margin) => {
+    if (!isReady.value) return;
+    setPageMargin(margin ?? 24);
+    if (props.isPaginationMode) {
+      nextTick(measureColumns);
     }
   },
 );
 
 watch(
-  () => props.scrollOffset,
-  (offset) => {
-    if (!props.isPaginationMode || offset === undefined) return;
-    const article = getArticle();
-    if (article) {
-      article.style.transform = `translateX(-${offset}px)`;
-    }
+  () => props.currentPage,
+  (page) => {
+    if (!props.isPaginationMode || page === undefined) return;
+    setPage(page);
   },
 );
 
@@ -179,8 +158,9 @@ function setupResizeObserver() {
   if (!doc?.body) return;
 
   resizeObserver = new ResizeObserver(() => {
-    injectColumnCSS();
-    measureColumns();
+    if (props.isPaginationMode) {
+      measureColumns();
+    }
   });
   resizeObserver.observe(doc.body);
 
@@ -216,8 +196,8 @@ onUnmounted(() => {
 defineExpose({
   getDocument,
   getArticle,
-  scrollToChapter,
-  restoreScrollPosition,
+  paginateToChapter,
+  restorePosition,
   syncResources,
 });
 </script>

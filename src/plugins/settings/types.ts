@@ -8,7 +8,7 @@ export interface ReaderSettings {
   paragraphSpacing?: number;
   textAlign?: "left" | "center" | "justify";
   contrast?: "soft" | "normal" | "high";
-  scrollMode?: "vertical" | "pagination";
+  readingMode?: "vertical" | "pagination";
   paginationAnimation?: "slide" | "flip" | "fade";
   /** Whether to apply custom typography settings (fontFamily, lineHeight, etc.). When false, EPUB original styling is preserved. */
   customTypography?: boolean;

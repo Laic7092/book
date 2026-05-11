@@ -19,7 +19,7 @@ export interface ReaderHost {
   isPaginationMode: ComputedRef<boolean>;
 
   // ── Render mode control ──
-  setScrollMode(mode: "vertical" | "pagination"): void;
+  setReadingMode(mode: "vertical" | "pagination"): void;
   setPageMargin(margin: number): void;
 
   // ── Actions ──

@@ -6,7 +6,7 @@ export const THEME_OPTIONS = [
 ] as const;
 
 // Reading mode options
-export const SCROLL_MODE_OPTIONS = [
+export const READING_MODE_OPTIONS = [
   { label: "Vertical", value: "vertical", desc: "Continuous scroll" },
   { label: "Pagination", value: "pagination", desc: "Page by page" },
 ] as const;

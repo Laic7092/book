@@ -1,4 +1,4 @@
-import { ref, computed, onUnmounted } from "vue";
+import { ref, onUnmounted } from "vue";
 
 export interface PaginateOptions {
   html?: string;
@@ -13,12 +13,9 @@ export function useColumnPagination() {
   const isPaginating = ref(false);
   const rawHtml = ref("");
   const currentHtml = ref("");
-  const columnWidth = ref(0);
-  const columnGap = ref(0);
+  const iframeWidth = ref(0);
 
   let pendingTargetPage: number | undefined;
-
-  const scrollOffset = computed(() => currentPage.value * (columnWidth.value + columnGap.value));
 
   function clampPage(target: number | undefined, length: number): number {
     if (length <= 0) return 0;
@@ -43,11 +40,10 @@ export function useColumnPagination() {
     isPaginating.value = false;
   }
 
-  function updateColumnLayout(cw: number, gap: number, scrollW: number): void {
-    columnWidth.value = cw || 0;
-    columnGap.value = gap || 0;
-    const step = columnWidth.value + columnGap.value;
-    const newTotal = step > 0 ? Math.max(1, Math.ceil(scrollW / step)) : 1;
+  function updateColumnLayout(scrollWidth: number, width: number): void {
+    iframeWidth.value = width || 0;
+    const step = iframeWidth.value;
+    const newTotal = step > 0 ? Math.max(1, Math.ceil(scrollWidth / step)) : 1;
     totalPages.value = newTotal;
 
     if (pendingTargetPage !== undefined) {
@@ -60,7 +56,7 @@ export function useColumnPagination() {
   }
 
   function getPageAtOffset(offsetInBody: number): number {
-    const step = columnWidth.value + columnGap.value;
+    const step = iframeWidth.value;
     if (step <= 0 || totalPages.value <= 0) return 0;
     return Math.max(0, Math.min(totalPages.value - 1, Math.floor(offsetInBody / step)));
   }
@@ -92,8 +88,7 @@ export function useColumnPagination() {
     currentHtml.value = "";
     currentPage.value = 0;
     totalPages.value = 1;
-    columnWidth.value = 0;
-    columnGap.value = 0;
+    iframeWidth.value = 0;
     pendingTargetPage = undefined;
   }
 
@@ -106,7 +101,6 @@ export function useColumnPagination() {
     isReady,
     currentHtml,
     rawHtml,
-    scrollOffset,
     getPageAtOffset,
     getPageAtRatio,
     goToPage,

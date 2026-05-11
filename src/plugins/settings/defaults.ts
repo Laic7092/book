@@ -10,7 +10,7 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
   paragraphSpacing: 1.2,
   textAlign: "left",
   contrast: "normal",
-  scrollMode: "pagination",
+  readingMode: "pagination",
   paginationAnimation: "fade",
   customTypography: false,
 };

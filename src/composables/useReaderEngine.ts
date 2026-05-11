@@ -22,7 +22,7 @@ import type { Chapter } from "../core/types";
 export interface ReaderContentAPI {
   getDocument?(): Document | null;
   getArticle?(): HTMLElement | null;
-  scrollToChapter?(chapterId: string): void;
+  paginateToChapter?(chapterId: string): void;
   syncResources?(elements: HTMLElement[]): void;
 }
 
@@ -36,7 +36,7 @@ export function useReaderEngine(
   const navStack = useNavigationStack();
 
   // ── Refs ──
-  const scrollMode = ref<"vertical" | "pagination">("pagination");
+  const readingMode = ref<"vertical" | "pagination">("pagination");
   const pageMargin = ref(24);
   const isTransitioning = ref(false);
   const isRestoring = ref(false);
@@ -62,7 +62,7 @@ export function useReaderEngine(
     readerStore.chapters.findIndex((c) => c.id === readerStore.currentChapter?.id),
   );
 
-  const isPaginationMode = computed(() => scrollMode.value === "pagination");
+  const isPaginationMode = computed(() => readingMode.value === "pagination");
 
   const chapterProgress = computed(() => {
     if (isPaginationMode.value) {
@@ -204,7 +204,7 @@ export function useReaderEngine(
       } else {
         await chapterLoader.loadCurrentAndAdjacent(2);
         await nextTick();
-        readerContentRef.value?.scrollToChapter?.(chapterId);
+        readerContentRef.value?.paginateToChapter?.(chapterId);
       }
 
       for (const cb of chapterChangeCallbacks) cb(chapterId);
@@ -373,7 +373,7 @@ export function useReaderEngine(
     const filePath = hashIndex > 0 ? href.substring(0, hashIndex) : href;
     const anchor = hashIndex >= 0 ? href.substring(hashIndex + 1) : "";
 
-    const scrollToAnchor = () => {
+    const paginateToAnchor = () => {
       if (!anchor) return;
       const article = readerContentRef.value?.getArticle?.();
       if (!article) return;
@@ -393,7 +393,7 @@ export function useReaderEngine(
     const currentChId = readerStore.currentChapter?.id;
 
     if (!filePath) {
-      scrollToAnchor();
+      paginateToAnchor();
       if (currentChId) {
         navStack.push({
           chapterId: currentChId,
@@ -409,11 +409,11 @@ export function useReaderEngine(
     if (targetChapter.id === readerStore.currentChapter?.id) {
       if (isPaginationMode.value) {
         void waitForPaginationReady().then(() => {
-          scrollToAnchor();
+          paginateToAnchor();
           navStack.push({ chapterId: targetChapter.id, page: pagination.currentPage.value });
         });
       } else {
-        scrollToAnchor();
+        paginateToAnchor();
         navStack.push({ chapterId: targetChapter.id, page: 0 });
       }
       return;
@@ -429,13 +429,13 @@ export function useReaderEngine(
       }
       if (isPaginationMode.value) {
         await waitForPaginationReady();
-        scrollToAnchor();
+        paginateToAnchor();
         navStack.push({ chapterId: targetChapter.id, page: pagination.currentPage.value });
       } else {
         await nextTick();
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
-            scrollToAnchor();
+            paginateToAnchor();
             navStack.push({ chapterId: targetChapter.id, page: 0 });
           });
         });
@@ -444,34 +444,29 @@ export function useReaderEngine(
   }
 
   // ── Column layout ──
-  function handleColumnLayout(data: {
-    columnWidth: number;
-    gap: number;
-    scrollWidth: number;
-    iframeWidth: number;
-  }) {
-    pagination.updateColumnLayout(data.columnWidth, data.gap, data.scrollWidth);
+  function handleColumnLayout(data: { contentWidth: number; iframeWidth: number }) {
+    pagination.updateColumnLayout(data.contentWidth, data.iframeWidth);
   }
 
   function handleChaptersChanged() {
-    refreshScrollObserver();
+    refreshProgressObserver();
   }
 
   // ── Scroll observer (vertical mode) ──
-  let scrollObserver: IntersectionObserver | null = null;
-  let scrollCurrentChapterId: string | null = null;
-  let scrollLastPercent = -1;
-  let scrollLastChapterId: string | null = null;
-  let scrollLastChapterProgress = -1;
-  let scrollCleanup: (() => void) | null = null;
+  let progressObserver: IntersectionObserver | null = null;
+  let visibleChapterId: string | null = null;
+  let lastProgressPercent = -1;
+  let lastProgressChapterId: string | null = null;
+  let lastChapterProgress = -1;
+  let progressCleanup: (() => void) | null = null;
 
-  function refreshScrollObserver() {
-    if (!scrollObserver) return;
+  function refreshProgressObserver() {
+    if (!progressObserver) return;
     const doc = readerContentRef.value?.getDocument?.();
     if (!doc) return;
-    scrollObserver.disconnect();
+    progressObserver.disconnect();
     doc.querySelectorAll<HTMLElement>("[data-chapter-id]").forEach((el) => {
-      scrollObserver?.observe(el);
+      progressObserver?.observe(el);
     });
     const win = doc.defaultView;
     if (win) {
@@ -480,28 +475,28 @@ export function useReaderEngine(
       const containers = doc.querySelectorAll<HTMLElement>("[data-chapter-id]");
       for (const el of containers) {
         if (midpoint >= el.offsetTop && midpoint < el.offsetTop + el.offsetHeight) {
-          scrollCurrentChapterId = el.getAttribute("data-chapter-id");
+          visibleChapterId = el.getAttribute("data-chapter-id");
           break;
         }
       }
     }
   }
 
-  function setupScrollHandler(doc: Document) {
-    if (scrollObserver) return;
-    scrollObserver = new IntersectionObserver(
+  function setupProgressTracking(doc: Document) {
+    if (progressObserver) return;
+    progressObserver = new IntersectionObserver(
       (entries) => {
         if (isPaginationMode.value) return;
         for (const entry of entries) {
           if (entry.isIntersecting) {
-            scrollCurrentChapterId = (entry.target as HTMLElement).getAttribute("data-chapter-id");
+            visibleChapterId = (entry.target as HTMLElement).getAttribute("data-chapter-id");
           }
         }
       },
       { root: doc.documentElement, threshold: 0 },
     );
     doc.querySelectorAll<HTMLElement>("[data-chapter-id]").forEach((el) => {
-      scrollObserver?.observe(el);
+      progressObserver?.observe(el);
     });
 
     let ticking = false;
@@ -517,10 +512,8 @@ export function useReaderEngine(
         if (scrollHeight <= 0) return;
         const percent = Math.min(100, Math.max(0, Math.round((scrollTop / scrollHeight) * 100)));
         let chapterProgressVal = 0;
-        if (scrollCurrentChapterId) {
-          const el = doc.querySelector<HTMLElement>(
-            `[data-chapter-id="${scrollCurrentChapterId}"]`,
-          );
+        if (visibleChapterId) {
+          const el = doc.querySelector<HTMLElement>(`[data-chapter-id="${visibleChapterId}"]`);
           if (el && el.offsetHeight > 0) {
             chapterProgressVal = Math.min(
               100,
@@ -529,25 +522,25 @@ export function useReaderEngine(
           }
         }
         if (
-          percent === scrollLastPercent &&
-          scrollCurrentChapterId === scrollLastChapterId &&
-          chapterProgressVal === scrollLastChapterProgress
+          percent === lastProgressPercent &&
+          visibleChapterId === lastProgressChapterId &&
+          chapterProgressVal === lastChapterProgress
         )
           return;
-        scrollLastPercent = percent;
-        scrollLastChapterId = scrollCurrentChapterId;
-        scrollLastChapterProgress = chapterProgressVal;
+        lastProgressPercent = percent;
+        lastProgressChapterId = visibleChapterId;
+        lastChapterProgress = chapterProgressVal;
         if (isRestoring.value) return;
         readerStore.updateProgress(percent, chapterProgressVal);
         const prevChId = readerStore.currentChapter?.id;
-        if (scrollCurrentChapterId && scrollCurrentChapterId !== prevChId) {
-          const chapter = readerStore.chapters.find((c) => c.id === scrollCurrentChapterId);
+        if (visibleChapterId && visibleChapterId !== prevChId) {
+          const chapter = readerStore.chapters.find((c) => c.id === visibleChapterId);
           if (chapter) {
             readerStore.currentChapter = chapter;
-            for (const cb of chapterChangeCallbacks) cb(scrollCurrentChapterId);
+            for (const cb of chapterChangeCallbacks) cb(visibleChapterId);
             void pluginEvents.emit("chapter:changed", {
               bookId: readerStore.currentBook!.id,
-              chapterId: scrollCurrentChapterId,
+              chapterId: visibleChapterId,
               previousChapterId: prevChId,
             });
           }
@@ -555,10 +548,10 @@ export function useReaderEngine(
       });
     };
     doc.addEventListener("scroll", handler, { passive: true });
-    scrollCleanup = () => {
+    progressCleanup = () => {
       doc.removeEventListener("scroll", handler);
-      scrollObserver?.disconnect();
-      scrollObserver = null;
+      progressObserver?.disconnect();
+      progressObserver = null;
     };
   }
 
@@ -605,7 +598,7 @@ export function useReaderEngine(
     const doc = readerContentRef.value?.getDocument?.();
     if (!doc) return;
     setupDirectHandlers(doc);
-    setupScrollHandler(doc);
+    setupProgressTracking(doc);
     for (const cb of iframeReadyCallbacks) cb();
     const chId = readerStore.currentChapter?.id;
     const bId = readerStore.currentBook?.id;
@@ -672,9 +665,9 @@ export function useReaderEngine(
       return readerStore.currentBook?.id;
     },
     isPaginationMode,
-    setScrollMode(mode: "vertical" | "pagination") {
-      if (scrollMode.value === mode) return;
-      scrollMode.value = mode;
+    setReadingMode(mode: "vertical" | "pagination") {
+      if (readingMode.value === mode) return;
+      readingMode.value = mode;
       if (mode === "vertical" && readerStore.chapters.length > 0) {
         void chapterLoader.loadCurrentAndAdjacent(2);
       } else if (mode === "pagination" && readerStore.currentChapter) {
@@ -762,8 +755,8 @@ export function useReaderEngine(
     void pluginEvents.emit("reader:unmounted", { bookId: bookId.value });
     gestureCleanup?.();
     gestureCleanup = null;
-    scrollCleanup?.();
-    scrollCleanup = null;
+    progressCleanup?.();
+    progressCleanup = null;
     cleanupFns.forEach((fn) => fn());
     cleanupFns.length = 0;
     iframeReadyCallbacks = [];
@@ -775,7 +768,7 @@ export function useReaderEngine(
 
   return {
     // State
-    scrollMode,
+    readingMode,
     pageMargin,
     isTransitioning,
     isRestoring,
@@ -808,7 +801,6 @@ export function useReaderEngine(
     // Pagination exposed
     currentPage: pagination.currentPage,
     totalPages: pagination.totalPages,
-    scrollOffset: pagination.scrollOffset,
     // Lifecycle helpers for ReaderHost consumers
     reloadForPagination,
     navigateToCfiLocation,

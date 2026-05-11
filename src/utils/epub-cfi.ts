@@ -520,6 +520,10 @@ export function resolveCfiRange(
 
 // ─── Navigation ────────────────────────────────────────────────────────────
 
+function paginateToElement(element: Element): void {
+  element.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
 /**
  * Navigate to a CFI location by scrolling the target element into view.
  * Also highlights the target briefly.
@@ -541,7 +545,7 @@ export function navigateToCfi(cfi: string, contentRoot: Element): boolean {
   element.style.backgroundColor = "rgba(251, 191, 36, 0.3)";
 
   // Scroll into view
-  element.scrollIntoView({ behavior: "smooth", block: "center" });
+  paginateToElement(element);
 
   // Remove highlight after animation
   setTimeout(() => {
@@ -571,7 +575,7 @@ export function selectCfi(cfi: string, contentRoot: Element): boolean {
       : (range.startContainer as Element);
 
   if (element) {
-    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    paginateToElement(element);
   }
 
   return true;

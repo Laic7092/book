@@ -100,9 +100,13 @@ export function useReaderSearch(readerHost: () => ReaderHost | null) {
     const markRect = mark.getBoundingClientRect();
     const offset = markRect.left - bodyRect.left;
     const total = host.getTotalPages();
-    const bodyScrollWidth = doc.body.scrollWidth;
-    const step = total > 0 ? bodyScrollWidth / total : 0;
+    const bodyContentWidth = doc.body.scrollWidth;
+    const step = total > 0 ? bodyContentWidth / total : 0;
     return step > 0 ? Math.max(0, Math.min(total - 1, Math.floor(offset / step))) : 0;
+  }
+
+  function paginateToElement(el: Element): void {
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
   async function navigateToResult(result: SearchResult) {
@@ -149,7 +153,7 @@ export function useReaderSearch(readerHost: () => ReaderHost | null) {
         host.goToPage(page);
         host.pushToHistory(targetChapter.id, page);
       } else {
-        mark.scrollIntoView({ behavior: "smooth", block: "center" });
+        paginateToElement(mark);
         host.pushToHistory(targetChapter.id, 0);
       }
     }

@@ -2,7 +2,7 @@
 import ModalHeader from "../../components/modals/ModalHeader.vue";
 import {
   THEME_OPTIONS,
-  SCROLL_MODE_OPTIONS,
+  READING_MODE_OPTIONS,
   ANIMATION_OPTIONS,
   FONT_SIZE_PRESETS,
 } from "./options";
@@ -57,14 +57,14 @@ const emit = defineEmits<{
         </div>
 
         <!-- 阅读模式 -->
-        <div class="setting-row" v-if="false">
+        <div class="setting-row">
           <label class="setting-label">阅读模式</label>
           <div class="mode-options">
             <button
-              v-for="mode in SCROLL_MODE_OPTIONS"
+              v-for="mode in READING_MODE_OPTIONS"
               :key="mode.value"
-              :class="['mode-btn', { active: (settings.scrollMode || 'vertical') === mode.value }]"
-              @click="state.update({ scrollMode: mode.value })"
+              :class="['mode-btn', { active: (settings.readingMode || 'vertical') === mode.value }]"
+              @click="state.update({ readingMode: mode.value })"
             >
               <svg
                 v-if="mode.value === 'vertical'"
@@ -98,7 +98,7 @@ const emit = defineEmits<{
         <!-- 翻页动画 -->
         <div
           class="setting-row"
-          v-if="(settings.scrollMode || 'vertical') === 'pagination' && false"
+          v-if="(settings.readingMode || 'vertical') === 'pagination' && false"
         >
           <label class="setting-label">
             <span>翻页效果</span>

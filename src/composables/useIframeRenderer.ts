@@ -7,7 +7,7 @@ import {
 } from "../reader-engine/iframe-resources";
 
 export interface IframeRendererOptions {
-  isPaginationMode: boolean;
+  initialMode: "scroll" | "paginated";
 }
 
 export interface IframeLinkClickEvent {
@@ -19,9 +19,8 @@ export interface IframeLinkClickEvent {
  * Iframe renderer composable.
  *
  * iframe internal style structure:
- * - <style id="base-style">       — constant reset styles
+ * - <style id="base-style">       — reset + mode CSS
  * - <style id="resource-style">   — format resource styles (CSS, fonts)
- * - <style id="pagination-style"> — pagination column layout
  * - <style id="plugin-*">         — plugin-injected styles (theme, typography via CssAPI)
  */
 export function useIframeRenderer(
@@ -67,16 +66,15 @@ export function useIframeRenderer(
     iframeDoc.open();
     iframeDoc.write(`
       <!DOCTYPE html>
-      <html>
+      <html data-mode="${options.value.initialMode}">
       <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
         <style id="base-style">${baseCSS}</style>
         <style id="resource-style"></style>
-        <style id="pagination-style"></style>
         ${linkHandlerScript}
       </head>
-      <body class="reader-content${!options.value.isPaginationMode ? " vertical-content" : ""}"></body>
+      <body class="reader-content"></body>
       </html>
     `);
     iframeDoc.close();
@@ -117,7 +115,7 @@ export function useIframeRenderer(
     return iframeDoc;
   }
 
-  function scrollToChapter(chapterId: string): void {
+  function paginateToChapter(chapterId: string): void {
     if (!iframeDoc) return;
     const el = iframeDoc.querySelector<HTMLElement>(`[data-chapter-id="${chapterId}"]`);
     if (el) {
@@ -125,7 +123,7 @@ export function useIframeRenderer(
     }
   }
 
-  function restoreScrollPosition(chapterId: string, progress: number): void {
+  function restorePosition(chapterId: string, progress: number): void {
     if (!iframeDoc) return;
     const el = iframeDoc.querySelector<HTMLElement>(`[data-chapter-id="${chapterId}"]`);
     if (el) {
@@ -135,6 +133,21 @@ export function useIframeRenderer(
         win.scrollTo({ top: targetY, behavior: "instant" });
       }
     }
+  }
+
+  function setMode(mode: "scroll" | "paginated"): void {
+    if (!iframeDoc?.documentElement) return;
+    iframeDoc.documentElement.dataset.mode = mode;
+  }
+
+  function setPage(page: number): void {
+    if (!iframeDoc?.documentElement) return;
+    iframeDoc.documentElement.style.setProperty("--current-page", String(page));
+  }
+
+  function setPageMargin(margin: number): void {
+    if (!iframeDoc?.documentElement) return;
+    iframeDoc.documentElement.style.setProperty("--page-margin", `${margin}px`);
   }
 
   function cleanup() {
@@ -152,8 +165,11 @@ export function useIframeRenderer(
     clearSyncedResources,
     getArticle,
     getDocument,
-    scrollToChapter,
-    restoreScrollPosition,
+    paginateToChapter,
+    restorePosition,
+    setMode,
+    setPage,
+    setPageMargin,
     cleanup,
   };
 }

@@ -43,7 +43,7 @@ function closeModal() {
       ref="readerContentRef"
       :content="engine.displayContent.value"
       :is-pagination-mode="engine.isPaginationMode.value"
-      :scroll-offset="engine.scrollOffset.value"
+      :current-page="engine.currentPage.value"
       :chapter-loading="engine.chapterLoading.value"
       :loaded-chapters="engine.transformedLoadedContent.value"
       :epub-resources="engine.currentChapterResources.value"
