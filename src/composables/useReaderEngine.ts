@@ -66,6 +66,12 @@ export function useReaderEngine(
 
   const callbacks: StrategyCallbacks = {
     onChapterChanged(chapterId: string, previousChapterId?: string) {
+      // Update store — ensures currentChapter is always correct regardless of
+      // which strategy triggered the change (pagination via goToChapter, scroll
+      // via IntersectionObserver or explicit navigation).
+      const chapter = readerStore.chapters.find((c) => c.id === chapterId);
+      if (chapter) readerStore.currentChapter = chapter;
+
       for (const cb of chapterChangeCallbacks) cb(chapterId);
       const bid = readerStore.currentBook?.id;
       if (bid) {

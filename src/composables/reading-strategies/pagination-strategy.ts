@@ -74,6 +74,19 @@ export function usePaginationStrategy(ctx: StrategyContext): ReadingStrategy {
     });
   }
 
+  /** Load chapter content and paginate — no transitioning, no events. */
+  async function loadChapter(chapterId: string, targetPage: number): Promise<void> {
+    const content = await ctx.getChapterContent(chapterId);
+    let html = content?.html || "";
+    if (html && ctx.resourceUrls.value) {
+      html = await processChapterHtml(html, ctx.bookId.value, chapterId, ctx.resourceUrls.value);
+    }
+    const resources = content?.resources || [];
+    await pagination.paginate(chapterId, { html, targetPage, resources });
+    chapterResources.value = resources;
+    ctx.syncResources(resources);
+  }
+
   async function navigateToChapter(
     chapterId: string,
     targetPage: number = 0,
@@ -83,18 +96,7 @@ export function usePaginationStrategy(ctx: StrategyContext): ReadingStrategy {
     const previousChapterId = ctx.currentChapter.value?.id;
 
     try {
-      // Fetch and process chapter content
-      const content = await ctx.getChapterContent(chapterId);
-      let html = content?.html || "";
-      if (html && ctx.resourceUrls.value) {
-        html = await processChapterHtml(html, ctx.bookId.value, chapterId, ctx.resourceUrls.value);
-      }
-
-      const resources = content?.resources || [];
-      await pagination.paginate(chapterId, { html, targetPage, resources });
-      chapterResources.value = resources;
-      ctx.syncResources(resources);
-
+      await loadChapter(chapterId, targetPage);
       ctx.callbacks.onChapterChanged(chapterId, previousChapterId);
 
       if (autoClearTransition) {
@@ -288,7 +290,10 @@ export function usePaginationStrategy(ctx: StrategyContext): ReadingStrategy {
   async function activate(): Promise<void> {
     const chId = ctx.currentChapter.value?.id;
     if (!chId) return;
-    await navigateToChapter(chId, 0, true);
+    // Use loadChapter directly — no transitioning, no events.
+    // reader:mounted fires immediately after, allowing plugins
+    // (reading-progress) to restore saved position before render.
+    await loadChapter(chId, 0);
   }
 
   function deactivate(): void {
