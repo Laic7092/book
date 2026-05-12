@@ -18,7 +18,7 @@ const SCENE_META: Record<string, { label: string }> = {
   app: { label: "启动加载" },
 };
 
-const SCENE_ORDER = ["book-import", "bookshelf", "reader", "app"];
+const SCENE_ORDER = ["reader", "book-import", "bookshelf", "app"];
 
 // ── Scene map built from manifest ──
 
@@ -43,7 +43,7 @@ interface FilterPill {
 }
 
 const filterPills = computed<FilterPill[]>(() => {
-  const pills: FilterPill[] = [{ key: "all", label: "全部", count: pluginManifest.length }];
+  const pills: FilterPill[] = [];
   for (const key of SCENE_ORDER) {
     const meta = SCENE_META[key];
     if (meta && sceneCount.has(key)) {
@@ -60,7 +60,7 @@ const allPlugins = computed(() => {
   return getAllPlugins();
 });
 
-const activeFilter = ref("all");
+const activeFilter = ref("reader");
 
 const filteredPlugins = computed(() => {
   const af = activeFilter.value;
