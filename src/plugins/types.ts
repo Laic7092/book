@@ -3,7 +3,7 @@ import type { Pinia } from "pinia";
 import type { BookParser, SearchResult } from "../core/types";
 import type { ReaderSettings } from "./settings/types";
 import type { ReaderSession } from "../core/reader-host";
-import type { ServerClient } from "../core/api";
+import type { ServerClient } from "../utils/api";
 
 /** Scene a plugin loads during. */
 export type Scene = "app" | "book-import" | "bookshelf" | "reader";

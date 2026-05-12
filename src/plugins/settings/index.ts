@@ -8,7 +8,7 @@ import {
   generateThemeCSS,
   generateBaseCSS,
   generateTypographyCSS,
-} from "../../reader-engine/reader-styles";
+} from "../../composables/useIframeRenderer";
 
 // ── State ──
 

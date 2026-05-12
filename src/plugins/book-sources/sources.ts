@@ -4,7 +4,7 @@
  * import from URL / file, and merging with built-in sources.
  */
 
-import type { ServerClient } from "../../core/api";
+import type { ServerClient } from "../../utils/api";
 import { STORES, dbPut, dbGetAll, dbDelete } from "../../storage/db";
 import {
   parseSearchResults,
@@ -15,7 +15,7 @@ import {
   type BookSearchItem,
   type BookChapter,
   querySingle,
-} from "../../utils/rule-parser";
+} from "./rule-parser";
 
 // ── Types ──
 

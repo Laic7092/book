@@ -3,7 +3,7 @@ import {
   generateThemeCSS,
   generateBaseCSS,
   generateTypographyCSS,
-} from "../../reader-engine/reader-styles";
+} from "../../composables/useIframeRenderer";
 
 export interface PreviewIframe {
   updateStyles(settings: ReaderSettings): void;

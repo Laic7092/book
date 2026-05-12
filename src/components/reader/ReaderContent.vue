@@ -23,7 +23,7 @@ const emit = defineEmits<{
 
 const iframeRef = ref<HTMLIFrameElement | null>(null);
 
-const { isReady, initIframe, getDocument, getArticle, cleanup } = useIframeRenderer(
+const { initIframe, getDocument, getArticle, cleanup } = useIframeRenderer(
   iframeRef,
   props.onLinkClick,
 );

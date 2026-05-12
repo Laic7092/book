@@ -3,7 +3,7 @@
 import { defineStore } from "pinia";
 import type { Book, Folder } from "../core/types";
 import { dbGetAll, STORES } from "../storage/db";
-import { getCoverBlob, deleteCoverBlob } from "../storage/covers";
+import { getCoverBlob, deleteCoverBlob } from "../storage/books";
 import { pluginEvents } from "../plugins/context";
 import * as booksStore from "../storage/books";
 import * as folderStore from "../storage/folders";

@@ -1,9 +1,7 @@
-// Reader Application - Vue 3 Entry Point
-
 import { createApp } from "vue";
 import { createPinia } from "pinia";
 import App from "./App.vue";
-import "./styles/index.css";
+import "./index.css";
 
 import { setBootstrap } from "./plugins/manager/registry";
 import { loadPluginsFor } from "./plugins/loader";

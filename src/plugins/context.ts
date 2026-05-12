@@ -19,7 +19,7 @@ import type {
 } from "./types";
 import { getReaderSession } from "../core/reader-host";
 import { navigate as routerNavigate } from "../router";
-import { createServerClient } from "../core/api";
+import { createServerClient } from "../utils/api";
 import { useUIStore } from "../stores/ui";
 
 // ── PluginStorageAdapter implementation ──
