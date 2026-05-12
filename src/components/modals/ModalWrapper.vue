@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import type { Chapter } from "../../core/types";
 import TableOfContents from "./TableOfContents.vue";
 import { computed } from "vue";
@@ -20,15 +21,31 @@ const emit = defineEmits<{
   (e: "select-chapter", chapterId: string): void;
 }>();
 
+const isClosing = ref(false);
+
 function handleClose() {
-  emit("close");
+  if (isClosing.value) return;
+  isClosing.value = true;
+}
+
+function onAnimationEnd() {
+  if (isClosing.value) {
+    isClosing.value = false;
+    emit("close");
+  }
 }
 </script>
 
 <template>
   <Teleport to="body">
-    <div v-if="modalType" class="modal-overlay" @click.stop="handleClose">
-      <div class="modal-content modal-panel" @click.stop>
+    <div
+      v-if="modalType"
+      class="modal-overlay"
+      :class="{ closing: isClosing }"
+      @click.stop="handleClose"
+      @animationend="onAnimationEnd"
+    >
+      <div class="modal-content modal-panel" @click.stop @animationend="onAnimationEnd">
         <!-- Core: Table of Contents -->
         <TableOfContents
           v-if="modalType === 'toc'"
@@ -94,6 +111,36 @@ function handleClose() {
   }
   to {
     opacity: 1;
+  }
+}
+
+.closing.modal-overlay {
+  animation: overlayFadeOut 300ms ease forwards;
+}
+
+@keyframes overlayFadeOut {
+  from {
+    opacity: 1;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  to {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+    -webkit-backdrop-filter: blur(0px);
+  }
+}
+
+.closing .modal-content {
+  animation: slideDown 300ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(100%);
   }
 }
 
