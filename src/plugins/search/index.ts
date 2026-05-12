@@ -12,7 +12,7 @@ export const searchPlugin: Plugin = {
   name: "Full-Text Search",
   version: "1.0.0",
   setup(ctx) {
-    const api = reactive(useReaderSearch(ctx.readerHost)) as unknown as SearchApi;
+    const api = reactive(useReaderSearch(ctx.readerSession)) as unknown as SearchApi;
     ctx.capabilities.register("searchApis", api);
 
     ctx.onCleanup(() => {

@@ -2,10 +2,9 @@
 import { computed, ref } from "vue";
 import type { Annotation } from "../../core/types";
 import ModalHeader from "../../components/modals/ModalHeader.vue";
-import { useAnnotationStore, getAnnotationHost, useAnnotationFilters } from "./index";
+import { useAnnotationStore, useAnnotationFilters } from "./index";
 
 const store = useAnnotationStore();
-const host = getAnnotationHost();
 const { currentBookId } = useAnnotationFilters();
 
 const emit = defineEmits<{

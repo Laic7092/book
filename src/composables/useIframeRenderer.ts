@@ -1,44 +1,31 @@
+// Thin iframe initialization utility.
+// DOM manipulation (content, page, mode, resources) is handled by the
+// state machine bridge via effects — this file only sets up the bare iframe.
+
 import { ref, type Ref } from "vue";
 import { generateBaseCSS } from "../reader-engine/reader-styles";
-import {
-  type ResourceInfo,
-  injectResources,
-  clearResources,
-} from "../reader-engine/iframe-resources";
-
-export interface IframeRendererOptions {
-  initialMode: "scroll" | "paginated";
-}
-
-export interface IframeLinkClickEvent {
-  type: "link-click";
-  href: string;
-}
 
 /**
- * Iframe renderer composable.
+ * Initialize the iframe with the base HTML skeleton and link-click handler.
  *
  * iframe internal style structure:
  * - <style id="base-style">       — reset + mode CSS
- * - <style id="resource-style">   — format resource styles (CSS, fonts)
- * - <style id="plugin-*">         — plugin-injected styles (theme, typography via CssAPI)
+ * - <style id="resource-style">   — format resource styles (CSS, fonts) — managed by bridge
+ * - <style id="plugin-*">         — plugin-injected styles (theme, typography)
  */
 export function useIframeRenderer(
   iframeRef: Ref<HTMLIFrameElement | null>,
-  options: Ref<IframeRendererOptions>,
-  onLinkClick?: (message: IframeLinkClickEvent) => void,
+  onLinkClick?: (href: string) => void,
 ) {
   const isReady = ref(false);
   let iframeDoc: Document | null = null;
 
-  const injectedResources = new Map<string, ResourceInfo>();
-
   const messageHandler = (event: MessageEvent) => {
     if (!onLinkClick || !event.data || event.data.type !== "link-click") return;
-    onLinkClick(event.data as IframeLinkClickEvent);
+    onLinkClick(event.data.href);
   };
 
-  function initIframe() {
+  function initIframe(initialMode: "scroll" | "paginated") {
     const iframe = iframeRef.value;
     if (!iframe) return;
 
@@ -66,7 +53,7 @@ export function useIframeRenderer(
     iframeDoc.open();
     iframeDoc.write(`
       <!DOCTYPE html>
-      <html data-mode="${options.value.initialMode}">
+      <html data-mode="${initialMode}">
       <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -86,72 +73,15 @@ export function useIframeRenderer(
     }
   }
 
-  function updateContent(html: string) {
-    if (!iframeDoc?.body) return;
-    iframeDoc.body.innerHTML = html;
-  }
-
-  function syncResources(elements: HTMLElement[]): void {
-    if (!iframeDoc) return;
-    injectResources(
-      iframeDoc,
-      elements,
-      injectedResources,
-      "resource-style",
-      "data-resource-dynamic",
-    );
-  }
-
-  function clearSyncedResources(): void {
-    if (!iframeDoc) return;
-    clearResources(iframeDoc, injectedResources, "resource-style");
+  function getDocument(): Document | null {
+    return iframeDoc;
   }
 
   function getArticle(): HTMLElement | null {
     return iframeDoc?.body || null;
   }
 
-  function getDocument(): Document | null {
-    return iframeDoc;
-  }
-
-  function paginateToChapter(chapterId: string): void {
-    if (!iframeDoc) return;
-    const el = iframeDoc.querySelector<HTMLElement>(`[data-chapter-id="${chapterId}"]`);
-    if (el) {
-      el.scrollIntoView({ behavior: "instant", block: "start" });
-    }
-  }
-
-  function restorePosition(chapterId: string, progress: number): void {
-    if (!iframeDoc) return;
-    const el = iframeDoc.querySelector<HTMLElement>(`[data-chapter-id="${chapterId}"]`);
-    if (el) {
-      const targetY = el.offsetTop + (progress / 100) * el.offsetHeight;
-      const win = iframeDoc.defaultView;
-      if (win) {
-        win.scrollTo({ top: targetY, behavior: "instant" });
-      }
-    }
-  }
-
-  function setMode(mode: "scroll" | "paginated"): void {
-    if (!iframeDoc?.documentElement) return;
-    iframeDoc.documentElement.dataset.mode = mode;
-  }
-
-  function setPage(page: number): void {
-    if (!iframeDoc?.documentElement) return;
-    iframeDoc.documentElement.style.setProperty("--current-page", String(page));
-  }
-
-  function setPageMargin(margin: number): void {
-    if (!iframeDoc?.documentElement) return;
-    iframeDoc.documentElement.style.setProperty("--page-margin", `${margin}px`);
-  }
-
   function cleanup() {
-    clearSyncedResources();
     window.removeEventListener("message", messageHandler);
     iframeDoc = null;
     isReady.value = false;
@@ -160,16 +90,8 @@ export function useIframeRenderer(
   return {
     isReady,
     initIframe,
-    updateContent,
-    syncResources,
-    clearSyncedResources,
-    getArticle,
     getDocument,
-    paginateToChapter,
-    restorePosition,
-    setMode,
-    setPage,
-    setPageMargin,
+    getArticle,
     cleanup,
   };
 }

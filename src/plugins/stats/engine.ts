@@ -3,7 +3,7 @@
 
 import type { ReadingSession, BookReadingStats } from "../../core/types";
 import type { PluginStorageAdapter } from "../types";
-import type { ReaderHost } from "../../core/reader-host";
+import type { ReaderSession } from "../../core/reader-host";
 
 const SESSIONS_KEY = "sessions";
 
@@ -13,7 +13,10 @@ function statsKey(bookId: string): string {
 
 // ── Engine factory ──
 
-export function createStatsEngine(storage: PluginStorageAdapter, getHost: () => ReaderHost | null) {
+export function createStatsEngine(
+  storage: PluginStorageAdapter,
+  getSession: () => ReaderSession | null,
+) {
   // ── Session helpers ──
 
   async function getSessions(): Promise<ReadingSession[]> {
@@ -208,7 +211,7 @@ export function createStatsEngine(storage: PluginStorageAdapter, getHost: () => 
     updateStats,
     getSummaryStats,
     deleteStats,
-    getReaderHost: () => getHost(),
+    getSession: () => getSession(),
   };
 }
 

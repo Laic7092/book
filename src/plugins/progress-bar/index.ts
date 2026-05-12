@@ -1,11 +1,11 @@
 import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
-import type { ReaderHost } from "../../core/reader-host";
+import type { ReaderSession } from "../../core/reader-host";
 
 export const loadOn = "reader" as const;
 
-let _host: () => ReaderHost | null;
-export const getReaderHost = () => _host();
+let _session: (() => ReaderSession | null) | null = null;
+export const getProgressBarSession = () => _session?.() ?? null;
 
 export const corePlugin: Plugin = {
   [PLUGIN_BRAND]: true as const,
@@ -13,7 +13,7 @@ export const corePlugin: Plugin = {
   name: "progress-bar",
   version: "1.0.0",
   setup(ctx) {
-    _host = ctx.readerHost;
+    _session = ctx.readerSession;
     ctx.ui.registerOverlay("plugins", () => import("./ProgressBar.vue"));
   },
 };

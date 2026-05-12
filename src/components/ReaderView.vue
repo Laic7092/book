@@ -2,7 +2,7 @@
 import { ref, computed } from "vue";
 import { useReaderStore } from "../stores/reader";
 import { useUIStore } from "../stores/ui";
-import { useReaderEngine, type ReaderContentAPI } from "../composables/useReaderEngine";
+import { useReaderMachine, type ReaderContentAPI } from "../composables/useReaderMachine";
 import { ReaderHeader, ReaderFooter, ReaderContent, ReaderToolbar } from "../components/reader";
 import { ModalWrapper } from "../components/modals";
 import type { Book } from "../core/types";
@@ -17,7 +17,7 @@ const uiStore = useUIStore();
 
 const readerContentRef = ref<ReaderContentAPI | null>(null);
 
-const engine = useReaderEngine(
+const engine = useReaderMachine(
   computed(() => props.book.id),
   readerContentRef,
 );
@@ -41,16 +41,11 @@ function closeModal() {
     <!-- ── Content layer (z: 0) ── -->
     <ReaderContent
       ref="readerContentRef"
-      :content="engine.displayContent.value"
       :is-pagination-mode="engine.isPaginationMode.value"
-      :current-page="engine.currentPage.value"
       :chapter-loading="engine.chapterLoading.value"
-      :loaded-chapters="engine.transformedLoadedContent.value"
-      :epub-resources="engine.currentChapterResources.value"
       :page-margin="engine.pageMargin.value"
       :on-link-click="engine.handleInternalLinkClick"
       @column-layout="engine.handleColumnLayout"
-      @chapters-changed="engine.handleChaptersChanged"
       @iframe-ready="engine.handleIframeReady"
     />
 

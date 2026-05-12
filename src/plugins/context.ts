@@ -17,7 +17,7 @@ import type {
   ContentTransformer,
   ToolbarItem,
 } from "./types";
-import { getReaderHost } from "../core/reader-host";
+import { getReaderSession } from "../core/reader-host";
 import { navigate as routerNavigate } from "../router";
 import { createServerClient } from "../core/api";
 import { useUIStore } from "../stores/ui";
@@ -255,7 +255,7 @@ export function createCssAPI(): CssAPI {
       currentTheme = theme;
     },
     injectIframeStyle(id: string, css: string) {
-      const doc = getReaderHost()?.getDocument();
+      const doc = getReaderSession()?.getDocument();
       if (!doc) return;
       const styleId = `plugin-${id}`;
       let style = doc.getElementById(styleId);
@@ -267,7 +267,7 @@ export function createCssAPI(): CssAPI {
       style.textContent = css;
     },
     removeIframeStyle(id: string) {
-      const doc = getReaderHost()?.getDocument();
+      const doc = getReaderSession()?.getDocument();
       if (!doc) return;
       const style = doc.getElementById(`plugin-${id}`);
       if (style) style.remove();
@@ -294,7 +294,7 @@ export function createPluginContext(id: string, bootstrap: PluginBootstrap): Plu
     events: pluginEvents,
     capabilities: createCapabilitySlots(),
     onCleanup(_fn: () => void | Promise<void>) {},
-    readerHost: () => getReaderHost(),
+    readerSession: () => getReaderSession(),
     registerContentTransformer,
     navigate: routerNavigate,
     server: createServerClient(),
@@ -460,7 +460,7 @@ export function createTrackedContext(id: string, bootstrap: PluginBootstrap): Tr
     onCleanup(fn: () => void | Promise<void>) {
       cleanupFns.push(fn);
     },
-    readerHost: () => getReaderHost(),
+    readerSession: () => getReaderSession(),
     registerContentTransformer(t: ContentTransformer) {
       registerContentTransformer(t);
       trackedTransformers.push(t);

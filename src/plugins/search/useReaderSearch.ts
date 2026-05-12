@@ -1,13 +1,14 @@
 import { ref } from "vue";
 import { searchInBook } from "./engine";
 import type { SearchResult } from "../../core/types";
-import type { ReaderHost } from "../../core/reader-host";
-import { generateCfiFromCharOffset, resolveCfiRange } from "../../utils/epub-cfi";
+import type { ReaderSession } from "../../core/reader-host";
+import { generateCfiFromCharOffset, resolveCfi } from "../../utils/epub-cfi";
 import { useDocumentMarker } from "../../composables/useDocumentMarker";
+import * as booksStore from "../../storage/books";
 
 const SEARCH_MARKER_ID = "search-temp";
 
-export function useReaderSearch(readerHost: () => ReaderHost | null) {
+export function useReaderSearch(getSession: () => ReaderSession | null) {
   const searchQuery = ref("");
   const searchResults = ref<SearchResult[]>([]);
   const hasHighlights = ref(false);
@@ -16,7 +17,7 @@ export function useReaderSearch(readerHost: () => ReaderHost | null) {
 
   function getMarker() {
     if (!marker) {
-      marker = useDocumentMarker(() => readerHost()?.getDocument() ?? null);
+      marker = useDocumentMarker(() => getSession()?.getDocument() ?? null);
     }
     return marker;
   }
@@ -25,33 +26,29 @@ export function useReaderSearch(readerHost: () => ReaderHost | null) {
     _doc: Document,
     container: Element,
     position: number,
-    textLength: number,
+    _textLength: number,
     spineIndex: number,
   ) {
-    const m = getMarker();
-    m.remove(SEARCH_MARKER_ID);
-
-    const startCfi = generateCfiFromCharOffset(spineIndex, container, position);
-    const endCfi = generateCfiFromCharOffset(spineIndex, container, position + textLength);
-    if (!startCfi || !endCfi) return;
-
-    const range = resolveCfiRange(startCfi, endCfi, container);
-    if (!range || range.collapsed) return;
-
-    m.add({
-      id: SEARCH_MARKER_ID,
-      range,
-      style: {
-        backgroundColor: "rgba(251, 191, 36, 0.45)",
-        borderRadius: "2px",
-        transition: "background-color 1.5s ease",
-      },
-    });
+    const tempContainer = document.createElement("div");
+    tempContainer.innerHTML = container.innerHTML;
+    const cfi = generateCfiFromCharOffset(spineIndex, tempContainer, position);
+    const target = resolveCfi(cfi, container as HTMLElement);
+    if (target) {
+      const range = _doc.createRange();
+      range.setStart(target.node, target.offset);
+      range.collapse(true);
+      getMarker().add({ id: SEARCH_MARKER_ID, range, className: "search-match" });
+    }
   }
 
-  // ── Search ──
-
   const doSearch = async () => {
+    const session = getSession();
+    if (!session) return;
+
+    const state = session.getState();
+    const bookId = state.bookId;
+    if (!bookId) return;
+
     if (!searchQuery.value.trim()) {
       searchResults.value = [];
       hasHighlights.value = false;
@@ -61,14 +58,9 @@ export function useReaderSearch(readerHost: () => ReaderHost | null) {
     getMarker().remove(SEARCH_MARKER_ID);
     await clearHighlights();
 
-    const host = readerHost();
-    const bookId = host?.getCurrentBookId();
-    const chapters = host?.getChapters() ?? [];
-    if (!bookId) return;
-
-    searchResults.value = await searchInBook(bookId, searchQuery.value, chapters, {
-      getChapterContent: (_: string, chapterId: string) =>
-        host?.getChapterContent(chapterId) ?? Promise.resolve(undefined),
+    searchResults.value = await searchInBook(bookId, searchQuery.value, state.chapters, {
+      getChapterContent: (_bookId: string, chapterId: string) =>
+        booksStore.getChapterContent(bookId, chapterId),
     });
   };
 
@@ -93,13 +85,14 @@ export function useReaderSearch(readerHost: () => ReaderHost | null) {
 
   // ── Result navigation ──
 
-  function findPageFromMark(host: ReaderHost, mark: Element): number {
-    const doc = host.getDocument();
+  function findPageFromMark(session: ReaderSession, mark: Element): number {
+    const doc = session.getDocument();
     if (!doc) return 0;
     const bodyRect = doc.body.getBoundingClientRect();
     const markRect = mark.getBoundingClientRect();
     const offset = markRect.left - bodyRect.left;
-    const total = host.getTotalPages();
+    const state = session.getState();
+    const total = state.page.total;
     const bodyContentWidth = doc.body.scrollWidth;
     const step = total > 0 ? bodyContentWidth / total : 0;
     return step > 0 ? Math.max(0, Math.min(total - 1, Math.floor(offset / step))) : 0;
@@ -110,22 +103,24 @@ export function useReaderSearch(readerHost: () => ReaderHost | null) {
   }
 
   async function navigateToResult(result: SearchResult) {
-    const host = readerHost();
-    if (!host || !result) return;
+    const session = getSession();
+    if (!session || !result) return;
 
-    const targetChapter = host.getChapters().find((c) => c.id === result.chapterId);
+    const state = session.getState();
+    const targetChapter = state.chapters.find((c) => c.id === result.chapterId);
     if (!targetChapter) return;
 
-    const sameChapter = targetChapter.id === host.getCurrentChapter()?.id;
+    const currentChapter = state.chapters[state.currentChapterIndex];
+    const sameChapter = targetChapter.id === currentChapter?.id;
 
     if (!sameChapter) {
-      await host.navigateToChapter(targetChapter.id, 0);
+      session.dispatch({ type: "GO_TO_CHAPTER", chapterId: targetChapter.id, targetPage: 0 });
     }
 
     // Wait for content to be ready
     await new Promise<void>((resolve) => {
       const check = () => {
-        const doc = host.getDocument();
+        const doc = session.getDocument();
         if (doc?.body) {
           resolve();
         } else {
@@ -135,10 +130,11 @@ export function useReaderSearch(readerHost: () => ReaderHost | null) {
       check();
     });
 
-    const doc = host.getDocument();
+    const doc = session.getDocument();
     if (!doc?.body) return;
 
-    const container = host.isPaginationMode.value
+    const isPagination = session.getState().mode === "pagination";
+    const container = isPagination
       ? doc.body
       : (doc.querySelector(`[data-chapter-id="${targetChapter.id}"]`) as HTMLElement | null) ||
         doc.body;
@@ -148,18 +144,15 @@ export function useReaderSearch(readerHost: () => ReaderHost | null) {
     await new Promise((r) => setTimeout(r, 50));
     const mark = getMarker().getElement(SEARCH_MARKER_ID);
     if (mark) {
-      if (host.isPaginationMode.value) {
-        const page = findPageFromMark(host, mark);
-        host.goToPage(page);
-        host.pushToHistory(targetChapter.id, page);
+      if (isPagination) {
+        const page = findPageFromMark(session, mark);
+        session.dispatch({ type: "GO_TO_PAGE", page });
       } else {
         paginateToElement(mark);
-        host.pushToHistory(targetChapter.id, 0);
       }
     }
 
     hasHighlights.value = true;
-    host.closeModal();
   }
 
   const reset = () => {

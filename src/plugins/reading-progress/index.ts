@@ -25,15 +25,15 @@ export const readingProgressPlugin: Plugin = {
     const unsubs: (() => void)[] = [];
 
     async function save(bookId: string) {
-      const h = ctx.readerHost();
+      const h = ctx.readerSession();
       if (!h) return;
-      const chapter = h.getCurrentChapter();
+      const s = h.getState();
+      const chapter = s.chapters[s.currentChapterIndex];
       if (!chapter) return;
-      const chapters = h.getChapters();
-      const page = h.getCurrentPage();
-      const total = h.getTotalPages();
-      const chapterIndex = chapters.findIndex((c) => c.id === chapter.id);
-      const chapterPortion = 100 / Math.max(1, chapters.length);
+      const page = s.page.current;
+      const total = s.page.total;
+      const chapterIndex = s.chapters.findIndex((c) => c.id === chapter.id);
+      const chapterPortion = 100 / Math.max(1, s.chapters.length);
       const chapterProgress = total > 1 ? Math.round(((page + 1) / total) * 100) : 0;
       const readingProgress = Math.round(
         chapterIndex * chapterPortion + (chapterProgress / 100) * chapterPortion,
@@ -50,9 +50,9 @@ export const readingProgressPlugin: Plugin = {
     async function restore(bookId: string) {
       const data = await ctx.storage.get<ProgressData>(progressKey(bookId));
       if (!data) return;
-      const h = ctx.readerHost();
+      const h = ctx.readerSession();
       if (!h) return;
-      await h.navigateToChapter(data.chapterId, data.pageIndex);
+      h.dispatch({ type: "GO_TO_CHAPTER", chapterId: data.chapterId, targetPage: data.pageIndex });
     }
 
     ctx.events.on("reader:mounted", async ({ bookId }) => {

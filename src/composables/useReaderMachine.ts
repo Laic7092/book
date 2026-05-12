@@ -1,0 +1,463 @@
+// Bridge composable: wires the pure-TS state machine to Vue reactivity and
+// executes side effects against the "dirty world" (storage, DOM, events).
+
+import { ref, computed, shallowRef, watch, onMounted, onUnmounted, type Ref } from "vue";
+import {
+  createReaderMachine,
+  type ReaderState,
+  type ReaderAction,
+  type ReaderEffect,
+} from "../reader-engine/reader-machine";
+import { processChapterHtml } from "../reader-engine/content-pipeline";
+import { useReaderStore } from "../stores/reader";
+import { useUIStore } from "../stores/ui";
+import { useNavigationStack } from "./useNavigationStack";
+import {
+  getOverlayComponents,
+  getHeaderActions,
+  pluginStateVersion,
+} from "../plugins/manager/registry";
+import { pluginEvents } from "../plugins/context";
+import { resolveChapterResources } from "../reader-engine/resource-resolver";
+import { injectResources } from "../reader-engine/iframe-resources";
+import {
+  registerReaderSession,
+  unregisterReaderSession,
+  type ReaderSession,
+} from "../core/reader-host";
+import { TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../config/constants";
+import * as booksStore from "../storage/books";
+
+export interface ReaderContentAPI {
+  getDocument?(): Document | null;
+  getArticle?(): HTMLElement | null;
+  paginateToChapter?(chapterId: string): void;
+  syncResources?(elements: HTMLElement[]): void;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Machine
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type { ReaderState, ReaderAction, ReaderEffect };
+
+export function useReaderMachine(
+  bookId: Ref<string>,
+  readerContentRef: Ref<ReaderContentAPI | null>,
+) {
+  const readerStore = useReaderStore();
+  const uiStore = useUIStore();
+  const navStack = useNavigationStack();
+
+  // ── Create machine + reactive state ──
+  const machine = createReaderMachine();
+  const state = shallowRef<ReaderState>(machine.getState());
+  const unsubMachine = machine.subscribe((s) => {
+    state.value = s;
+  });
+
+  // ── Per-render ephemeral state ──
+  const pageMargin = ref(24);
+  const isRestoring = ref(false);
+  let gestureCleanup: (() => void) | null = null;
+
+  // Cached resource elements from last FETCH_CHAPTER resolution (used by RENDER_HTML effect)
+  let lastResolvedResources: HTMLElement[] = [];
+
+  // ── Plugin UI computeds ──
+  const overlayComponents = computed(() => {
+    void pluginStateVersion.value;
+    return getOverlayComponents();
+  });
+  const headerActions = computed(() => {
+    void pluginStateVersion.value;
+    return getHeaderActions();
+  });
+
+  // ── Derived computeds from machine state ──
+  const readingMode = computed<"vertical" | "pagination">(() =>
+    state.value.mode === "scroll" ? "vertical" : "pagination",
+  );
+  const isPaginationMode = computed(() => state.value.mode === "pagination");
+  const currentChapterIndex = computed(() => state.value.currentChapterIndex);
+  const currentChapterId = computed(
+    () => state.value.chapters[state.value.currentChapterIndex]?.id ?? null,
+  );
+  const chapterProgress = computed(() => state.value.chapterProgress);
+  const readingProgress = computed(() => state.value.bookProgress);
+  const totalBookProgress = computed(() => state.value.bookProgress);
+  const currentPage = computed(() => state.value.page.current);
+  const totalPages = computed(() => state.value.page.total);
+  const isTransitioning = computed(() => state.value.status === "loading-chapter");
+
+  const chapterLoading = computed(() => {
+    if (isRestoring.value) return true;
+    if (isTransitioning.value) return true;
+    return false;
+  });
+
+  // ── Effect runner ──
+  function getIframeDoc(): Document | null {
+    return readerContentRef.value?.getDocument?.() ?? null;
+  }
+
+  async function runEffect(effect: ReaderEffect): Promise<void> {
+    switch (effect.type) {
+      case "FETCH_CHAPTER": {
+        const rawHtml = await booksStore.getChapterContent(effect.bookId, effect.chapterId);
+        if (rawHtml === undefined) {
+          dispatch({
+            type: "CHAPTER_FAILED",
+            chapterId: effect.chapterId,
+            error: "Content not found",
+          });
+          return;
+        }
+
+        // Resolve EPUB resources (mutates currentUrls in-place)
+        const currentUrls = new Map(state.value.resourceUrls);
+        const parser = readerStore.currentParser;
+        let html = rawHtml;
+        let resources: HTMLElement[] = [];
+
+        if (parser) {
+          const resolved = await resolveChapterResources(
+            rawHtml,
+            effect.bookId,
+            parser,
+            currentUrls,
+          );
+          html = resolved.html;
+          resources = resolved.resources;
+        }
+
+        // Content pipeline (plugin transformers)
+        try {
+          html = await processChapterHtml(html, effect.bookId, effect.chapterId, currentUrls);
+        } catch {
+          // Use un-transformed content on error
+        }
+
+        lastResolvedResources = resources;
+        dispatch({
+          type: "CHAPTER_LOADED",
+          chapterId: effect.chapterId,
+          html,
+          resourceUrls: currentUrls,
+        });
+        break;
+      }
+
+      case "FETCH_CHAPTERS": {
+        // Background prefetch — just load into storage cache, don't process pipeline
+        effect.chapterIds.forEach((id) => {
+          booksStore.getChapterContent(effect.bookId, id).catch(() => {});
+        });
+        break;
+      }
+
+      case "RENDER_HTML": {
+        const doc = getIframeDoc();
+        if (!doc?.body) return;
+        doc.body.innerHTML = effect.html;
+
+        // Sync resolved resources to iframe head
+        if (lastResolvedResources.length > 0) {
+          injectResources(
+            doc,
+            lastResolvedResources,
+            new Map(),
+            "resource-style",
+            "data-resource-dynamic",
+          );
+        }
+        break;
+      }
+
+      case "SET_PAGE_CSS": {
+        const doc = getIframeDoc();
+        if (!doc?.documentElement) return;
+        doc.documentElement.style.setProperty("--current-page", String(effect.page));
+        break;
+      }
+
+      case "SET_MODE_CSS": {
+        const doc = getIframeDoc();
+        if (!doc?.documentElement) return;
+        doc.documentElement.dataset.mode = effect.mode;
+        break;
+      }
+
+      case "SET_PAGE_MARGIN_CSS": {
+        const doc = getIframeDoc();
+        if (!doc?.documentElement) return;
+        doc.documentElement.style.setProperty("--page-margin", `${effect.margin}px`);
+        break;
+      }
+
+      case "EMIT": {
+        void pluginEvents.emit(effect.event as any, effect.payload as any);
+        break;
+      }
+
+      case "PUSH_HISTORY": {
+        navStack.push(effect.entry);
+        break;
+      }
+
+      case "SCROLL_INTO_VIEW": {
+        const doc = getIframeDoc();
+        if (!doc) return;
+        const el = doc.querySelector<HTMLElement>(`[data-chapter-id="${effect.chapterId}"]`);
+        if (el) el.scrollIntoView({ behavior: "instant", block: "start" });
+        break;
+      }
+
+      case "NOOP":
+        break;
+    }
+  }
+
+  function dispatch(action: ReaderAction): void {
+    const effects = machine.dispatch(action);
+    effects.forEach((e) => {
+      void runEffect(e);
+    });
+  }
+
+  // ── Actions (called by ReaderView template) ──
+  function handleSelectChapter(chapterId: string, targetPage: number = 0) {
+    dispatch({ type: "GO_TO_CHAPTER", chapterId, targetPage });
+  }
+
+  function nextPage() {
+    dispatch({ type: "NEXT_PAGE" });
+  }
+
+  function prevPage() {
+    dispatch({ type: "PREV_PAGE" });
+  }
+
+  function handleHistoryBack() {
+    const entry = navStack.back();
+    if (!entry) return;
+    if (entry.chapterId === currentChapterId.value) {
+      dispatch({ type: "GO_TO_PAGE", page: entry.page });
+    } else {
+      dispatch({ type: "GO_TO_CHAPTER", chapterId: entry.chapterId, targetPage: entry.page });
+    }
+  }
+
+  function handleHistoryForward() {
+    const entry = navStack.forward();
+    if (!entry) return;
+    if (entry.chapterId === currentChapterId.value) {
+      dispatch({ type: "GO_TO_PAGE", page: entry.page });
+    } else {
+      dispatch({ type: "GO_TO_CHAPTER", chapterId: entry.chapterId, targetPage: entry.page });
+    }
+  }
+
+  // ── Iframe ready ──
+  function shouldIgnoreTarget(target: EventTarget | null): boolean {
+    if (!target || !(target instanceof Element)) return false;
+    return !!(
+      target.closest("button") ||
+      target.closest("input") ||
+      target.closest("textarea") ||
+      target.closest("select") ||
+      target.closest("a[href]") ||
+      target.closest("[contenteditable]")
+    );
+  }
+
+  function handleIframeReady() {
+    const doc = getIframeDoc();
+    if (!doc) return;
+
+    gestureCleanup?.();
+    gestureCleanup = null;
+
+    // Gesture handler
+    const handleClick = (e: MouseEvent) => {
+      if (shouldIgnoreTarget(e.target)) return;
+      if (uiStore.activeModal) {
+        uiStore.closeModal();
+        return;
+      }
+      if (state.value.mode === "pagination") {
+        const w = window.innerWidth;
+        const x = e.clientX;
+        if (x < w * TAP_ZONE_LEFT) prevPage();
+        else if (x > w * TAP_ZONE_RIGHT) nextPage();
+        else uiStore.toggleControls();
+      } else {
+        uiStore.toggleControls();
+      }
+    };
+    doc.addEventListener("click", handleClick);
+    gestureCleanup = () => doc.removeEventListener("click", handleClick);
+
+    const chId = currentChapterId.value;
+    if (chId && state.value.bookId) {
+      void pluginEvents.emit("content:loaded", { bookId: state.value.bookId, chapterId: chId });
+    }
+  }
+
+  function handleColumnLayout(data: { contentWidth: number; iframeWidth: number }) {
+    dispatch({
+      type: "LAYOUT_MEASURED",
+      contentWidth: data.contentWidth,
+      iframeWidth: data.iframeWidth,
+    });
+  }
+
+  // ── Internal links ──
+  function handleInternalLinkClick(href: string) {
+    if (href.startsWith("http://") || href.startsWith("https://") || href.startsWith("mailto:"))
+      return;
+
+    const hashIndex = href.indexOf("#");
+    const filePath = hashIndex > 0 ? href.substring(0, hashIndex) : href;
+    const anchor = hashIndex >= 0 ? href.substring(hashIndex + 1) : "";
+
+    const chapters = state.value.chapters;
+    const targetChapter = chapters.find(
+      (c) =>
+        c.href &&
+        (c.href === filePath || c.href.endsWith(filePath) || c.href.endsWith("/" + filePath)),
+    );
+
+    if (!filePath) {
+      // Anchor within current chapter
+      const doc = getIframeDoc();
+      if (doc && anchor) {
+        const el =
+          doc.querySelector(`[id="${CSS.escape(anchor)}"]`) ||
+          doc.querySelector(`[name="${CSS.escape(anchor)}"]`);
+        if (el) {
+          const bodyRect = doc.body!.getBoundingClientRect();
+          const elRect = el.getBoundingClientRect();
+          const offset = elRect.left - bodyRect.left;
+          const step = state.value.page.iframeWidth || doc.documentElement.clientWidth;
+          if (step > 0) {
+            const page = Math.floor(offset / step);
+            dispatch({ type: "GO_TO_PAGE", page });
+          }
+        }
+      }
+      return;
+    }
+
+    if (!targetChapter) return;
+
+    if (targetChapter.id === currentChapterId.value) {
+      // Same chapter — scroll to anchor
+      const doc = getIframeDoc();
+      if (doc && anchor) {
+        const el =
+          doc.querySelector(`[id="${CSS.escape(anchor)}"]`) ||
+          doc.querySelector(`[name="${CSS.escape(anchor)}"]`);
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      return;
+    }
+
+    // Different chapter
+    dispatch({ type: "GO_TO_CHAPTER", chapterId: targetChapter.id });
+  }
+
+  // ── Lifecycle ──
+  function initMachine() {
+    const chapters = readerStore.chapters;
+    const initialChapterId = readerStore.currentChapter?.id;
+    const initialIdx = initialChapterId ? chapters.findIndex((c) => c.id === initialChapterId) : 0;
+    dispatch({
+      type: "INIT",
+      bookId: bookId.value,
+      chapters,
+      chapterIndex: Math.max(0, initialIdx),
+      mode: readingMode.value === "vertical" ? "scroll" : "pagination",
+    });
+  }
+
+  onMounted(() => {
+    registerReaderSession(session);
+    uiStore.showControls = true;
+    isRestoring.value = true;
+    initMachine();
+
+    // Wait for initial chapter to load before emitting reader:mounted.
+    // Plugins (reading-progress, stats, etc.) depend on content being ready.
+    const stopWatch = watch(
+      () => state.value.status,
+      (status) => {
+        if (status === "ready") {
+          stopWatch();
+          isRestoring.value = false;
+          void pluginEvents.emit("reader:mounted", { bookId: bookId.value });
+        }
+      },
+    );
+  });
+
+  onUnmounted(() => {
+    dispatch({ type: "CLEANUP" });
+    unregisterReaderSession();
+    gestureCleanup?.();
+    gestureCleanup = null;
+    unsubMachine();
+    navStack.reset();
+  });
+
+  // ── ReaderSession (registered globally for plugins) ──
+  const session: ReaderSession = {
+    getDocument: getIframeDoc,
+    getState: () => state.value,
+    dispatch: (action: ReaderAction) => dispatch(action),
+    setPageMargin: (margin: number) => {
+      pageMargin.value = margin;
+      void runEffect({ type: "SET_PAGE_MARGIN_CSS", margin });
+    },
+  };
+
+  return {
+    // Machine access (for plugins transitioning to direct dispatch)
+    machine,
+    dispatch,
+    state,
+
+    // Template bindings
+    readingMode,
+    pageMargin,
+    isTransitioning,
+    isRestoring,
+    currentChapterIndex,
+    isPaginationMode,
+    chapterProgress,
+    readingProgress,
+    totalBookProgress,
+    chapterLoading,
+    overlayComponents,
+    headerActions,
+    handleSelectChapter,
+    nextPage,
+    prevPage,
+    handleHistoryBack,
+    handleHistoryForward,
+    navStack,
+    handleInternalLinkClick,
+    handleColumnLayout,
+    handleIframeReady,
+    currentPage,
+    totalPages,
+    // For backward compat
+    reloadForPagination: () => {
+      const chId = currentChapterId.value;
+      if (chId) dispatch({ type: "GO_TO_CHAPTER", chapterId: chId });
+    },
+    navigateToCfiLocation: (_cfi: string, _chapterId: string) => {
+      // CFI navigation will be re-implemented on top of the machine
+    },
+  };
+}

@@ -2,7 +2,7 @@ import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
 import { createEntityStore, type EntityStore } from "../store-factory";
 import type { Bookmark } from "../../core/types";
-import type { ReaderHost } from "../../core/reader-host";
+import type { ReaderSession } from "../../core/reader-host";
 import {
   LEGACY_FALLBACK_CFI,
   generateCfiFromElement,
@@ -15,7 +15,7 @@ export const loadOn = "reader" as const;
 // ── Module-level state (DI via closure, no global setter) ──
 
 let _store: EntityStore<Bookmark> | null = null;
-let _readerHost: (() => ReaderHost | null) | null = null;
+let _session: (() => ReaderSession | null) | null = null;
 
 /** Access the reactive bookmark store from Vue components. */
 export function useBookmarkStore(): EntityStore<Bookmark> {
@@ -24,8 +24,8 @@ export function useBookmarkStore(): EntityStore<Bookmark> {
 }
 
 /** Access the reader host from Vue components. */
-export function getBookmarkHost(): ReaderHost | null {
-  return _readerHost?.() ?? null;
+export function getBookmarkSession(): ReaderSession | null {
+  return _session?.() ?? null;
 }
 
 // ── Legacy migration helpers ──
@@ -72,27 +72,28 @@ function createBookmark(
 
 /** Compute CFI from current reading position and persist a bookmark. */
 export async function addBookmarkFromHost(): Promise<void> {
-  const host = _readerHost?.();
-  if (!host || !_store) return;
+  const session = _session?.();
+  if (!session || !_store) return;
 
-  const chapter = host.getCurrentChapter();
+  const s = session.getState();
+  const chapter = s.chapters[s.currentChapterIndex];
   if (!chapter) return;
 
-  const article = host.getDocument()?.body;
+  const article = session.getDocument()?.body;
   if (!article) return;
 
-  const bookId = host.getCurrentBookId();
+  const bookId = s.bookId;
   if (!bookId) return;
 
   let cfi: string;
   let preview: string;
 
-  if (host.isPaginationMode.value) {
-    const fullHtml = host.getCurrentChapterRawHtml();
+  if (s.mode === "pagination") {
+    const fullHtml = s.contentCache.get(chapter.id);
     if (!fullHtml) return;
 
-    const totalPages = host.getTotalPages();
-    const currentPage = host.getCurrentPage();
+    const totalPages = s.page.total;
+    const currentPage = s.page.current;
     const fullText = fullHtml.replace(/<[^>]*>/g, "");
     const charOffset = Math.floor(((currentPage + 0.5) / totalPages) * fullText.length);
 
@@ -171,7 +172,7 @@ export const bookmarksPlugin: Plugin = {
   version: "1.0.0",
   setup(ctx) {
     _store = createEntityStore<Bookmark>(ctx.storage, "bookmark", (b) => b.id);
-    _readerHost = ctx.readerHost;
+    _session = ctx.readerSession;
 
     ctx.events.on("book:opened", ({ bookId }) => {
       void loadBookmarks(bookId);
@@ -189,6 +190,6 @@ export const bookmarksPlugin: Plugin = {
   },
   teardown() {
     _store = null;
-    _readerHost = null;
+    _session = null;
   },
 };

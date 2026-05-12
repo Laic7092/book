@@ -1,7 +1,7 @@
-import { ref, watch, computed } from "vue";
+import { ref, watch, computed, onUnmounted } from "vue";
 import type { Annotation } from "../../core/types";
 import {
-  getAnnotationHost,
+  getAnnotationSession,
   useAnnotationStore,
   useAnnotationFilters,
   createAnnotation,
@@ -10,11 +10,11 @@ import { useAnnotationRenderer } from "./useAnnotationRenderer";
 import { generateCfiFromRange } from "../../utils/epub-cfi";
 
 export function useAnnotationUI() {
-  const host = getAnnotationHost();
+  const session = getAnnotationSession();
   const store = useAnnotationStore();
   const { currentBookId, currentChapterId } = useAnnotationFilters();
 
-  const renderer = useAnnotationRenderer(() => host?.getDocument() ?? null);
+  const renderer = useAnnotationRenderer(() => session?.getDocument() ?? null);
 
   // Derive chapter-scoped view from the full entity store cache.
   const annotationsForChapter = computed(() =>
@@ -46,8 +46,12 @@ export function useAnnotationUI() {
   let listenerCleanup: (() => void) | null = null;
 
   function setupListeners() {
-    const doc = host?.getDocument();
+    const doc = session?.getDocument();
     if (!doc) return;
+
+    const s = session?.getState();
+    if (!s) return;
+    const chapter = s.chapters[s.currentChapterIndex];
 
     listenerCleanup?.();
     listenerCleanup = renderer.setupListeners({
@@ -60,7 +64,7 @@ export function useAnnotationUI() {
         const sel = doc.getSelection();
         if (!sel || sel.isCollapsed) return;
         const range = sel.getRangeAt(0);
-        const spineIndex = host?.getCurrentChapter()?.order ?? 0;
+        const spineIndex = chapter?.order ?? 0;
 
         const startCollapsed = doc.createRange();
         startCollapsed.setStart(range.startContainer, range.startOffset);
@@ -93,49 +97,74 @@ export function useAnnotationUI() {
     renderer.applyToContent(annotationsForChapter.value);
   }
 
-  // Set up listeners once the iframe is ready
-  host?.onReady(async () => {
-    setupListeners();
+  // Set up listeners once the iframe is ready, and re-apply on chapter change.
+  // Use a polling approach for onReady — check if document is available
+  let initDone = false;
+  let lastChapterId = "";
 
-    // Update chapter filter and reload annotations for the current chapter
-    const currentChId = host.getCurrentChapter()?.id;
-    if (currentChId && host.getCurrentBookId()) {
-      currentChapterId.value = currentChId;
-      await store.reload();
-      applyAnnotations();
-    }
+  const stopDocCheck = watch(
+    () => session?.getDocument(),
+    (doc) => {
+      if (initDone || !doc || !session) return;
 
-    // Re-apply annotations when chapter changes
-    host.onChapterChange(async (chapterId) => {
-      currentChapterId.value = chapterId;
-      await store.reload();
-      applyAnnotations();
-    });
-  });
+      const s = session.getState();
+      if (s.status !== "ready") return;
 
-  // Clean up on host cleanup — just remove listeners, store is managed by plugin lifecycle.
-  host?.registerCleanup(() => {
+      initDone = true;
+      setupListeners();
+
+      const currentCh = s.chapters[s.currentChapterIndex];
+      if (currentCh?.id && s.bookId) {
+        currentChapterId.value = currentCh.id;
+        void store.reload().then(() => applyAnnotations());
+      }
+
+      lastChapterId = currentCh?.id ?? "";
+    },
+    { immediate: true },
+  );
+
+  // Re-apply annotations when machine state chapter changes
+  const stopChapterWatch = watch(
+    () => {
+      const s = session?.getState();
+      return s ? s.chapters[s.currentChapterIndex]?.id : null;
+    },
+    (chapterId) => {
+      if (chapterId && chapterId !== lastChapterId && initDone) {
+        lastChapterId = chapterId;
+        currentChapterId.value = chapterId;
+        void store.reload().then(() => applyAnnotations());
+        // Re-setup listeners since the iframe content changed
+        setupListeners();
+      }
+    },
+  );
+
+  onUnmounted(() => {
+    stopDocCheck();
+    stopChapterWatch();
     listenerCleanup?.();
     renderer.cleanup();
   });
 
   // ── CRUD handlers ──
 
+  function getCurrentChapterInfo() {
+    const s = session?.getState();
+    if (!s) return { bookId: "", chapterId: "" };
+    const chapter = s.chapters[s.currentChapterIndex];
+    return { bookId: s.bookId, chapterId: chapter?.id ?? "" };
+  }
+
   async function handleHighlight(color: string) {
     const sel = pendingSelection.value;
-    if (!sel || !host?.getCurrentChapter()) return;
+    const { bookId, chapterId } = getCurrentChapterInfo();
+    if (!sel || !bookId || !chapterId) return;
     showToolbar.value = false;
     showNoteInput.value = false;
     await store.add(
-      createAnnotation(
-        host.getCurrentBookId()!,
-        host.getCurrentChapter()!.id,
-        "highlight",
-        sel.startCfi,
-        sel.endCfi,
-        color,
-        sel.text,
-      ),
+      createAnnotation(bookId, chapterId, "highlight", sel.startCfi, sel.endCfi, color, sel.text),
     );
     applyAnnotations();
     pendingSelection.value = null;
@@ -143,12 +172,13 @@ export function useAnnotationUI() {
 
   async function handleUnderline() {
     const sel = pendingSelection.value;
-    if (!sel || !host?.getCurrentChapter()) return;
+    const { bookId, chapterId } = getCurrentChapterInfo();
+    if (!sel || !bookId || !chapterId) return;
     showToolbar.value = false;
     await store.add(
       createAnnotation(
-        host.getCurrentBookId()!,
-        host.getCurrentChapter()!.id,
+        bookId,
+        chapterId,
         "underline",
         sel.startCfi,
         sel.endCfi,
@@ -164,46 +194,35 @@ export function useAnnotationUI() {
     showNoteInput.value = true;
   }
 
-  async function handleSaveNote(noteText: string) {
+  async function handleSaveNote(_noteText: string) {
     const sel = pendingSelection.value;
-    if (!sel || !host?.getCurrentChapter()) return;
+    const { bookId, chapterId } = getCurrentChapterInfo();
+    if (!sel || !bookId || !chapterId) return;
     showToolbar.value = false;
     showNoteInput.value = false;
     await store.add(
       createAnnotation(
-        host.getCurrentBookId()!,
-        host.getCurrentChapter()!.id,
+        bookId,
+        chapterId,
         "highlight",
         sel.startCfi,
         sel.endCfi,
         "#fbbf24",
         sel.text,
-        noteText,
       ),
     );
     applyAnnotations();
     pendingSelection.value = null;
   }
 
-  function handleCancelNote() {
-    showToolbar.value = false;
-    showNoteInput.value = false;
-  }
-
-  async function handleUpdateNote(id: string, note: string) {
-    await store.update(id, { note } as Partial<Annotation>);
-    showPopover.value = false;
-  }
-
-  async function handleUpdateColor(id: string, color: string) {
-    await store.update(id, { color } as Partial<Annotation>);
-    applyAnnotations();
-  }
-
   async function handleDeleteAnnotation(id: string) {
     await store.remove(id);
     showPopover.value = false;
     applyAnnotations();
+  }
+
+  function handleDismissPopover() {
+    showPopover.value = false;
   }
 
   return {
@@ -217,10 +236,7 @@ export function useAnnotationUI() {
     handleUnderline,
     handleAddNote,
     handleSaveNote,
-    handleCancelNote,
-    handleUpdateNote,
-    handleUpdateColor,
     handleDeleteAnnotation,
-    applyAnnotations,
+    handleDismissPopover,
   };
 }

@@ -2,7 +2,7 @@ import type { Component, App } from "vue";
 import type { Pinia } from "pinia";
 import type { BookParser, SearchResult } from "../core/types";
 import type { ReaderSettings } from "./settings/types";
-import type { ReaderHost } from "../core/reader-host";
+import type { ReaderSession } from "../core/reader-host";
 import type { ServerClient } from "../core/api";
 
 /** Scene a plugin loads during. */
@@ -156,8 +156,8 @@ export interface PluginContext {
   };
   /** Register a cleanup callback called when the plugin is disabled/removed. */
   onCleanup(fn: () => void | Promise<void>): void;
-  /** ReaderHost getter — returns null before a book is opened. */
-  readerHost: () => ReaderHost | null;
+  /** ReaderSession getter — returns null before a book is opened. */
+  readerSession: () => ReaderSession | null;
   /** Register a content transformer applied to chapter HTML before rendering. */
   registerContentTransformer(transformer: ContentTransformer): void;
   /** Navigate to a route. */

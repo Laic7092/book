@@ -1,59 +1,34 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
+// Thin iframe host component. Content rendering, mode switching, page
+// transitions, and resource injection are all driven by the state machine
+// bridge via effects. This component only:
+//   1. Initializes the iframe skeleton
+//   2. Measures CSS columns for pagination layout
+//   3. Exposes getDocument() so the bridge can manipulate the iframe DOM
+
+import { ref, onMounted, onUnmounted } from "vue";
 import { useIframeRenderer } from "../../composables/useIframeRenderer";
 
 const props = defineProps<{
-  content: string;
   isPaginationMode: boolean;
-  currentPage?: number;
-  chapterLoading?: boolean;
-  loadedChapters?: Array<{ chapterId: string; title: string; content: string }>;
-  epubResources?: HTMLElement[];
   pageMargin?: number;
+  chapterLoading?: boolean;
   onLinkClick?: (href: string) => void;
 }>();
 
 const emit = defineEmits<{
   (e: "columnLayout", data: { contentWidth: number; iframeWidth: number }): void;
-  (e: "chaptersChanged"): void;
   (e: "iframeReady"): void;
 }>();
 
 const iframeRef = ref<HTMLIFrameElement | null>(null);
 
-const rendererOptions = computed<{ initialMode: "scroll" | "paginated" }>(() => ({
-  initialMode: props.isPaginationMode ? "paginated" : "scroll",
-}));
-
-const {
-  isReady,
-  initIframe,
-  updateContent,
-  syncResources,
-  clearSyncedResources,
-  getArticle,
-  getDocument,
-  paginateToChapter,
-  restorePosition,
-  setMode,
-  setPage,
-  setPageMargin,
-  cleanup,
-} = useIframeRenderer(
+const { isReady, initIframe, getDocument, getArticle, cleanup } = useIframeRenderer(
   iframeRef,
-  rendererOptions,
-  props.onLinkClick ? (msg) => props.onLinkClick!(msg.href) : undefined,
+  props.onLinkClick,
 );
 
-// ── Content source selection ──
-// Pagination mode renders single-chapter HTML from `content` prop.
-// Scroll mode renders multi-chapter concatenated HTML from `loadedChapters` prop.
-// This is explicit: the mode determines which prop is authoritative.
-
-const effectiveContent = computed(() => {
-  if (props.isPaginationMode) return props.content;
-  return props.loadedChapters?.map((ch) => ch.content).join("") ?? "";
-});
+// ── Column measurement (pagination mode only) ──
 
 let resizeObserver: ResizeObserver | null = null;
 let columnMeasureTimer: ReturnType<typeof setTimeout> | null = null;
@@ -76,73 +51,6 @@ function measureColumns() {
   }, 150);
 }
 
-function handleLoad() {
-  const doc = getDocument();
-  if (!doc) return;
-
-  const mode = props.isPaginationMode ? "paginated" : "scroll";
-  setMode(mode);
-  setPageMargin(props.pageMargin ?? 24);
-  if (props.currentPage !== undefined) {
-    setPage(props.currentPage);
-  }
-  measureColumns();
-
-  const html = effectiveContent.value;
-  if (html) updateContent(html);
-
-  doc.querySelectorAll<HTMLElement>("[data-chapter-id]").forEach((el) => {
-    el.style.display = "block";
-  });
-
-  emit("chaptersChanged");
-  emit("iframeReady");
-}
-
-// Single content watch — mode determines the source via effectiveContent
-watch(effectiveContent, (html) => {
-  if (html) {
-    updateContent(html);
-    nextTick(() => {
-      measureColumns();
-      emit("chaptersChanged");
-    });
-  }
-});
-
-watch(
-  () => props.epubResources,
-  (resources) => {
-    if (resources) syncResources(resources);
-  },
-);
-
-watch([() => props.isPaginationMode, isReady], ([mode, ready]) => {
-  if (ready) {
-    setMode(mode ? "paginated" : "scroll");
-    if (mode) nextTick(measureColumns);
-  }
-});
-
-watch(
-  () => props.pageMargin,
-  (margin) => {
-    if (!isReady.value) return;
-    setPageMargin(margin ?? 24);
-    if (props.isPaginationMode) nextTick(measureColumns);
-  },
-);
-
-watch(
-  () => props.currentPage,
-  (page) => {
-    if (!props.isPaginationMode || page === undefined) return;
-    setPage(page);
-  },
-);
-
-let resizeCleanup: (() => void) | null = null;
-
 function setupResizeObserver() {
   if (!iframeRef.value) return;
   const doc = getDocument();
@@ -152,24 +60,24 @@ function setupResizeObserver() {
     if (props.isPaginationMode) measureColumns();
   });
   resizeObserver.observe(doc.body);
+}
 
-  resizeCleanup = () => {
-    resizeObserver?.disconnect();
-    resizeObserver = null;
-  };
+// ── Iframe lifecycle ──
+
+function handleLoad() {
+  if (!getDocument()) return;
+  measureColumns();
+  emit("iframeReady");
 }
 
 onMounted(() => {
-  initIframe();
+  initIframe(props.isPaginationMode ? "paginated" : "scroll");
 
   const doc = getDocument();
   if (doc) {
     handleLoad();
   } else {
-    const iframe = iframeRef.value;
-    if (iframe) {
-      iframe.addEventListener("load", handleLoad, { once: true });
-    }
+    iframeRef.value?.addEventListener("load", handleLoad, { once: true });
   }
 
   setupResizeObserver();
@@ -177,18 +85,11 @@ onMounted(() => {
 
 onUnmounted(() => {
   cleanup();
-  clearSyncedResources();
-  resizeCleanup?.();
+  resizeObserver?.disconnect();
   if (columnMeasureTimer) clearTimeout(columnMeasureTimer);
 });
 
-defineExpose({
-  getDocument,
-  getArticle,
-  paginateToChapter,
-  restorePosition,
-  syncResources,
-});
+defineExpose({ getDocument, getArticle });
 </script>
 
 <template>

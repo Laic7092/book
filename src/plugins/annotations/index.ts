@@ -4,14 +4,14 @@ import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
 import { createEntityStore, type EntityStore } from "../store-factory";
 import type { Annotation } from "../../core/types";
-import type { ReaderHost } from "../../core/reader-host";
+import type { ReaderSession } from "../../core/reader-host";
 
 export const loadOn = "reader" as const;
 
 // ── Module-level state ──
 
 let _store: EntityStore<Annotation> | null = null;
-let _readerHost: (() => ReaderHost | null) | null = null;
+let _readerSession: (() => ReaderSession | null) | null = null;
 const _currentBookId = ref<string | null>(null);
 const _currentChapterId = ref<string | null>(null);
 
@@ -22,8 +22,8 @@ export function useAnnotationStore(): EntityStore<Annotation> {
 }
 
 /** Access the reader host from Vue components. */
-export function getAnnotationHost(): ReaderHost | null {
-  return _readerHost?.() ?? null;
+export function getAnnotationSession(): ReaderSession | null {
+  return _readerSession?.() ?? null;
 }
 
 /** Create a new Annotation object with a unique ID. */
@@ -70,7 +70,7 @@ export const annotationsPlugin: Plugin = {
   version: "1.0.0",
   setup(ctx) {
     _store = createEntityStore<Annotation>(ctx.storage, "annotation", (a) => a.id);
-    _readerHost = ctx.readerHost;
+    _readerSession = ctx.readerSession;
 
     ctx.events.on("book:opened", ({ bookId }) => {
       _currentBookId.value = bookId;
@@ -97,7 +97,7 @@ export const annotationsPlugin: Plugin = {
   },
   teardown() {
     _store = null;
-    _readerHost = null;
+    _readerSession = null;
     _currentBookId.value = null;
     _currentChapterId.value = null;
   },

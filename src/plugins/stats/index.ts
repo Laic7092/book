@@ -11,7 +11,7 @@ export const statsPlugin: Plugin = {
   name: "Reading Statistics",
   version: "1.0.0",
   setup(ctx) {
-    const eng = createStatsEngine(ctx.storage, ctx.readerHost);
+    const eng = createStatsEngine(ctx.storage, ctx.readerSession);
     setStatsEngine(eng);
 
     ctx.events.on("book:opened", ({ bookId }) => eng.startSession(bookId));

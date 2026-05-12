@@ -7,7 +7,7 @@ import {
   FONT_SIZE_PRESETS,
 } from "./options";
 import { getSettingsState } from "./index";
-import { getReaderHost } from "../../core/reader-host";
+import { useUIStore } from "../../stores/ui";
 
 const state = getSettingsState();
 if (!state) throw new Error("SettingsPanel: settings plugin not initialized");
@@ -121,7 +121,7 @@ const emit = defineEmits<{
       </div>
 
       <!-- 自定义排版按钮 -->
-      <button class="typography-btn" @click="getReaderHost()?.openModal('typographySettings')">
+      <button class="typography-btn" @click="useUIStore().openModal('typographySettings')">
         <svg
           width="18"
           height="18"

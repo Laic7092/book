@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { getReaderHost } from "./index";
-const host = getReaderHost();
+import { getProgressBarSession } from "./index";
+const session = getProgressBarSession();
 
-const currentPage = computed(() => host?.getCurrentPage() || 0);
-const totalPages = computed(() => host?.getTotalPages() || 0);
+const currentPage = computed(() => session?.getState().page.current ?? 0);
+const totalPages = computed(() => session?.getState().page.total ?? 0);
 
 const progress = computed(() => {
   const total = totalPages.value;

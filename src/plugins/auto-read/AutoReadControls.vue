@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from "vue";
-import { getReaderHost } from "./index";
+import { getAutoReadSession } from "./index";
 
 const isPlaying = ref(false);
 const speed = ref(1);
@@ -21,16 +21,28 @@ const interval = computed(() => Math.round(BASE_INTERVAL / speed.value));
 function tick() {
   lastTick = Date.now();
   progress.value = 0;
-  const h = getReaderHost();
-  if (!h) return;
-  h.nextPage().then((moved) => {
-    if (!moved) stop();
+  const s = getAutoReadSession();
+  if (!s) return;
+  const prevPage = s.getState().page.current;
+  s.dispatch({ type: "NEXT_PAGE" });
+  // Stop if we're at the end (state didn't change after dispatch)
+  requestAnimationFrame(() => {
+    const newState = s.getState();
+    if (newState.status === "loading-chapter") return; // still transitioning
+    if (
+      newState.page.current === prevPage &&
+      newState.currentChapterIndex >= newState.chapters.length - 1
+    ) {
+      stop();
+    }
   });
 }
 
 function start() {
-  const h = getReaderHost();
-  if (!h || h.getTotalPages() <= 1) return;
+  const s = getAutoReadSession();
+  if (!s) return;
+  const st = s.getState();
+  if (st.page.total <= 1 && st.currentChapterIndex >= st.chapters.length - 1) return;
   isPlaying.value = true;
   lastTick = Date.now();
   progress.value = 0;

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
-import { getTTSReaderHost } from "./index";
+import { getTTSSession } from "./index";
 
 // ── State ──
 type TTSState = "idle" | "playing" | "paused";
@@ -22,9 +22,9 @@ const SPEED_PERSIST_KEY = "tts_speed";
 // ── Text extraction ──
 
 function getChapterText(): string {
-  const host = getTTSReaderHost();
-  if (!host) return "";
-  const article = host.getDocument()?.body;
+  const session = getTTSSession();
+  if (!session) return "";
+  const article = session.getDocument()?.body;
   if (!article) return "";
   const clone = article.cloneNode(true) as HTMLElement;
   clone.querySelectorAll("script, style, nav, aside, [aria-hidden]").forEach((el) => el.remove());
@@ -96,16 +96,16 @@ function speakSentence(index: number) {
 
 function advanceChapter() {
   stop();
-  const host = getTTSReaderHost();
-  if (!host) return;
-  const chapters = host.getChapters();
-  const current = host.getCurrentChapter();
+  const session = getTTSSession();
+  if (!session) return;
+  const s = session.getState();
+  const chapters = s.chapters;
+  const current = chapters[s.currentChapterIndex];
   if (!current) return;
   const idx = chapters.findIndex((c) => c.id === current.id);
   if (idx < chapters.length - 1) {
-    host.navigateToChapter(chapters[idx + 1].id).then(() => {
-      start();
-    });
+    session.dispatch({ type: "GO_TO_CHAPTER", chapterId: chapters[idx + 1].id });
+    start();
   } else {
     expanded.value = false;
   }
@@ -213,9 +213,18 @@ onMounted(() => {
 
   document.addEventListener("keydown", onKeyDown);
 
-  const host = getTTSReaderHost();
-  if (host) {
-    chapterChangeUnsub = host.onChapterChange(onChapterChange);
+  // Chapter change detection: watch machine state for chapter transitions
+  const session = getTTSSession();
+  if (session) {
+    let lastChapterId = session.getState().chapters[session.getState().currentChapterIndex]?.id;
+    chapterChangeUnsub = (() => {
+      const s = session.getState();
+      const chId = s.chapters[s.currentChapterIndex]?.id;
+      if (chId && chId !== lastChapterId) {
+        lastChapterId = chId;
+        onChapterChange();
+      }
+    }) as unknown as () => void;
   }
 });
 

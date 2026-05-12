@@ -1,61 +1,32 @@
-import type { ComputedRef } from "vue";
-import type { Chapter } from "./types";
+// ReaderSession — the API surface exposed to plugins for interacting with
+// the active reader session. Replaces the old 20-method ReaderHost with
+// three focused primitives:
+//
+//   dispatch(action) — send an action to the state machine
+//   getState()      — read current machine state
+//   getDocument()   — access the iframe document (for DOM plugins)
+//
+// A session is registered when a book is opened and cleared when closed.
 
-/**
- * Host API that ReaderView exposes to plugins.
- */
-export interface ReaderHost {
-  // ── Document access ──
+import type { ReaderAction, ReaderState } from "../reader-engine/reader-machine";
+
+export interface ReaderSession {
+  dispatch(action: ReaderAction): void;
+  getState(): ReaderState;
   getDocument(): Document | null;
-
-  // ── Navigation ──
-  navigateToChapter(chapterId: string, targetPage?: number): Promise<void>;
-  navigateToCfi(cfi: string, chapterId: string): Promise<void>;
-
-  // ── State queries ──
-  getCurrentChapter(): Chapter | null;
-  getChapters(): Chapter[];
-  getCurrentBookId(): string | undefined;
-  isPaginationMode: ComputedRef<boolean>;
-
-  // ── Render mode control ──
-  setReadingMode(mode: "vertical" | "pagination"): void;
   setPageMargin(margin: number): void;
-
-  // ── Actions ──
-  openModal(name: string): void;
-  closeModal(): void;
-
-  // ── Pagination state (for plugins that compute CFI) ──
-  getCurrentPage(): number;
-  getTotalPages(): number;
-  /** Jump to a page within the current chapter (pagination mode only). */
-  goToPage(page: number): void;
-  /** Go to next page, or next chapter if at end of current chapter. Returns true if moved, false if at end of book. */
-  nextPage(): Promise<boolean>;
-  /** Push a position to the navigation history stack. Call after non-linear navigation. */
-  pushToHistory(chapterId: string, page: number): void;
-  getCurrentChapterRawHtml(): string;
-
-  // ── Content pipeline ──
-  getChapterContent(chapterId: string): Promise<string | undefined>;
-
-  // ── Events ──
-  onReady(cb: () => void): () => void;
-  onChapterChange(handler: (chapterId: string) => void): () => void;
-  registerCleanup(fn: () => void): void;
 }
 
-let hostInstance: ReaderHost | null = null;
+let currentSession: ReaderSession | null = null;
 
-export function registerReaderHost(host: ReaderHost): void {
-  hostInstance = host;
+export function registerReaderSession(session: ReaderSession): void {
+  currentSession = session;
 }
 
-export function getReaderHost(): ReaderHost | null {
-  return hostInstance;
+export function unregisterReaderSession(): void {
+  currentSession = null;
 }
 
-export function unregisterReaderHost(): void {
-  hostInstance = null;
+export function getReaderSession(): ReaderSession | null {
+  return currentSession;
 }

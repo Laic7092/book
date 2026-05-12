@@ -1,12 +1,12 @@
 import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
-import type { ReaderHost } from "../../core/reader-host";
+import type { ReaderSession } from "../../core/reader-host";
 import TTSControls from "./TTSControls.vue";
 
-let _readerHost: (() => ReaderHost | null) | null = null;
+let _session: (() => ReaderSession | null) | null = null;
 
-export function getTTSReaderHost(): ReaderHost | null {
-  return _readerHost?.() ?? null;
+export function getTTSSession(): ReaderSession | null {
+  return _session?.() ?? null;
 }
 
 export const ttsPlugin: Plugin = {
@@ -15,10 +15,10 @@ export const ttsPlugin: Plugin = {
   name: "Text to Speech",
   version: "1.0.0",
   setup(ctx) {
-    _readerHost = ctx.readerHost;
+    _session = ctx.readerSession;
     ctx.ui.registerToolbarItem({ id: "tts", order: 20, component: TTSControls });
   },
   teardown() {
-    _readerHost = null;
+    _session = null;
   },
 };

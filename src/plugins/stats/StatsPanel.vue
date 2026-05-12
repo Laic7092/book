@@ -6,12 +6,12 @@ import ModalHeader from "../../components/modals/ModalHeader.vue";
 import { getStatsEngine } from "./engine";
 
 const eng = getStatsEngine();
-const host = eng.getReaderHost();
+const getSession = eng.getSession();
 const stats = ref<BookReadingStats | null>(null);
-const totalChapters = computed(() => host?.getChapters().length ?? 0);
+const totalChapters = computed(() => getSession?.getState().chapters.length ?? 0);
 
 onMounted(async () => {
-  const bookId = host?.getCurrentBookId();
+  const bookId = getSession?.getState().bookId;
   if (bookId) {
     stats.value = await eng.getStats(bookId);
   }
