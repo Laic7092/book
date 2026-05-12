@@ -6,12 +6,11 @@ defineProps<{
   showControls: boolean;
   isPaginationMode: boolean;
   currentPage: number;
-  pagesCount: number;
-  readingProgress: number;
+  totalPages: number;
   bookProgress: number;
   currentChapterTitle: string;
-  canPrev: boolean;
-  canNext: boolean;
+  canGoToPrevChapter: boolean;
+  canGoToNextChapter: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -134,7 +133,7 @@ async function openModal(modal: string) {
         <button
           class="footer-btn"
           @click.stop="emit('prev-chapter')"
-          :disabled="!canPrev"
+          :disabled="!canGoToPrevChapter"
           :aria-label="'Previous chapter'"
         >
           <svg
@@ -151,7 +150,7 @@ async function openModal(modal: string) {
         <button
           class="footer-btn"
           @click.stop="emit('next-chapter')"
-          :disabled="!canNext"
+          :disabled="!canGoToNextChapter"
           :aria-label="'Next chapter'"
         >
           <svg

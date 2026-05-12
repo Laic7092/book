@@ -1,12 +1,17 @@
 <script setup lang="ts">
-import type { HeaderAction } from "../../plugins/types";
+import { computed } from "vue";
+import { getHeaderActions, pluginStateVersion } from "../../plugins/manager/registry";
 
 defineProps<{
   bookTitle: string;
   chapterTitle?: string;
   showControls: boolean;
-  headerActions: HeaderAction[];
 }>();
+
+const headerActions = computed(() => {
+  void pluginStateVersion.value;
+  return getHeaderActions();
+});
 
 const emit = defineEmits<{
   (e: "close"): void;

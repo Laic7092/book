@@ -49,9 +49,9 @@ function closeModal() {
       :epub-resources="engine.currentChapterResources.value"
       :page-margin="engine.pageMargin.value"
       :on-link-click="engine.handleInternalLinkClick"
-      :on-column-layout="engine.handleColumnLayout"
-      :on-chapters-changed="engine.handleChaptersChanged"
-      :on-iframe-ready="engine.handleIframeReady"
+      @column-layout="engine.handleColumnLayout"
+      @chapters-changed="engine.handleChaptersChanged"
+      @iframe-ready="engine.handleIframeReady"
     />
 
     <!-- ── Overlay layer (z: 100) ── -->
@@ -62,7 +62,6 @@ function closeModal() {
       :book-title="book.title"
       :chapter-title="readerStore.currentChapter?.title"
       :show-controls="uiStore.effectiveShowControls"
-      :header-actions="engine.headerActions.value"
       @close="handleClose"
     />
 
@@ -70,12 +69,11 @@ function closeModal() {
       :show-controls="uiStore.effectiveShowControls"
       :is-pagination-mode="engine.isPaginationMode.value"
       :current-page="engine.currentPage.value"
-      :pages-count="engine.totalPages.value"
-      :reading-progress="engine.readingProgress.value"
+      :total-pages="engine.totalPages.value"
       :book-progress="engine.totalBookProgress.value"
       :current-chapter-title="readerStore.currentChapter?.title || ''"
-      :can-prev="engine.currentChapterIndex.value > 0"
-      :can-next="engine.currentChapterIndex.value < readerStore.chapters.length - 1"
+      :can-go-to-prev-chapter="engine.currentChapterIndex.value > 0"
+      :can-go-to-next-chapter="engine.currentChapterIndex.value < readerStore.chapters.length - 1"
       @prev-page="engine.prevPage"
       @next-page="engine.nextPage"
       @prev-chapter="

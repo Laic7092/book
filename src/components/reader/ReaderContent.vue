@@ -11,9 +11,12 @@ const props = defineProps<{
   epubResources?: HTMLElement[];
   pageMargin?: number;
   onLinkClick?: (href: string) => void;
-  onColumnLayout?: (data: { contentWidth: number; iframeWidth: number }) => void;
-  onChaptersChanged?: () => void;
-  onIframeReady?: () => void;
+}>();
+
+const emit = defineEmits<{
+  (e: "columnLayout", data: { contentWidth: number; iframeWidth: number }): void;
+  (e: "chaptersChanged"): void;
+  (e: "iframeReady"): void;
 }>();
 
 const containerRef = ref<HTMLElement | null>(null);
@@ -57,7 +60,7 @@ function measureColumns() {
       const contentWidth = doc.body.scrollWidth || 0;
       const iframeWidth = iframe.clientWidth || 0;
       if (iframeWidth > 0) {
-        props.onColumnLayout?.({ contentWidth, iframeWidth });
+        emit("columnLayout", { contentWidth, iframeWidth });
       }
     });
   }, 150);
@@ -83,8 +86,8 @@ function handleLoad() {
     el.style.display = "block";
   });
 
-  props.onChaptersChanged?.();
-  props.onIframeReady?.();
+  emit("chaptersChanged");
+  emit("iframeReady");
 }
 
 watch(
@@ -94,7 +97,7 @@ watch(
       updateContent(chapters.map((ch) => ch.content).join(""));
       nextTick(() => {
         measureColumns();
-        props.onChaptersChanged?.();
+        emit("chaptersChanged");
       });
     }
   },
@@ -107,7 +110,7 @@ watch(
       updateContent(html);
       nextTick(() => {
         measureColumns();
-        props.onChaptersChanged?.();
+        emit("chaptersChanged");
       });
     }
   },
