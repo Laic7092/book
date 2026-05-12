@@ -1,23 +1,25 @@
-import { ref, computed, onMounted, onUnmounted, watch, nextTick, type Ref } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch, type Ref } from "vue";
 import { useReaderStore } from "../stores/reader";
 import { useUIStore } from "../stores/ui";
-import { useColumnPagination } from "./useColumnPagination";
-import { useChapterLoader } from "./useChapterLoader";
 import { useNavigationStack } from "./useNavigationStack";
-import { rewriteResourcePaths } from "../reader-engine/resource-resolver";
-import { navigateToCfi, resolveCfi, getSpineIndex } from "../utils/epub-cfi";
-import { TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../config/constants";
 import { registerReaderHost, unregisterReaderHost } from "../core/reader-host";
 import type { ReaderHost } from "../core/reader-host";
 import {
   getOverlayComponents,
   getHeaderActions,
   pluginStateVersion,
-  applyContentTransformers,
 } from "../plugins/manager/registry";
 import { pluginEvents } from "../plugins/context";
+import { TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../config/constants";
 import { getChapterContent as fetchChapterContent } from "../storage/books";
 import type { Chapter } from "../core/types";
+import { usePaginationStrategy } from "./reading-strategies/pagination-strategy";
+import { useScrollStrategy } from "./reading-strategies/scroll-strategy";
+import type {
+  ReadingStrategy,
+  StrategyContext,
+  StrategyCallbacks,
+} from "./reading-strategies/types";
 
 export interface ReaderContentAPI {
   getDocument?(): Document | null;
@@ -32,22 +34,24 @@ export function useReaderEngine(
 ) {
   const readerStore = useReaderStore();
   const uiStore = useUIStore();
-  const pagination = useColumnPagination();
   const navStack = useNavigationStack();
 
-  // ── Refs ──
+  // ── Shared state ──
   const readingMode = ref<"vertical" | "pagination">("pagination");
   const pageMargin = ref(24);
   const isTransitioning = ref(false);
   const isRestoring = ref(false);
-  const currentChapterResources = ref<HTMLElement[]>([]);
+  const currentChapterIndex = computed(() =>
+    readerStore.chapters.findIndex((c) => c.id === readerStore.currentChapter?.id),
+  );
 
   // ── Cleanup registry ──
   const cleanupFns: (() => void)[] = [];
   let iframeReadyCallbacks: (() => void)[] = [];
   let chapterChangeCallbacks: ((chapterId: string) => void)[] = [];
+  let gestureCleanup: (() => void) | null = null;
 
-  // ── Computeds ──
+  // ── Plugin UI computeds ──
   const overlayComponents = computed(() => {
     void pluginStateVersion.value;
     return getOverlayComponents();
@@ -58,561 +62,146 @@ export function useReaderEngine(
     return getHeaderActions();
   });
 
-  const currentChapterIndex = computed(() =>
-    readerStore.chapters.findIndex((c) => c.id === readerStore.currentChapter?.id),
-  );
+  // ── Strategy callbacks (engine → strategy communication) ──
 
-  const isPaginationMode = computed(() => readingMode.value === "pagination");
-
-  const chapterProgress = computed(() => {
-    if (isPaginationMode.value) {
-      const total = pagination.totalPages.value;
-      if (total <= 1) return 100;
-      return ((pagination.currentPage.value + 1) / total) * 100;
-    }
-    return readerStore.chapterProgress;
-  });
-
-  const readingProgress = computed(() => {
-    const total = readerStore.chapters.length;
-    if (total <= 1) return chapterProgress.value;
-    const current = currentChapterIndex.value;
-    const portion = 100 / total;
-    return Math.round(current * portion + (chapterProgress.value / 100) * portion);
-  });
-
-  const totalBookProgress = computed(() => {
-    const total = readerStore.chapters.length;
-    if (total <= 1) return Math.max(1, Math.round(chapterProgress.value));
-    const current = currentChapterIndex.value;
-    const portion = 100 / total;
-    return Math.round(current * portion + (chapterProgress.value / 100) * portion);
-  });
-
-  const displayContent = computed(() => {
-    if (isPaginationMode.value) return pagination.currentHtml.value;
-    return "";
-  });
-
-  const chapterLoading = computed(() => {
-    if (isRestoring.value) return true;
-    if (isTransitioning.value) return true;
-    if (isPaginationMode.value && !pagination.isReady.value) return true;
-    return false;
-  });
-
-  // ── Chapter loader ──
-  const chapterLoader = useChapterLoader(
-    computed(() => bookId.value),
-    readerStore.$state,
-    currentChapterIndex,
-  );
-
-  // ── Content pipeline ──
-  const rewrittenLoadedContent = computed(() => {
-    const chapters = chapterLoader.allLoadedContent.value;
-    const urls = readerStore.resourceUrls;
-    return chapters.map((ch) => {
-      if (urls && urls.size > 0) {
-        const doc = rewriteResourcePaths(ch.content, urls);
-        return { ...ch, content: doc.body.innerHTML };
+  const callbacks: StrategyCallbacks = {
+    onChapterChanged(chapterId: string, previousChapterId?: string) {
+      for (const cb of chapterChangeCallbacks) cb(chapterId);
+      const bid = readerStore.currentBook?.id;
+      if (bid) {
+        void pluginEvents.emit("chapter:changed", { bookId: bid, chapterId, previousChapterId });
       }
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(ch.content, "text/html");
-      return { ...ch, content: doc.body.innerHTML };
-    });
-  });
-
-  const transformedLoadedContent = ref<typeof rewrittenLoadedContent.value>([]);
-  let transformSeq = 0;
-
-  async function refreshTransformedContent() {
-    const seq = ++transformSeq;
-    const source = rewrittenLoadedContent.value;
-    const bid = readerStore.currentBook?.id;
-    if (!bid) {
-      transformedLoadedContent.value = source;
-      return;
-    }
-    const result = await Promise.all(
-      source.map(async (ch) => {
-        try {
-          const html = await applyContentTransformers(ch.content, {
-            bookId: bid,
-            chapterId: ch.chapterId,
-          });
-          return { ...ch, content: html };
-        } catch {
-          return ch;
-        }
-      }),
-    );
-    if (seq === transformSeq) transformedLoadedContent.value = result;
-  }
-
-  watch(
-    [rewrittenLoadedContent, pluginStateVersion, () => readerStore.currentBook?.id],
-    () => {
-      void refreshTransformedContent();
     },
-    { immediate: true },
-  );
 
-  // ── Page change watcher ──
-  watch(
-    [() => pagination.currentPage.value, () => pagination.totalPages.value],
-    ([page, total]) => {
-      if (!isPaginationMode.value) return;
+    onPageChanged(page: number, totalPages: number) {
       const chId = readerStore.currentChapter?.id;
       const bId = readerStore.currentBook?.id;
       if (chId && bId) {
-        void pluginEvents.emit("page:changed", {
-          bookId: bId,
-          chapterId: chId,
-          page,
-          totalPages: total,
-        });
+        void pluginEvents.emit("page:changed", { bookId: bId, chapterId: chId, page, totalPages });
       }
     },
+
+    onContentLoaded(chapterId: string) {
+      const bId = readerStore.currentBook?.id;
+      if (bId) {
+        void pluginEvents.emit("content:loaded", { bookId: bId, chapterId });
+      }
+    },
+
+    onProgressUpdate(bookPercent: number, chapterPercent: number) {
+      if (isRestoring.value) return;
+      readerStore.updateProgress(bookPercent, chapterPercent);
+    },
+
+    setTransitioning(value: boolean) {
+      isTransitioning.value = value;
+    },
+
+    isRestoring() {
+      return isRestoring.value;
+    },
+  };
+
+  // ── Strategy context (engine → strategy dependency injection) ──
+
+  const strategyContext: StrategyContext = {
+    bookId,
+    chapters: computed(() => readerStore.chapters),
+    currentChapter: computed({
+      get: () => readerStore.currentChapter,
+      set: (ch: Chapter | null) => {
+        readerStore.currentChapter = ch;
+      },
+    }) as unknown as Ref<Chapter | null>,
+    currentChapterIndex,
+    resourceUrls: computed(() => readerStore.resourceUrls) as unknown as Ref<
+      Map<string, string> | undefined
+    >,
+    callbacks,
+
+    async getChapterContent(chapterId: string) {
+      // Navigate to chapter (fetches content, sets currentChapter)
+      await readerStore.goToChapter(chapterId);
+      // Resolve resources
+      return readerStore.getCurrentChapterContent();
+    },
+
+    getDocument() {
+      return readerContentRef.value?.getDocument?.() ?? null;
+    },
+
+    getArticle() {
+      return readerContentRef.value?.getArticle?.() ?? null;
+    },
+
+    syncResources(elements: HTMLElement[]) {
+      readerContentRef.value?.syncResources?.(elements);
+    },
+  };
+
+  // ── Strategies (both created, one active) ──
+
+  const paginationStrategy = usePaginationStrategy(strategyContext);
+  const scrollStrategy = useScrollStrategy(strategyContext);
+
+  const activeStrategy = computed<ReadingStrategy>(() =>
+    readingMode.value === "pagination" ? paginationStrategy : scrollStrategy,
   );
 
-  // ── Chapter navigation ──
+  // Proxy refs that delegate to the active strategy
+  const currentChapterResources = computed(() => activeStrategy.value.chapterResources.value);
+  const transformedLoadedContent = computed(() => activeStrategy.value.loadedChapters.value);
+
+  // ── Mode switching ──
+
+  watch(readingMode, (mode, prevMode) => {
+    if (mode === prevMode) return;
+    if (prevMode === "pagination") paginationStrategy.deactivate();
+    else scrollStrategy.deactivate();
+
+    if (mode === "pagination") void paginationStrategy.activate();
+    else void scrollStrategy.activate();
+  });
+
+  // ── Navigation (delegated) ──
+
   async function handleSelectChapter(
     chapterId: string,
     targetPage: number = 0,
     autoClearTransition = true,
   ) {
-    isTransitioning.value = true;
     const wasShowingControls = uiStore.showControls;
-    const previousChapterId = readerStore.currentChapter?.id;
     try {
-      await readerStore.goToChapter(chapterId);
-
-      if (isPaginationMode.value) {
-        const content = await readerStore.getCurrentChapterContent();
-        let html = content?.html || "";
-        if (html && readerStore.currentBook) {
-          html = await applyContentTransformers(html, {
-            bookId: readerStore.currentBook.id,
-            chapterId,
-          });
-        }
-        const resources = content?.resources || [];
-        await pagination.paginate(chapterId, { html, targetPage, resources });
-        currentChapterResources.value = resources;
-        readerContentRef.value?.syncResources?.(resources);
-      } else {
-        await chapterLoader.loadCurrentAndAdjacent(2);
-        await nextTick();
-        readerContentRef.value?.paginateToChapter?.(chapterId);
-      }
-
-      for (const cb of chapterChangeCallbacks) cb(chapterId);
-      void pluginEvents.emit("chapter:changed", {
-        bookId: readerStore.currentBook!.id,
-        chapterId,
-        previousChapterId,
-      });
-
-      if (isPaginationMode.value && autoClearTransition) {
-        const onReady = async () => {
-          isTransitioning.value = false;
-          uiStore.showControls = wasShowingControls;
-          void pluginEvents.emit("content:loaded", {
-            bookId: readerStore.currentBook!.id,
-            chapterId,
-          });
-        };
-        if (pagination.isReady.value) {
-          await onReady();
-        } else {
-          const stop = watch(
-            () => pagination.isReady.value,
-            (ready) => {
-              if (ready) {
-                stop();
-                void onReady();
-              }
-            },
-          );
-        }
-      } else if (!isPaginationMode.value) {
-        setTimeout(() => {
-          isTransitioning.value = false;
-          uiStore.showControls = wasShowingControls;
-          void pluginEvents.emit("content:loaded", {
-            bookId: readerStore.currentBook!.id,
-            chapterId,
-          });
-        }, 50);
-      }
-    } catch {
-      isTransitioning.value = false;
+      await activeStrategy.value.navigateToChapter(chapterId, targetPage, autoClearTransition);
+    } finally {
       uiStore.showControls = wasShowingControls;
     }
   }
 
   async function nextPage() {
-    if (pagination.isPaginating.value) return;
-    if (isPaginationMode.value) {
-      const moved = pagination.nextPage();
-      if (!moved) {
-        const idx = currentChapterIndex.value;
-        if (idx < readerStore.chapters.length - 1) {
-          await handleSelectChapter(readerStore.chapters[idx + 1].id, 0);
-        }
-      }
-    } else {
-      const idx = currentChapterIndex.value;
-      if (idx < readerStore.chapters.length - 1) {
-        await handleSelectChapter(readerStore.chapters[idx + 1].id);
-      }
-    }
+    await activeStrategy.value.goForward();
   }
 
   async function prevPage() {
-    if (pagination.isPaginating.value) return;
-    if (isPaginationMode.value) {
-      if (pagination.currentPage.value > 0) {
-        pagination.prevPage();
-      } else {
-        const idx = currentChapterIndex.value;
-        if (idx > 0) {
-          await handleSelectChapter(readerStore.chapters[idx - 1].id, -1);
-        }
-      }
-    } else {
-      const idx = currentChapterIndex.value;
-      if (idx > 0) {
-        await handleSelectChapter(readerStore.chapters[idx - 1].id);
-      }
-    }
-  }
-
-  // ── Pagination helpers ──
-  function waitForPaginationReady(): Promise<void> {
-    if (pagination.isReady.value) return Promise.resolve();
-    return new Promise<void>((resolve) => {
-      const stop = watch(
-        () => pagination.isReady.value,
-        (ready) => {
-          if (ready) {
-            stop();
-            resolve();
-          }
-        },
-      );
-    });
-  }
-
-  function getPageForCfi(cfi: string): number | null {
-    const doc = readerContentRef.value?.getDocument?.();
-    if (!doc?.body) return null;
-    const target = resolveCfi(cfi, doc.body);
-    if (!target || !doc.body.contains(target.node)) return null;
-    const range = doc.createRange();
-    if (target.node.nodeType === Node.TEXT_NODE) {
-      range.setStart(target.node, Math.min(target.offset, (target.node.textContent || "").length));
-    } else {
-      range.setStart(target.node, 0);
-    }
-    range.collapse(true);
-    const bodyRect = doc.body.getBoundingClientRect();
-    const rangeRect = range.getBoundingClientRect();
-    return pagination.getPageAtOffset(rangeRect.left - bodyRect.left);
-  }
-
-  async function navigateToCfiLocation(cfi: string, chapterId: string) {
-    const spineIndex = getSpineIndex(cfi);
-    if (spineIndex < 0) return;
-    const targetChapter = readerStore.chapters.find((c) => c.order === spineIndex);
-    if (!targetChapter) {
-      const fallback = readerStore.chapters.find((c) => c.id === chapterId);
-      if (!fallback) return;
-      await handleSelectChapter(fallback.id);
-      return;
-    }
-    isTransitioning.value = true;
-    try {
-      if (targetChapter.id !== readerStore.currentChapter?.id) {
-        await handleSelectChapter(targetChapter.id, 0, false);
-      }
-      if (isPaginationMode.value) {
-        await waitForPaginationReady();
-        const page = getPageForCfi(cfi);
-        pagination.goToPage(page ?? 0);
-      } else {
-        const article = readerContentRef.value?.getArticle?.();
-        if (article) navigateToCfi(cfi, article);
-      }
-      navStack.push({
-        chapterId: targetChapter.id,
-        page: isPaginationMode.value ? pagination.currentPage.value : 0,
-      });
-    } finally {
-      isTransitioning.value = false;
-    }
-  }
-
-  // ── Internal links ──
-  function chapterMatchesHref(chapter: Chapter, filePath: string): boolean {
-    if (!chapter.href) return false;
-    return (
-      chapter.href === filePath ||
-      chapter.href.endsWith(filePath) ||
-      chapter.href.endsWith("/" + filePath) ||
-      chapter.href.includes(filePath)
-    );
-  }
-
-  function handleInternalLinkClick(href: string) {
-    if (href.startsWith("http://") || href.startsWith("https://") || href.startsWith("mailto:"))
-      return;
-
-    const hashIndex = href.indexOf("#");
-    const filePath = hashIndex > 0 ? href.substring(0, hashIndex) : href;
-    const anchor = hashIndex >= 0 ? href.substring(hashIndex + 1) : "";
-
-    const paginateToAnchor = () => {
-      if (!anchor) return;
-      const article = readerContentRef.value?.getArticle?.();
-      if (!article) return;
-      const target =
-        article.querySelector(`[id="${CSS.escape(anchor)}"]`) ||
-        article.querySelector(`[name="${CSS.escape(anchor)}"]`);
-      if (!target) return;
-      if (isPaginationMode.value) {
-        const articleRect = article.getBoundingClientRect();
-        const targetRect = target.getBoundingClientRect();
-        pagination.goToPage(pagination.getPageAtOffset(targetRect.left - articleRect.left));
-      } else {
-        target.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-    };
-
-    const currentChId = readerStore.currentChapter?.id;
-
-    if (!filePath) {
-      paginateToAnchor();
-      if (currentChId) {
-        navStack.push({
-          chapterId: currentChId,
-          page: isPaginationMode.value ? pagination.currentPage.value : 0,
-        });
-      }
-      return;
-    }
-
-    const targetChapter = readerStore.chapters.find((c) => chapterMatchesHref(c, filePath));
-    if (!targetChapter) return;
-
-    if (targetChapter.id === readerStore.currentChapter?.id) {
-      if (isPaginationMode.value) {
-        void waitForPaginationReady().then(() => {
-          paginateToAnchor();
-          navStack.push({ chapterId: targetChapter.id, page: pagination.currentPage.value });
-        });
-      } else {
-        paginateToAnchor();
-        navStack.push({ chapterId: targetChapter.id, page: 0 });
-      }
-      return;
-    }
-
-    void handleSelectChapter(targetChapter.id).then(async () => {
-      if (!anchor) {
-        navStack.push({
-          chapterId: targetChapter.id,
-          page: isPaginationMode.value ? pagination.currentPage.value : 0,
-        });
-        return;
-      }
-      if (isPaginationMode.value) {
-        await waitForPaginationReady();
-        paginateToAnchor();
-        navStack.push({ chapterId: targetChapter.id, page: pagination.currentPage.value });
-      } else {
-        await nextTick();
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            paginateToAnchor();
-            navStack.push({ chapterId: targetChapter.id, page: 0 });
-          });
-        });
-      }
-    });
-  }
-
-  // ── Column layout ──
-  function handleColumnLayout(data: { contentWidth: number; iframeWidth: number }) {
-    pagination.updateColumnLayout(data.contentWidth, data.iframeWidth);
-  }
-
-  function handleChaptersChanged() {
-    refreshProgressObserver();
-  }
-
-  // ── Scroll observer (vertical mode) ──
-  let progressObserver: IntersectionObserver | null = null;
-  let visibleChapterId: string | null = null;
-  let lastProgressPercent = -1;
-  let lastProgressChapterId: string | null = null;
-  let lastChapterProgress = -1;
-  let progressCleanup: (() => void) | null = null;
-
-  function refreshProgressObserver() {
-    if (!progressObserver) return;
-    const doc = readerContentRef.value?.getDocument?.();
-    if (!doc) return;
-    progressObserver.disconnect();
-    doc.querySelectorAll<HTMLElement>("[data-chapter-id]").forEach((el) => {
-      progressObserver?.observe(el);
-    });
-    const win = doc.defaultView;
-    if (win) {
-      const scrollTop = win.scrollY || doc.documentElement.scrollTop || 0;
-      const midpoint = scrollTop + win.innerHeight / 2;
-      const containers = doc.querySelectorAll<HTMLElement>("[data-chapter-id]");
-      for (const el of containers) {
-        if (midpoint >= el.offsetTop && midpoint < el.offsetTop + el.offsetHeight) {
-          visibleChapterId = el.getAttribute("data-chapter-id");
-          break;
-        }
-      }
-    }
-  }
-
-  function setupProgressTracking(doc: Document) {
-    if (progressObserver) return;
-    progressObserver = new IntersectionObserver(
-      (entries) => {
-        if (isPaginationMode.value) return;
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            visibleChapterId = (entry.target as HTMLElement).getAttribute("data-chapter-id");
-          }
-        }
-      },
-      { root: doc.documentElement, threshold: 0 },
-    );
-    doc.querySelectorAll<HTMLElement>("[data-chapter-id]").forEach((el) => {
-      progressObserver?.observe(el);
-    });
-
-    let ticking = false;
-    const handler = () => {
-      if (ticking || isPaginationMode.value) return;
-      ticking = true;
-      requestAnimationFrame(() => {
-        ticking = false;
-        const win = doc.defaultView;
-        if (!win) return;
-        const scrollTop = win.scrollY || doc.documentElement.scrollTop || 0;
-        const scrollHeight = doc.documentElement.scrollHeight - doc.documentElement.clientHeight;
-        if (scrollHeight <= 0) return;
-        const percent = Math.min(100, Math.max(0, Math.round((scrollTop / scrollHeight) * 100)));
-        let chapterProgressVal = 0;
-        if (visibleChapterId) {
-          const el = doc.querySelector<HTMLElement>(`[data-chapter-id="${visibleChapterId}"]`);
-          if (el && el.offsetHeight > 0) {
-            chapterProgressVal = Math.min(
-              100,
-              Math.max(0, Math.round(((scrollTop - el.offsetTop) / el.offsetHeight) * 100)),
-            );
-          }
-        }
-        if (
-          percent === lastProgressPercent &&
-          visibleChapterId === lastProgressChapterId &&
-          chapterProgressVal === lastChapterProgress
-        )
-          return;
-        lastProgressPercent = percent;
-        lastProgressChapterId = visibleChapterId;
-        lastChapterProgress = chapterProgressVal;
-        if (isRestoring.value) return;
-        readerStore.updateProgress(percent, chapterProgressVal);
-        const prevChId = readerStore.currentChapter?.id;
-        if (visibleChapterId && visibleChapterId !== prevChId) {
-          const chapter = readerStore.chapters.find((c) => c.id === visibleChapterId);
-          if (chapter) {
-            readerStore.currentChapter = chapter;
-            for (const cb of chapterChangeCallbacks) cb(visibleChapterId);
-            void pluginEvents.emit("chapter:changed", {
-              bookId: readerStore.currentBook!.id,
-              chapterId: visibleChapterId,
-              previousChapterId: prevChId,
-            });
-          }
-        }
-      });
-    };
-    doc.addEventListener("scroll", handler, { passive: true });
-    progressCleanup = () => {
-      doc.removeEventListener("scroll", handler);
-      progressObserver?.disconnect();
-      progressObserver = null;
-    };
-  }
-
-  // ── Gesture handling ──
-  let gestureCleanup: (() => void) | null = null;
-
-  function shouldIgnoreTarget(target: EventTarget | null): boolean {
-    if (!target || !(target instanceof Element)) return false;
-    const el = target as Element;
-    return !!(
-      el.closest("button") ||
-      el.closest("input") ||
-      el.closest("textarea") ||
-      el.closest("select") ||
-      el.closest("a[href]") ||
-      el.closest("[contenteditable]")
-    );
-  }
-
-  function setupDirectHandlers(doc: Document) {
-    if (gestureCleanup) return;
-    const handleClick = (e: MouseEvent) => {
-      if (shouldIgnoreTarget(e.target)) return;
-      if (uiStore.activeModal) {
-        uiStore.closeModal();
-        return;
-      }
-      if (isPaginationMode.value) {
-        const w = window.innerWidth;
-        const x = e.clientX;
-        if (x < w * TAP_ZONE_LEFT) void prevPage();
-        else if (x > w * TAP_ZONE_RIGHT) void nextPage();
-        else uiStore.toggleControls();
-      } else {
-        uiStore.toggleControls();
-      }
-    };
-    doc.addEventListener("click", handleClick);
-    gestureCleanup = () => doc.removeEventListener("click", handleClick);
-  }
-
-  // ── Iframe ready ──
-  function handleIframeReady() {
-    const doc = readerContentRef.value?.getDocument?.();
-    if (!doc) return;
-    setupDirectHandlers(doc);
-    setupProgressTracking(doc);
-    for (const cb of iframeReadyCallbacks) cb();
-    const chId = readerStore.currentChapter?.id;
-    const bId = readerStore.currentBook?.id;
-    if (chId && bId) {
-      void pluginEvents.emit("content:loaded", { bookId: bId, chapterId: chId });
-    }
+    await activeStrategy.value.goBackward();
   }
 
   // ── History ──
+
+  function pushHistoryEntry() {
+    const chId = readerStore.currentChapter?.id;
+    if (!chId) return;
+    const page = activeStrategy.value.pagination?.currentPage.value ?? 0;
+    navStack.push({ chapterId: chId, page });
+  }
+
   function handleHistoryBack() {
     const entry = navStack.back();
     if (!entry) return;
     if (entry.chapterId === readerStore.currentChapter?.id) {
-      if (isPaginationMode.value) pagination.goToPage(entry.page);
+      if (activeStrategy.value.pagination) {
+        activeStrategy.value.pagination.goToPage(entry.page);
+      }
     } else {
       void handleSelectChapter(entry.chapterId, entry.page);
     }
@@ -622,29 +211,122 @@ export function useReaderEngine(
     const entry = navStack.forward();
     if (!entry) return;
     if (entry.chapterId === readerStore.currentChapter?.id) {
-      if (isPaginationMode.value) pagination.goToPage(entry.page);
+      if (activeStrategy.value.pagination) {
+        activeStrategy.value.pagination.goToPage(entry.page);
+      }
     } else {
       void handleSelectChapter(entry.chapterId, entry.page);
     }
   }
 
-  // ── Reload ──
-  async function reloadForPagination() {
-    const content = await readerStore.getCurrentChapterContent();
-    let html = content?.html || "";
-    if (html && readerStore.currentBook) {
-      html = await applyContentTransformers(html, {
-        bookId: readerStore.currentBook.id,
-        chapterId: readerStore.currentChapter!.id,
-      });
+  // ── Internal links ──
+
+  function handleInternalLinkClick(href: string) {
+    const currentChId = readerStore.currentChapter?.id;
+    activeStrategy.value.handleInternalLinkClick(href);
+    // Push history if chapter changed or anchor was navigated
+    const newChId = readerStore.currentChapter?.id;
+    if (newChId && newChId !== currentChId) {
+      pushHistoryEntry();
     }
-    const resources = content?.resources || [];
-    currentChapterResources.value = resources;
-    readerContentRef.value?.syncResources?.(resources);
-    await pagination.paginate(readerStore.currentChapter!.id, { html, resources });
+  }
+
+  // ── Column layout (pagination only) ──
+
+  function handleColumnLayout(data: { contentWidth: number; iframeWidth: number }) {
+    activeStrategy.value.pagination?.updateColumnLayout(data.contentWidth, data.iframeWidth);
+  }
+
+  // ── Chapters changed ──
+
+  function handleChaptersChanged() {
+    activeStrategy.value.onChaptersChanged();
+  }
+
+  // ── Iframe ready ──
+
+  function shouldIgnoreTarget(target: EventTarget | null): boolean {
+    if (!target || !(target instanceof Element)) return false;
+    return !!(
+      target.closest("button") ||
+      target.closest("input") ||
+      target.closest("textarea") ||
+      target.closest("select") ||
+      target.closest("a[href]") ||
+      target.closest("[contenteditable]")
+    );
+  }
+
+  function handleIframeReady() {
+    const doc = readerContentRef.value?.getDocument?.();
+    if (!doc) return;
+
+    // Set up mode-specific gesture handler (left/right tap zones for pagination)
+    gestureCleanup?.();
+    gestureCleanup = null;
+    gestureCleanup = activeStrategy.value.setupGestureHandler(doc);
+
+    // Notify strategy
+    activeStrategy.value.onIframeReady(doc);
+
+    // Fire engine-level iframe-ready callbacks
+    for (const cb of iframeReadyCallbacks) cb();
+
+    // Emit content:loaded
+    const chId = readerStore.currentChapter?.id;
+    const bId = readerStore.currentBook?.id;
+    if (chId && bId) {
+      void pluginEvents.emit("content:loaded", { bookId: bId, chapterId: chId });
+    }
+
+    // Engine-level gesture: modal dismiss + controls toggle
+    const strategyCleanup = gestureCleanup;
+    const engineClickHandler = (e: MouseEvent) => {
+      if (shouldIgnoreTarget(e.target)) return;
+      if (uiStore.activeModal) {
+        uiStore.closeModal();
+        return;
+      }
+      if (readingMode.value === "pagination") {
+        // Pagination: only center zone toggles controls (strategy handles left/right)
+        const x = e.clientX;
+        const w = window.innerWidth;
+        if (x >= w * TAP_ZONE_LEFT && x <= w * TAP_ZONE_RIGHT) {
+          uiStore.toggleControls();
+        }
+      } else {
+        // Scroll: tap anywhere toggles controls
+        uiStore.toggleControls();
+      }
+    };
+    doc.addEventListener("click", engineClickHandler);
+    gestureCleanup = () => {
+      strategyCleanup?.();
+      doc.removeEventListener("click", engineClickHandler);
+    };
+  }
+
+  // ── Reload ──
+
+  async function reloadForPagination() {
+    const chId = readerStore.currentChapter?.id;
+    if (!chId) return;
+    paginationStrategy.deactivate();
+    await paginationStrategy.activate();
+  }
+
+  async function navigateToCfiLocation(cfi: string, chapterId: string) {
+    await activeStrategy.value.navigateToCfi(cfi, chapterId);
+    pushHistoryEntry();
+  }
+
+  async function switchReadingMode(mode: "vertical" | "pagination") {
+    if (readingMode.value === mode) return;
+    readingMode.value = mode;
   }
 
   // ── ReaderHost ──
+
   const host: ReaderHost = {
     getDocument() {
       return readerContentRef.value?.getDocument?.() ?? null;
@@ -664,15 +346,9 @@ export function useReaderEngine(
     getCurrentBookId() {
       return readerStore.currentBook?.id;
     },
-    isPaginationMode,
+    isPaginationMode: computed(() => readingMode.value === "pagination"),
     setReadingMode(mode: "vertical" | "pagination") {
-      if (readingMode.value === mode) return;
-      readingMode.value = mode;
-      if (mode === "vertical" && readerStore.chapters.length > 0) {
-        void chapterLoader.loadCurrentAndAdjacent(2);
-      } else if (mode === "pagination" && readerStore.currentChapter) {
-        void reloadForPagination();
-      }
+      void switchReadingMode(mode);
     },
     setPageMargin(margin: number) {
       pageMargin.value = margin;
@@ -684,13 +360,13 @@ export function useReaderEngine(
       uiStore.closeModal();
     },
     getCurrentPage() {
-      return pagination.currentPage.value;
+      return activeStrategy.value.pagination?.currentPage.value ?? 0;
     },
     getTotalPages() {
-      return pagination.totalPages.value;
+      return activeStrategy.value.pagination?.totalPages.value ?? 0;
     },
     goToPage(page: number) {
-      pagination.goToPage(page);
+      activeStrategy.value.pagination?.goToPage(page);
     },
     async nextPage() {
       await nextPage();
@@ -700,7 +376,7 @@ export function useReaderEngine(
       navStack.push({ chapterId, page });
     },
     getCurrentChapterRawHtml() {
-      return pagination.rawHtml.value;
+      return "";
     },
     async getChapterContent(chapterId: string) {
       return fetchChapterContent(bookId.value, chapterId);
@@ -725,26 +401,12 @@ export function useReaderEngine(
   registerReaderHost(host);
 
   // ── Lifecycle ──
+
   onMounted(async () => {
     uiStore.showControls = true;
     isRestoring.value = true;
     try {
-      if (isPaginationMode.value && readerStore.currentChapter) {
-        const content = await readerStore.getCurrentChapterContent();
-        let html = content?.html || "";
-        if (html && readerStore.currentBook) {
-          html = await applyContentTransformers(html, {
-            bookId: readerStore.currentBook.id,
-            chapterId: readerStore.currentChapter.id,
-          });
-        }
-        const resources = content?.resources || [];
-        currentChapterResources.value = resources;
-        readerContentRef.value?.syncResources?.(resources);
-        await pagination.paginate(readerStore.currentChapter.id, { html, resources });
-      } else {
-        await chapterLoader.loadCurrentAndAdjacent(2);
-      }
+      await activeStrategy.value.activate();
     } finally {
       isRestoring.value = false;
     }
@@ -755,16 +417,17 @@ export function useReaderEngine(
     void pluginEvents.emit("reader:unmounted", { bookId: bookId.value });
     gestureCleanup?.();
     gestureCleanup = null;
-    progressCleanup?.();
-    progressCleanup = null;
     cleanupFns.forEach((fn) => fn());
     cleanupFns.length = 0;
     iframeReadyCallbacks = [];
     chapterChangeCallbacks = [];
     unregisterReaderHost();
-    pagination.cleanup();
+    paginationStrategy.deactivate();
+    scrollStrategy.deactivate();
     navStack.reset();
   });
+
+  // ── Public interface (same shape as before for ReaderView compatibility) ──
 
   return {
     // State
@@ -775,12 +438,16 @@ export function useReaderEngine(
     currentChapterResources,
     // Computed
     currentChapterIndex,
-    isPaginationMode,
-    chapterProgress,
-    readingProgress,
-    totalBookProgress,
-    displayContent,
-    chapterLoading,
+    isPaginationMode: computed(() => readingMode.value === "pagination"),
+    chapterProgress: computed(() => activeStrategy.value.chapterProgress.value),
+    readingProgress: computed(() => activeStrategy.value.readingProgress.value),
+    totalBookProgress: computed(() => activeStrategy.value.totalBookProgress.value),
+    displayContent: computed(() => activeStrategy.value.displayContent.value),
+    chapterLoading: computed(() => {
+      if (isRestoring.value) return true;
+      if (isTransitioning.value) return true;
+      return activeStrategy.value.isLoading.value;
+    }),
     overlayComponents,
     headerActions,
     // Content
@@ -799,8 +466,8 @@ export function useReaderEngine(
     handleChaptersChanged,
     handleIframeReady,
     // Pagination exposed
-    currentPage: pagination.currentPage,
-    totalPages: pagination.totalPages,
+    currentPage: computed(() => activeStrategy.value.pagination?.currentPage.value ?? 0),
+    totalPages: computed(() => activeStrategy.value.pagination?.totalPages.value ?? 1),
     // Lifecycle helpers for ReaderHost consumers
     reloadForPagination,
     navigateToCfiLocation,

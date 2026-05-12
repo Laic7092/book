@@ -19,7 +19,6 @@ const emit = defineEmits<{
   (e: "iframeReady"): void;
 }>();
 
-const containerRef = ref<HTMLElement | null>(null);
 const iframeRef = ref<HTMLIFrameElement | null>(null);
 
 const rendererOptions = computed<{ initialMode: "scroll" | "paginated" }>(() => ({
@@ -46,14 +45,25 @@ const {
   props.onLinkClick ? (msg) => props.onLinkClick!(msg.href) : undefined,
 );
 
+// ── Content source selection ──
+// Pagination mode renders single-chapter HTML from `content` prop.
+// Scroll mode renders multi-chapter concatenated HTML from `loadedChapters` prop.
+// This is explicit: the mode determines which prop is authoritative.
+
+const effectiveContent = computed(() => {
+  if (props.isPaginationMode) return props.content;
+  return props.loadedChapters?.map((ch) => ch.content).join("") ?? "";
+});
+
 let resizeObserver: ResizeObserver | null = null;
 let columnMeasureTimer: ReturnType<typeof setTimeout> | null = null;
 
 function measureColumns() {
+  if (!props.isPaginationMode) return;
   if (columnMeasureTimer) clearTimeout(columnMeasureTimer);
   columnMeasureTimer = setTimeout(() => {
     const doc = getDocument();
-    if (!doc?.body || !props.isPaginationMode) return;
+    if (!doc?.body) return;
     requestAnimationFrame(() => {
       const iframe = iframeRef.value;
       if (!iframe) return;
@@ -78,9 +88,8 @@ function handleLoad() {
   }
   measureColumns();
 
-  if (props.loadedChapters) {
-    updateContent(props.loadedChapters.map((ch) => ch.content).join(""));
-  }
+  const html = effectiveContent.value;
+  if (html) updateContent(html);
 
   doc.querySelectorAll<HTMLElement>("[data-chapter-id]").forEach((el) => {
     el.style.display = "block";
@@ -90,47 +99,28 @@ function handleLoad() {
   emit("iframeReady");
 }
 
-watch(
-  () => props.loadedChapters,
-  (chapters) => {
-    if (chapters?.length) {
-      updateContent(chapters.map((ch) => ch.content).join(""));
-      nextTick(() => {
-        measureColumns();
-        emit("chaptersChanged");
-      });
-    }
-  },
-);
-
-watch(
-  () => props.content,
-  (html) => {
-    if (html) {
-      updateContent(html);
-      nextTick(() => {
-        measureColumns();
-        emit("chaptersChanged");
-      });
-    }
-  },
-);
+// Single content watch — mode determines the source via effectiveContent
+watch(effectiveContent, (html) => {
+  if (html) {
+    updateContent(html);
+    nextTick(() => {
+      measureColumns();
+      emit("chaptersChanged");
+    });
+  }
+});
 
 watch(
   () => props.epubResources,
   (resources) => {
-    if (resources) {
-      syncResources(resources);
-    }
+    if (resources) syncResources(resources);
   },
 );
 
 watch([() => props.isPaginationMode, isReady], ([mode, ready]) => {
   if (ready) {
     setMode(mode ? "paginated" : "scroll");
-    if (mode) {
-      nextTick(measureColumns);
-    }
+    if (mode) nextTick(measureColumns);
   }
 });
 
@@ -139,9 +129,7 @@ watch(
   (margin) => {
     if (!isReady.value) return;
     setPageMargin(margin ?? 24);
-    if (props.isPaginationMode) {
-      nextTick(measureColumns);
-    }
+    if (props.isPaginationMode) nextTick(measureColumns);
   },
 );
 
@@ -161,9 +149,7 @@ function setupResizeObserver() {
   if (!doc?.body) return;
 
   resizeObserver = new ResizeObserver(() => {
-    if (props.isPaginationMode) {
-      measureColumns();
-    }
+    if (props.isPaginationMode) measureColumns();
   });
   resizeObserver.observe(doc.body);
 
@@ -206,7 +192,7 @@ defineExpose({
 </script>
 
 <template>
-  <div ref="containerRef" class="reader-content-wrapper">
+  <div class="reader-content-wrapper">
     <div v-if="chapterLoading" class="chapter-loading-overlay" />
     <iframe ref="iframeRef" class="reader-iframe" title="Reader Content" @load="handleLoad" />
   </div>
