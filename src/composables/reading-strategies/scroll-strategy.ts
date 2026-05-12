@@ -1,4 +1,4 @@
-import { reactive, ref, computed, watch, nextTick } from "vue";
+import { reactive, ref, computed, nextTick } from "vue";
 import { useChapterLoader } from "../useChapterLoader";
 import { createBatchProcessor } from "./content-pipeline";
 import { navigateToCfi, getSpineIndex } from "../../utils/epub-cfi";
@@ -12,38 +12,28 @@ export function useScrollStrategy(ctx: StrategyContext): ReadingStrategy {
     chapterLoaderState,
     ctx.currentChapterIndex,
   );
-
   const batchProcessor = createBatchProcessor();
+
+  // ── Window state (contiguous range of rendered chapters) ──
+  const chapterWindowStart = ref(0);
+  const chapterWindowEnd = ref(0);
+  const isLoadingMore = ref(false);
+
+  // ── Processed content cache (chapterId → pipeline-processed ChapterContent) ──
+  const processedChapters = new Map<string, ChapterContent>();
+
+  // ── Output refs ──
   const transformedLoadedContent = ref<ChapterContent[]>([]);
-
-  // ── Content pipeline (reactive) ──
-
-  watch(
-    [chapterLoader.allLoadedContent, () => ctx.resourceUrls.value, () => ctx.bookId.value],
-    async () => {
-      const source = chapterLoader.allLoadedContent.value;
-      const bid = ctx.bookId.value;
-      if (!bid || source.length === 0) {
-        transformedLoadedContent.value = [];
-        return;
-      }
-      const results = await batchProcessor.processAll(source, bid, ctx.resourceUrls.value);
-      if (results.length > 0) transformedLoadedContent.value = results;
-    },
-    { immediate: true },
-  );
-
-  // ── Progress computeds ──
-
   const chapterResources = ref<HTMLElement[]>([]);
 
-  const displayContent = computed(() => "");
-
+  // ── Progress computeds ──
   const chapterProgress = ref(0);
   const readingProgress = ref(0);
 
   const chapterProgressComputed = computed(() => chapterProgress.value);
   const readingProgressComputed = computed(() => readingProgress.value);
+
+  const displayContent = computed(() => "");
 
   const totalBookProgress = computed(() => {
     const total = ctx.chapters.value.length;
@@ -55,10 +45,313 @@ export function useScrollStrategy(ctx: StrategyContext): ReadingStrategy {
 
   const isLoading = computed(() => {
     if (ctx.callbacks.isRestoring()) return true;
+    if (isLoadingMore.value) return true;
     return false;
   });
 
-  // ── Progress tracking (IntersectionObserver + scroll) ──
+  // ═══════════════════════════════════════════════════
+  //  Content loading & processing (window-based)
+  // ═══════════════════════════════════════════════════
+
+  /**
+   * Ensure all chapters in index range [from, to] are in the LRU cache.
+   * Chapters already cached are skipped.
+   */
+  async function ensureChaptersLoaded(from: number, to: number): Promise<void> {
+    const promises: Promise<void>[] = [];
+    for (let i = from; i <= to; i++) {
+      const ch = ctx.chapters.value[i];
+      if (ch && !chapterLoader.isLoaded(ch.id)) {
+        promises.push(chapterLoader.loadChapter(ch.id));
+      }
+    }
+    if (promises.length > 0) await Promise.all(promises);
+  }
+
+  /**
+   * Process raw chapter content through the content pipeline (resource
+   * rewriting + plugin transformers). Already-processed chapters are skipped
+   * via the processedChapters cache.
+   */
+  async function ensureChaptersProcessed(from: number, to: number): Promise<void> {
+    const toProcess: Array<{
+      chapterId: string;
+      title: string;
+      content: string;
+      order: number;
+    }> = [];
+    for (let i = from; i <= to; i++) {
+      const ch = ctx.chapters.value[i];
+      if (!ch) continue;
+      if (processedChapters.has(ch.id)) continue;
+      const raw = chapterLoader.getContent(ch.id);
+      if (raw !== undefined) {
+        toProcess.push({
+          chapterId: ch.id,
+          title: ch.title,
+          content: raw,
+          order: ch.order,
+        });
+      }
+    }
+    if (toProcess.length === 0) return;
+    const results = await batchProcessor.processAll(
+      toProcess,
+      ctx.bookId.value,
+      ctx.resourceUrls.value,
+    );
+    for (const r of results) {
+      processedChapters.set(r.chapterId, r);
+    }
+  }
+
+  /**
+   * Build the display content array from the current window.
+   *
+   * The array layout is:
+   *   [top-sentinel?] + [windowed chapters] + [bottom-sentinel?]
+   *
+   * Sentinel <div> elements are only included when there are more chapters
+   * available in that direction.  The sentinel observer (set up inside the
+   * iframe) watches these <div>s and triggers window expansion.
+   */
+  /**
+   * Full content rebuild — only used for initial activation and explicit
+   * chapter navigation.  Incremental scroll expansion uses direct DOM
+   * manipulation instead (see expandWindowUp / expandWindowDown).
+   */
+  async function fullRebuild(): Promise<void> {
+    await ensureChaptersLoaded(chapterWindowStart.value, chapterWindowEnd.value);
+    await ensureChaptersProcessed(chapterWindowStart.value, chapterWindowEnd.value);
+
+    const result: ChapterContent[] = [];
+
+    // ── Top sentinel ──
+    if (chapterWindowStart.value > 0) {
+      result.push({
+        chapterId: "__sentinel_top__",
+        title: "",
+        content: '<div data-sentinel="top" style="height:1px;width:100%"></div>',
+        order: -1,
+      });
+    }
+
+    // ── Windowed chapters (in document order) ──
+    // Each chapter's content is wrapped in <div data-chapter-id="…"> so that
+    // the progress observer, scroll-position save/restore, and chapter
+    // navigation can locate chapter boundaries in the iframe DOM.
+    for (let i = chapterWindowStart.value; i <= chapterWindowEnd.value; i++) {
+      const ch = ctx.chapters.value[i];
+      if (!ch) continue;
+      const cached = processedChapters.get(ch.id);
+      if (cached) {
+        result.push({
+          ...cached,
+          content: `<div data-chapter-id="${ch.id}" class="scroll-chapter">${cached.content}</div>`,
+        });
+      }
+    }
+
+    // ── Bottom sentinel ──
+    if (chapterWindowEnd.value < ctx.chapters.value.length - 1) {
+      result.push({
+        chapterId: "__sentinel_bottom__",
+        title: "",
+        content: '<div data-sentinel="bottom" style="height:1px;width:100%"></div>',
+        order: Number.MAX_SAFE_INTEGER,
+      });
+    }
+
+    transformedLoadedContent.value = result;
+  }
+
+  // ═══════════════════════════════════════════════════
+  //  Scroll position preservation
+  // ═══════════════════════════════════════════════════
+
+  let pendingScrollRestore: (() => void) | null = null;
+
+  /**
+   * Save the current scroll position relative to the visible chapter's
+   * offset.  The saved offset survives content rebuilds (prepend/append)
+   * because it's relative to a stable [data-chapter-id] element.
+   */
+  function saveScrollPosition(): void {
+    pendingScrollRestore = null;
+    const doc = ctx.getDocument();
+    if (!doc) return;
+    const win = doc.defaultView;
+    if (!win) return;
+    const scrollTop = win.scrollY || doc.documentElement.scrollTop || 0;
+
+    const containers = doc.querySelectorAll<HTMLElement>("[data-chapter-id]");
+    for (const el of containers) {
+      if (scrollTop >= el.offsetTop && scrollTop < el.offsetTop + el.offsetHeight) {
+        const chapterId = el.getAttribute("data-chapter-id");
+        if (!chapterId) break;
+        const offset = scrollTop - el.offsetTop;
+        pendingScrollRestore = () => {
+          requestAnimationFrame(() => {
+            const doc2 = ctx.getDocument();
+            if (!doc2) return;
+            const restoredEl = doc2.querySelector<HTMLElement>(`[data-chapter-id="${chapterId}"]`);
+            if (restoredEl) {
+              doc2.defaultView?.scrollTo(0, restoredEl.offsetTop + offset);
+            }
+          });
+        };
+        return;
+      }
+    }
+  }
+
+  // ═══════════════════════════════════════════════════
+  //  Window expansion (sentinel-driven infinite scroll)
+  // ═══════════════════════════════════════════════════
+
+  /** Expand the window upward by one chapter — direct DOM insertBefore. */
+  async function expandWindowUp(): Promise<void> {
+    if (isLoadingMore.value || chapterWindowStart.value <= 0) return;
+    saveScrollPosition();
+    isLoadingMore.value = true;
+    try {
+      const newIdx = chapterWindowStart.value - 1;
+      const ch = ctx.chapters.value[newIdx];
+      if (!ch) return;
+
+      // Load & process the single new chapter
+      if (!chapterLoader.isLoaded(ch.id)) {
+        await chapterLoader.loadChapter(ch.id);
+      }
+      await ensureChaptersProcessed(newIdx, newIdx);
+      const processed = processedChapters.get(ch.id);
+      if (!processed) return;
+
+      // Direct DOM: create <div data-chapter-id> and insert before first chapter
+      const doc = ctx.getDocument();
+      if (doc?.body) {
+        const chapterEl = doc.createElement("div");
+        chapterEl.setAttribute("data-chapter-id", ch.id);
+        chapterEl.className = "scroll-chapter";
+        chapterEl.innerHTML = processed.content;
+
+        const firstChapter = doc.querySelector<HTMLElement>("[data-chapter-id]");
+        if (firstChapter) {
+          doc.body.insertBefore(chapterEl, firstChapter);
+        } else {
+          doc.body.appendChild(chapterEl);
+        }
+      }
+
+      chapterWindowStart.value = newIdx;
+      if (doc?.body) {
+        syncSentinels(doc);
+        setupSentinelObservers();
+        refreshProgressObserver();
+      }
+
+      // Restore scroll after browser layout
+      requestAnimationFrame(() => {
+        if (pendingScrollRestore) {
+          pendingScrollRestore();
+          pendingScrollRestore = null;
+        }
+      });
+    } finally {
+      isLoadingMore.value = false;
+    }
+  }
+
+  /** Expand the window downward by one chapter — direct DOM appendChild. */
+  async function expandWindowDown(): Promise<void> {
+    if (isLoadingMore.value || chapterWindowEnd.value >= ctx.chapters.value.length - 1) return;
+    saveScrollPosition();
+    isLoadingMore.value = true;
+    try {
+      const newIdx = chapterWindowEnd.value + 1;
+      const ch = ctx.chapters.value[newIdx];
+      if (!ch) return;
+
+      // Load & process the single new chapter
+      if (!chapterLoader.isLoaded(ch.id)) {
+        await chapterLoader.loadChapter(ch.id);
+      }
+      await ensureChaptersProcessed(newIdx, newIdx);
+      const processed = processedChapters.get(ch.id);
+      if (!processed) return;
+
+      // Direct DOM: create <div data-chapter-id> and append after last chapter
+      const doc = ctx.getDocument();
+      if (doc?.body) {
+        const chapterEl = doc.createElement("div");
+        chapterEl.setAttribute("data-chapter-id", ch.id);
+        chapterEl.className = "scroll-chapter";
+        chapterEl.innerHTML = processed.content;
+
+        const lastChapter = doc.querySelector<HTMLElement>("[data-chapter-id]:last-of-type");
+        if (lastChapter && lastChapter.nextSibling) {
+          doc.body.insertBefore(chapterEl, lastChapter.nextSibling);
+        } else {
+          doc.body.appendChild(chapterEl);
+        }
+      }
+
+      chapterWindowEnd.value = newIdx;
+      if (doc?.body) {
+        syncSentinels(doc);
+        setupSentinelObservers();
+        refreshProgressObserver();
+      }
+
+      // Restore scroll after browser layout
+      requestAnimationFrame(() => {
+        if (pendingScrollRestore) {
+          pendingScrollRestore();
+          pendingScrollRestore = null;
+        }
+      });
+    } finally {
+      isLoadingMore.value = false;
+    }
+  }
+
+  /**
+   * Sync sentinel <div> elements in the iframe DOM with the current window
+   * position.  Removes stale sentinels and re-creates them at the correct
+   * positions.  A sentinel is only present when there are more chapters
+   * available in that direction.
+   */
+  function syncSentinels(doc: Document): void {
+    // Remove all existing sentinel elements
+    doc.querySelectorAll<HTMLElement>("[data-sentinel]").forEach((el) => el.remove());
+
+    const firstChapter = doc.querySelector<HTMLElement>("[data-chapter-id]");
+    const lastChapter = doc.querySelector<HTMLElement>("[data-chapter-id]:last-of-type");
+
+    // Top sentinel
+    if (chapterWindowStart.value > 0 && firstChapter) {
+      const top = doc.createElement("div");
+      top.setAttribute("data-sentinel", "top");
+      top.style.cssText = "height:1px;width:100%";
+      doc.body.insertBefore(top, firstChapter);
+    }
+
+    // Bottom sentinel
+    if (chapterWindowEnd.value < ctx.chapters.value.length - 1) {
+      const bottom = doc.createElement("div");
+      bottom.setAttribute("data-sentinel", "bottom");
+      bottom.style.cssText = "height:1px;width:100%";
+      if (lastChapter && lastChapter.nextSibling) {
+        doc.body.insertBefore(bottom, lastChapter.nextSibling);
+      } else {
+        doc.body.appendChild(bottom);
+      }
+    }
+  }
+
+  // ═══════════════════════════════════════════════════
+  //  Progress tracking (IntersectionObserver + scroll)
+  // ═══════════════════════════════════════════════════
 
   let progressObserver: IntersectionObserver | null = null;
   let visibleChapterId: string | null = null;
@@ -167,7 +460,44 @@ export function useScrollStrategy(ctx: StrategyContext): ReadingStrategy {
     };
   }
 
-  // ── Navigation ──
+  // ═══════════════════════════════════════════════════
+  //  Sentinel observers
+  // ═══════════════════════════════════════════════════
+
+  let sentinelObserver: IntersectionObserver | null = null;
+
+  /**
+   * Set up IntersectionObserver on the top/bottom sentinel <div> elements
+   * inside the iframe.  When a sentinel enters the viewport the corresponding
+   * window-expansion function is called.  The sentinel is only present when
+   * there are more chapters available in that direction.
+   */
+  function setupSentinelObservers(): void {
+    const doc = ctx.getDocument();
+    if (!doc) return;
+
+    sentinelObserver?.disconnect();
+    sentinelObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const type = (entry.target as HTMLElement).getAttribute("data-sentinel");
+          if (type === "top") void expandWindowUp();
+          else if (type === "bottom") void expandWindowDown();
+        }
+      },
+      { root: doc.documentElement, threshold: 0 },
+    );
+
+    const topSentinel = doc.querySelector<HTMLElement>('[data-sentinel="top"]');
+    const bottomSentinel = doc.querySelector<HTMLElement>('[data-sentinel="bottom"]');
+    if (topSentinel) sentinelObserver.observe(topSentinel);
+    if (bottomSentinel) sentinelObserver.observe(bottomSentinel);
+  }
+
+  // ═══════════════════════════════════════════════════
+  //  Navigation
+  // ═══════════════════════════════════════════════════
 
   async function navigateToChapter(
     chapterId: string,
@@ -178,7 +508,24 @@ export function useScrollStrategy(ctx: StrategyContext): ReadingStrategy {
     const previousChapterId = ctx.currentChapter.value?.id;
 
     try {
-      await chapterLoader.loadCurrentAndAdjacent(2);
+      const idx = ctx.chapters.value.findIndex((c) => c.id === chapterId);
+      if (idx < 0) return;
+
+      // Ensure target chapter is in the LRU cache
+      if (!chapterLoader.isLoaded(chapterId)) {
+        await chapterLoader.loadChapter(chapterId);
+      }
+
+      // Expand window so the target has a buffer of ±1 on each side
+      const buffer = 1;
+      if (idx < chapterWindowStart.value) {
+        chapterWindowStart.value = Math.max(0, idx - buffer);
+      }
+      if (idx > chapterWindowEnd.value) {
+        chapterWindowEnd.value = Math.min(ctx.chapters.value.length - 1, idx + buffer);
+      }
+
+      await fullRebuild();
       await nextTick();
 
       const doc = ctx.getDocument();
@@ -238,7 +585,9 @@ export function useScrollStrategy(ctx: StrategyContext): ReadingStrategy {
     }
   }
 
-  // ── Internal links ──
+  // ═══════════════════════════════════════════════════
+  //  Internal links
+  // ═══════════════════════════════════════════════════
 
   function chapterMatchesHref(chapter: Chapter, filePath: string): boolean {
     if (!chapter.href) return false;
@@ -291,15 +640,25 @@ export function useScrollStrategy(ctx: StrategyContext): ReadingStrategy {
     });
   }
 
-  // ── Iframe callbacks ──
+  // ═══════════════════════════════════════════════════
+  //  Iframe / lifecycle callbacks
+  // ═══════════════════════════════════════════════════
 
   function onIframeReady(doc: Document): void {
     setupProgressTracking(doc);
+    setupSentinelObservers();
     ctx.callbacks.onContentLoaded(ctx.currentChapter.value?.id ?? "");
   }
 
   function onChaptersChanged(): void {
     refreshProgressObserver();
+    setupSentinelObservers();
+    // Execute pending scroll restoration (set by expandWindowUp/Down)
+    // after the content update cycle has completed.
+    if (pendingScrollRestore) {
+      pendingScrollRestore();
+      pendingScrollRestore = null;
+    }
   }
 
   // ── Gesture ──
@@ -315,11 +674,27 @@ export function useScrollStrategy(ctx: StrategyContext): ReadingStrategy {
     return () => doc.removeEventListener("click", handleClick);
   }
 
-  // ── Lifecycle ──
+  // ═══════════════════════════════════════════════════
+  //  Lifecycle
+  // ═══════════════════════════════════════════════════
 
   async function activate(): Promise<void> {
-    await chapterLoader.loadCurrentAndAdjacent(2);
+    const idx = ctx.currentChapterIndex.value;
+    if (idx < 0) return;
+
+    // Initial window: current chapter ±1 so the user has content to scroll
+    // before hitting a sentinel.
+    chapterWindowStart.value = Math.max(0, idx - 1);
+    chapterWindowEnd.value = Math.min(ctx.chapters.value.length - 1, idx + 1);
+
+    // Ensure current chapter is in the LRU cache
+    if (!chapterLoader.isLoaded(ctx.chapters.value[idx].id)) {
+      await chapterLoader.loadChapter(ctx.chapters.value[idx].id);
+    }
+
+    await fullRebuild();
     await nextTick();
+
     const doc = ctx.getDocument();
     if (doc) {
       const chId = ctx.currentChapter.value?.id;
@@ -337,8 +712,14 @@ export function useScrollStrategy(ctx: StrategyContext): ReadingStrategy {
     progressCleanup = null;
     progressObserver?.disconnect();
     progressObserver = null;
+    sentinelObserver?.disconnect();
+    sentinelObserver = null;
     chapterLoader.reset();
+    processedChapters.clear();
     transformedLoadedContent.value = [];
+    chapterWindowStart.value = 0;
+    chapterWindowEnd.value = 0;
+    pendingScrollRestore = null;
   }
 
   return {
