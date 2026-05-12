@@ -25,6 +25,7 @@ const emit = defineEmits<{
 
 function handleNavigate(bookmark: Bookmark) {
   void session?.navigateToCfi(bookmark.cfi, bookmark.chapterId);
+  emit("close");
 }
 
 async function handleAdd() {

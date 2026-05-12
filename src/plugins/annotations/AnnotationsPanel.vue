@@ -14,6 +14,7 @@ const emit = defineEmits<{
 
 function handleNavigate(annotation: Annotation) {
   void session?.navigateToCfi(annotation.startCfi, annotation.chapterId);
+  emit("close");
 }
 
 function handleDelete(id: string) {
