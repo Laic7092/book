@@ -41,7 +41,7 @@ export interface ReaderState {
   chapters: Chapter[];
   currentChapterIndex: number;
   mode: "pagination" | "scroll";
-  status: "idle" | "loading-chapter" | "ready";
+  status: "idle" | "loading-chapter" | "rendered" | "ready";
 
   /** chapterId → processed HTML (pipeline output) */
   contentCache: Map<string, string>;
@@ -116,6 +116,11 @@ export type ReaderEffect =
   | { type: "EMIT"; event: string; payload: Record<string, unknown> }
   | { type: "PUSH_HISTORY"; entry: HistoryEntry }
   | { type: "SCROLL_INTO_VIEW"; chapterId: string }
+  | {
+      type: "MEASURE_LAYOUT";
+      /** The chapter whose content is in the DOM and needs measurement. */
+      chapterId: string;
+    }
   | { type: "NOOP" };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -262,21 +267,21 @@ function chapterLoadedReducer(
 
   const next: ReaderState = {
     ...state,
-    status: "ready",
+    status: "rendered",
     currentChapterIndex: chapterIdx,
     contentCache: newCache,
     resourceUrls: action.resourceUrls,
     page: {
       ...state.page,
       current: clampPage(state.page.pendingTarget, state.page.total),
-      total: 1, // will be updated by LAYOUT_MEASURED
+      total: 1,
     },
     error: null,
   };
 
   const effects: ReaderEffect[] = [
     { type: "RENDER_HTML", html: action.html },
-    { type: "SET_PAGE_CSS", page: next.page.current },
+    { type: "MEASURE_LAYOUT", chapterId: action.chapterId },
   ];
 
   // Add chapter change events if chapter actually changed
@@ -332,6 +337,7 @@ function layoutMeasuredReducer(
 
   const next: ReaderState = {
     ...state,
+    status: state.status === "rendered" ? "ready" : state.status,
     page: {
       current: resolvedPage,
       total: newTotal,
@@ -401,10 +407,9 @@ function nextPageReducer(state: ReaderState): { state: ReaderState; effects: Rea
   const cached = state.contentCache.get(nextChapter.id);
 
   if (cached) {
-    // Next chapter already cached — instant transition
     const next: ReaderState = {
       ...state,
-      status: "ready",
+      status: "rendered",
       currentChapterIndex: nextIdx,
       page: {
         current: 0,
@@ -418,7 +423,7 @@ function nextPageReducer(state: ReaderState): { state: ReaderState; effects: Rea
     const previousChapterId = getChapterId(state);
     const effects: ReaderEffect[] = [
       { type: "RENDER_HTML", html: cached },
-      { type: "SET_PAGE_CSS", page: 0 },
+      { type: "MEASURE_LAYOUT", chapterId: nextChapter.id },
       ...chapterChangeEffects(next, nextChapter.id, previousChapterId ?? undefined),
     ];
     return { state: next, effects };
@@ -475,11 +480,9 @@ function prevPageReducer(state: ReaderState): { state: ReaderState; effects: Rea
   const cached = state.contentCache.get(prevChapter.id);
 
   if (cached) {
-    // Content is cached, but we don't know total pages until LAYOUT_MEASURED.
-    // Set pendingTarget = -1 (last page), render, and let LAYOUT_MEASURED resolve.
     const next: ReaderState = {
       ...state,
-      status: "ready",
+      status: "rendered",
       currentChapterIndex: prevIdx,
       page: {
         current: 0,
@@ -491,7 +494,7 @@ function prevPageReducer(state: ReaderState): { state: ReaderState; effects: Rea
     const previousChapterId = getChapterId(state);
     const effects: ReaderEffect[] = [
       { type: "RENDER_HTML", html: cached },
-      { type: "SET_PAGE_CSS", page: 0 },
+      { type: "MEASURE_LAYOUT", chapterId: prevChapter.id },
       ...chapterChangeEffects(next, prevChapter.id, previousChapterId ?? undefined),
     ];
     return { state: next, effects };
@@ -523,7 +526,7 @@ function goToChapterReducer(
   if (cached) {
     const next: ReaderState = {
       ...state,
-      status: "ready",
+      status: "rendered",
       currentChapterIndex: idx,
       page: {
         current: 0,
@@ -537,7 +540,7 @@ function goToChapterReducer(
 
     const effects: ReaderEffect[] = [
       { type: "RENDER_HTML", html: cached },
-      { type: "SET_PAGE_CSS", page: 0 },
+      { type: "MEASURE_LAYOUT", chapterId: action.chapterId },
     ];
     if (previousChapterId !== action.chapterId) {
       effects.push(...chapterChangeEffects(next, action.chapterId, previousChapterId ?? undefined));

@@ -31,6 +31,7 @@ const { isReady, initIframe, getDocument, getArticle, cleanup } = useIframeRende
 // ── Column measurement (pagination mode only) ──
 
 let resizeObserver: ResizeObserver | null = null;
+let mutationObserver: MutationObserver | null = null;
 let columnMeasureTimer: ReturnType<typeof setTimeout> | null = null;
 
 function measureColumns() {
@@ -51,15 +52,25 @@ function measureColumns() {
   }, 150);
 }
 
-function setupResizeObserver() {
+function setupObservers() {
   if (!iframeRef.value) return;
   const doc = getDocument();
   if (!doc?.body) return;
 
+  // ResizeObserver: viewport / iframe size changes
   resizeObserver = new ResizeObserver(() => {
     if (props.isPaginationMode) measureColumns();
   });
   resizeObserver.observe(doc.body);
+
+  // MutationObserver: innerHTML replacement by the bridge on chapter switch.
+  // ResizeObserver doesn't fire here because body's content-box is fixed
+  // (100dvh × 100dvw) — only scrollWidth changes, which ResizeObserver
+  // doesn't observe.
+  mutationObserver = new MutationObserver(() => {
+    if (props.isPaginationMode) measureColumns();
+  });
+  mutationObserver.observe(doc.body, { childList: true });
 }
 
 // ── Iframe lifecycle ──
@@ -80,12 +91,13 @@ onMounted(() => {
     iframeRef.value?.addEventListener("load", handleLoad, { once: true });
   }
 
-  setupResizeObserver();
+  setupObservers();
 });
 
 onUnmounted(() => {
   cleanup();
   resizeObserver?.disconnect();
+  mutationObserver?.disconnect();
   if (columnMeasureTimer) clearTimeout(columnMeasureTimer);
 });
 

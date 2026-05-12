@@ -79,8 +79,6 @@ function goToPage(pageNum: number) {
       order: pageNum - 1,
     };
   }
-  readerStore.chapterProgress = 0;
-  readerStore.readingProgress = 0;
 
   requestAnimationFrame(() => {
     isTransitioning.value = false;

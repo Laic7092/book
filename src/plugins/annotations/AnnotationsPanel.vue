@@ -2,9 +2,10 @@
 import { computed, ref } from "vue";
 import type { Annotation } from "../../core/types";
 import ModalHeader from "../../components/modals/ModalHeader.vue";
-import { useAnnotationStore, useAnnotationFilters } from "./index";
+import { useAnnotationStore, useAnnotationFilters, getAnnotationSession } from "./index";
 
 const store = useAnnotationStore();
+const session = getAnnotationSession();
 const { currentBookId } = useAnnotationFilters();
 
 const emit = defineEmits<{
@@ -12,7 +13,7 @@ const emit = defineEmits<{
 }>();
 
 function handleNavigate(annotation: Annotation) {
-  host?.navigateToCfi(annotation.startCfi, annotation.chapterId);
+  void session?.navigateToCfi(annotation.startCfi, annotation.chapterId);
 }
 
 function handleDelete(id: string) {
@@ -44,7 +45,9 @@ const groupedByChapter = computed(() => {
     if (!group) {
       group = {
         chapterId: ann.chapterId,
-        title: host?.getChapters().find((c) => c.id === ann.chapterId)?.title ?? "Unknown Chapter",
+        title:
+          session?.getState().chapters.find((c) => c.id === ann.chapterId)?.title ??
+          "Unknown Chapter",
         annotations: [],
       };
       groups.push(group);

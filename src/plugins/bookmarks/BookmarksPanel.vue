@@ -24,7 +24,7 @@ const emit = defineEmits<{
 }>();
 
 function handleNavigate(bookmark: Bookmark) {
-  host?.navigateToCfi(bookmark.cfi, bookmark.chapterId);
+  void session?.navigateToCfi(bookmark.cfi, bookmark.chapterId);
 }
 
 async function handleAdd() {

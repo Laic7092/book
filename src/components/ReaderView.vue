@@ -20,7 +20,16 @@ const readerContentRef = ref<ReaderContentAPI | null>(null);
 const engine = useReaderMachine(
   computed(() => props.book.id),
   readerContentRef,
+  {
+    chapters: readerStore.chapters,
+    initialChapterId: readerStore.currentChapter?.id,
+  },
 );
+
+const currentChapterTitle = computed(() => {
+  const s = engine.state.value;
+  return s.chapters[s.currentChapterIndex]?.title;
+});
 
 function handleClose() {
   uiStore.setTransitioning(true);
@@ -55,7 +64,7 @@ function closeModal() {
     <!-- ── Chrome layer (z: 200) ── -->
     <ReaderHeader
       :book-title="book.title"
-      :chapter-title="readerStore.currentChapter?.title"
+      :chapter-title="currentChapterTitle"
       :show-controls="uiStore.effectiveShowControls"
       @close="handleClose"
     />
@@ -66,22 +75,28 @@ function closeModal() {
       :current-page="engine.currentPage.value"
       :total-pages="engine.totalPages.value"
       :book-progress="engine.totalBookProgress.value"
-      :current-chapter-title="readerStore.currentChapter?.title || ''"
+      :current-chapter-title="currentChapterTitle || ''"
       :can-go-to-prev-chapter="engine.currentChapterIndex.value > 0"
-      :can-go-to-next-chapter="engine.currentChapterIndex.value < readerStore.chapters.length - 1"
+      :can-go-to-next-chapter="
+        engine.currentChapterIndex.value < engine.state.value.chapters.length - 1
+      "
       @prev-page="engine.prevPage"
       @next-page="engine.nextPage"
       @prev-chapter="
-        engine.handleSelectChapter(readerStore.chapters[engine.currentChapterIndex.value - 1]?.id)
+        engine.handleSelectChapter(
+          engine.state.value.chapters[engine.currentChapterIndex.value - 1]?.id,
+        )
       "
       @next-chapter="
-        engine.handleSelectChapter(readerStore.chapters[engine.currentChapterIndex.value + 1]?.id)
+        engine.handleSelectChapter(
+          engine.state.value.chapters[engine.currentChapterIndex.value + 1]?.id,
+        )
       "
       @open-modal="openModal"
     />
 
     <button
-      v-show="uiStore.showControls && engine.navStack.canGoBack.value"
+      v-show="uiStore.showControls && engine.canGoBack.value"
       class="history-btn history-back"
       @click.stop="engine.handleHistoryBack"
       aria-label="Go back"
@@ -100,7 +115,7 @@ function closeModal() {
       </svg>
     </button>
     <button
-      v-show="uiStore.showControls && engine.navStack.canGoForward.value"
+      v-show="uiStore.showControls && engine.canGoForward.value"
       class="history-btn history-forward"
       @click.stop="engine.handleHistoryForward"
       aria-label="Go forward"
@@ -123,8 +138,8 @@ function closeModal() {
 
     <ModalWrapper
       :modal-type="uiStore.activeModal"
-      :chapters="readerStore.chapters"
-      :current-chapter-id="readerStore.currentChapter?.id ?? null"
+      :chapters="engine.state.value.chapters"
+      :current-chapter-id="engine.currentChapterId.value"
       @close="closeModal"
       @select-chapter="engine.handleSelectChapter"
     />

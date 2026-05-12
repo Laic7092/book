@@ -7,6 +7,7 @@ import { getParsers, getParserForFormat } from "../plugins/manager/registry";
 import { loadPluginsFor, loadParserForFormat } from "../plugins/loader";
 import { pluginEvents } from "../plugins/context";
 import * as booksStore from "../storage/books";
+import { setCurrentParser } from "../core/reader-context";
 import { assertValidBookFile, validateBookId } from "../utils/validation";
 
 const EXTENSION_MIME_MAP: Record<string, string> = {
@@ -40,11 +41,6 @@ export interface ReaderState {
   currentChapter: Chapter | null;
   currentParser: BookParser | null;
   chapters: Chapter[];
-  isLoading: boolean;
-  error: string | null;
-  resourceUrls: Map<string, string> | undefined;
-  readingProgress: number;
-  chapterProgress: number;
 }
 
 export const useReaderStore = defineStore("reader", {
@@ -53,217 +49,92 @@ export const useReaderStore = defineStore("reader", {
     currentChapter: null,
     currentParser: null,
     chapters: [],
-    isLoading: false,
-    error: null,
-    resourceUrls: undefined,
-    readingProgress: 0,
-    chapterProgress: 0,
   }),
-
-  getters: {
-    isBookOpen: (state) => state.currentBook !== null,
-  },
 
   actions: {
     async loadBook(file: File): Promise<{ book: Book; chapters: Chapter[] }> {
       assertValidBookFile(file);
-      this.isLoading = true;
-      this.error = null;
 
-      try {
-        // Load only the parser for this file's format instead of all parsers
-        const ext = file.name.split(".").pop()?.toLowerCase();
-        const format = ext && ext in EXTENSION_MIME_MAP ? ext : null;
-        if (format) {
-          await loadParserForFormat(format);
-        }
-        const parser = getParserForFile(file);
-        if (!parser) {
-          throw createReaderError(
-            `Unsupported file format: ${file.type || file.name}`,
-            ErrorCode.UNSUPPORTED_FORMAT,
-          );
-        }
-
-        const parsedBook: ParsedBook = await parser.parse(file);
-        await booksStore.saveBook(parsedBook, parser);
-
-        return { book: parsedBook.book, chapters: parsedBook.chapters };
-      } catch (error) {
-        this.error = error instanceof Error ? error.message : "Failed to load book";
-        throw error;
-      } finally {
-        this.isLoading = false;
+      const ext = file.name.split(".").pop()?.toLowerCase();
+      const format = ext && ext in EXTENSION_MIME_MAP ? ext : null;
+      if (format) {
+        await loadParserForFormat(format);
       }
+      const parser = getParserForFile(file);
+      if (!parser) {
+        throw createReaderError(
+          `Unsupported file format: ${file.type || file.name}`,
+          ErrorCode.UNSUPPORTED_FORMAT,
+        );
+      }
+
+      const parsedBook: ParsedBook = await parser.parse(file);
+      await booksStore.saveBook(parsedBook, parser);
+
+      return { book: parsedBook.book, chapters: parsedBook.chapters };
     },
 
     async openBook(bookId: string): Promise<{ book: Book; chapters: Chapter[] }> {
       validateBookId(bookId);
-      this.isLoading = true;
-      this.error = null;
 
-      if (this.resourceUrls) {
-        this.currentParser?.revokeResourceUrls?.(this.resourceUrls);
-        this.resourceUrls = undefined;
+      const book = await booksStore.getBook(bookId);
+      if (!book) {
+        throw createReaderError("Book not found", ErrorCode.BOOK_NOT_FOUND);
       }
 
-      try {
-        const book = await booksStore.getBook(bookId);
-        if (!book) {
-          throw createReaderError("Book not found", ErrorCode.BOOK_NOT_FOUND);
-        }
+      await loadPluginsFor("reader");
+      await loadParserForFormat(book.format);
 
-        await loadPluginsFor("reader");
-        // Load only the parser matching the book's format
-        await loadParserForFormat(book.format);
-
-        const parser = getParserForFormat(book.format);
-        if (!parser) {
-          throw createReaderError(
-            `No parser available for format "${book.format}". The corresponding plugin may be disabled.`,
-            ErrorCode.UNSUPPORTED_FORMAT,
-          );
-        }
-        const chaptersData = await booksStore.getChapters(bookId);
-
-        const chapters: Chapter[] = chaptersData.map((ch) => ({
-          id: ch.id,
-          bookId,
-          title: ch.title,
-          order: ch.order,
-          href: ch.href,
-          inToc: ch.inToc,
-        }));
-
-        this.currentParser = parser;
-        this.chapters = chapters;
-        this.resourceUrls = new Map();
-
-        await booksStore.updateLastRead(bookId);
-        this.currentChapter = chapters.length > 0 ? chapters[0] : null;
-
-        this.currentBook = book;
-
-        void pluginEvents.emit("book:opened", { bookId });
-
-        return { book, chapters };
-      } catch (error) {
-        this.error = error instanceof Error ? error.message : "Failed to open book";
-        throw error;
-      } finally {
-        this.isLoading = false;
+      const parser = getParserForFormat(book.format);
+      if (!parser) {
+        throw createReaderError(
+          `No parser available for format "${book.format}". The corresponding plugin may be disabled.`,
+          ErrorCode.UNSUPPORTED_FORMAT,
+        );
       }
-    },
+      const chaptersData = await booksStore.getChapters(bookId);
 
-    async goToChapter(chapterId: string): Promise<string> {
-      if (!this.currentBook) {
-        throw createReaderError("No book loaded", ErrorCode.NO_BOOK_LOADED);
-      }
+      const chapters: Chapter[] = chaptersData.map((ch) => ({
+        id: ch.id,
+        bookId,
+        title: ch.title,
+        order: ch.order,
+        href: ch.href,
+        inToc: ch.inToc,
+      }));
 
-      const chapter = this.chapters.find((c) => c.id === chapterId);
-      if (!chapter) {
-        throw createReaderError("Chapter not found", ErrorCode.CHAPTER_NOT_FOUND);
-      }
+      this.currentParser = parser;
+      setCurrentParser(parser);
+      this.chapters = chapters;
 
-      const content = await booksStore.getChapterContent(this.currentBook.id, chapterId);
+      await booksStore.updateLastRead(bookId);
+      this.currentChapter = chapters.length > 0 ? chapters[0] : null;
 
-      if (content === undefined) {
-        throw createReaderError("Chapter content not found", ErrorCode.CHAPTER_CONTENT_NOT_FOUND);
-      }
+      this.currentBook = book;
 
-      this.currentChapter = chapter;
-      this.chapterProgress = 0;
-      this.readingProgress = 0;
+      void pluginEvents.emit("book:opened", { bookId });
 
-      return content;
-    },
-
-    async nextChapter(): Promise<string | null> {
-      if (!this.currentChapter || !this.currentBook) return null;
-
-      const currentIndex = this.chapters.findIndex((c) => c.id === this.currentChapter!.id);
-      const nextChapter = this.chapters[currentIndex + 1];
-      if (nextChapter) return this.goToChapter(nextChapter.id);
-      return null;
-    },
-
-    async prevChapter(): Promise<string | null> {
-      if (!this.currentChapter || !this.currentBook) return null;
-
-      const currentIndex = this.chapters.findIndex((c) => c.id === this.currentChapter!.id);
-      const prevChapter = this.chapters[currentIndex - 1];
-      if (prevChapter) return this.goToChapter(prevChapter.id);
-      return null;
-    },
-
-    updateProgress(reading: number, chapter: number): void {
-      this.readingProgress = reading;
-      this.chapterProgress = chapter;
+      return { book, chapters };
     },
 
     async closeBook(): Promise<void> {
       const bookId = this.currentBook?.id;
       const chapterId = this.currentChapter?.id;
-      const urls = this.resourceUrls;
-      const parser = this.currentParser;
 
-      // Reset UI immediately
       this.currentBook = null;
       this.currentChapter = null;
       this.currentParser = null;
+      setCurrentParser(null);
       this.chapters = [];
-      this.resourceUrls = undefined;
-      this.readingProgress = 0;
-      this.chapterProgress = 0;
 
-      // Plugins listen to this event
       if (bookId) {
         void pluginEvents.emit("book:closed", { bookId, chapterId });
-      }
-
-      // Background cleanup
-      if (urls) {
-        parser?.revokeResourceUrls?.(urls);
       }
     },
 
     reset() {
-      if (this.resourceUrls) {
-        this.currentParser?.revokeResourceUrls?.(this.resourceUrls);
-      }
+      setCurrentParser(null);
       this.$reset();
-    },
-
-    getCurrentChapter() {
-      return this.currentChapter;
-    },
-
-    getCurrentBook() {
-      return this.currentBook;
-    },
-
-    async getCurrentChapterContent(): Promise<{
-      html: string;
-      resources: HTMLElement[];
-    } | null> {
-      if (!this.currentBook || !this.currentChapter) return null;
-
-      const content = await booksStore.getChapterContent(
-        this.currentBook.id,
-        this.currentChapter.id,
-      );
-      if (!content) return null;
-
-      const { resolveChapterResources } = await import("../reader-engine/resource-resolver");
-
-      if (!this.resourceUrls) this.resourceUrls = new Map();
-
-      return resolveChapterResources(
-        content,
-        this.currentBook.id,
-        this.currentParser!,
-        this.resourceUrls,
-      );
     },
   },
 });

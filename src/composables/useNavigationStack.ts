@@ -5,6 +5,61 @@ export interface NavEntry {
   page: number;
 }
 
+export interface NavSnapshot {
+  canGoBack: boolean;
+  canGoForward: boolean;
+  currentEntry: NavEntry | null;
+  stack: readonly NavEntry[];
+  idx: number;
+}
+
+/**
+ * Pure-TS navigation stack. Can be used standalone (no Vue dependency) by
+ * calling push/back/forward/reset and reading getSnapshot().
+ */
+export class NavigationStack {
+  private _stack: NavEntry[] = [];
+  private _idx = -1;
+
+  push(entry: NavEntry): void {
+    const top = this._stack[this._idx];
+    if (top && top.chapterId === entry.chapterId && top.page === entry.page) return;
+    this._stack = [...this._stack.slice(0, this._idx + 1), entry];
+    this._idx = this._stack.length - 1;
+  }
+
+  back(): NavEntry | null {
+    if (this._idx <= 0) return null;
+    this._idx--;
+    return this._stack[this._idx];
+  }
+
+  forward(): NavEntry | null {
+    if (this._idx >= this._stack.length - 1) return null;
+    this._idx++;
+    return this._stack[this._idx];
+  }
+
+  reset(): void {
+    this._stack = [];
+    this._idx = -1;
+  }
+
+  getSnapshot(): NavSnapshot {
+    return {
+      canGoBack: this._idx > 0,
+      canGoForward: this._idx < this._stack.length - 1,
+      currentEntry: this._stack[this._idx] ?? null,
+      stack: this._stack,
+      idx: this._idx,
+    };
+  }
+}
+
+/**
+ * Vue composable wrapper around NavigationStack.
+ * Returns the same interface as before for backward compatibility.
+ */
 export function useNavigationStack() {
   const stack = ref<NavEntry[]>([]);
   const idx = ref(-1);

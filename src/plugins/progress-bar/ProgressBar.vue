@@ -1,21 +1,30 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { ref, onMounted, onUnmounted } from "vue";
+import { pluginEvents } from "../context";
 import { getProgressBarSession } from "./index";
-const session = getProgressBarSession();
 
-const currentPage = computed(() => session?.getState().page.current ?? 0);
-const totalPages = computed(() => session?.getState().page.total ?? 0);
+const width = ref("0%");
 
-const progress = computed(() => {
-  const total = totalPages.value;
-  if (total <= 1) return 100;
-  return ((currentPage.value + 1) / total) * 100;
+function update() {
+  const s = getProgressBarSession()?.getState();
+  if (!s) return;
+  width.value = `${s.chapterProgress}%`;
+}
+
+const unsubPage = pluginEvents.on("page:changed", update);
+const unsubChapter = pluginEvents.on("chapter:changed", update);
+
+onMounted(update);
+
+onUnmounted(() => {
+  unsubPage();
+  unsubChapter();
 });
 </script>
 
 <template>
   <div class="progress-bar-container">
-    <div class="progress-bar" :style="{ width: `${progress}%` }"></div>
+    <div class="progress-bar" :style="{ width }"></div>
   </div>
 </template>
 

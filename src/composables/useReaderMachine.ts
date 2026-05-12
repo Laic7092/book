@@ -9,9 +9,8 @@ import {
   type ReaderEffect,
 } from "../reader-engine/reader-machine";
 import { processChapterHtml } from "../reader-engine/content-pipeline";
-import { useReaderStore } from "../stores/reader";
 import { useUIStore } from "../stores/ui";
-import { useNavigationStack } from "./useNavigationStack";
+import { NavigationStack } from "./useNavigationStack";
 import {
   getOverlayComponents,
   getHeaderActions,
@@ -25,8 +24,11 @@ import {
   unregisterReaderSession,
   type ReaderSession,
 } from "../core/reader-host";
+import { getCurrentParser } from "../core/reader-context";
 import { TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../config/constants";
+import { parseCfi, resolveCfiToElement } from "../utils/epub-cfi";
 import * as booksStore from "../storage/books";
+import type { Chapter } from "../core/types";
 
 export interface ReaderContentAPI {
   getDocument?(): Document | null;
@@ -44,10 +46,10 @@ export type { ReaderState, ReaderAction, ReaderEffect };
 export function useReaderMachine(
   bookId: Ref<string>,
   readerContentRef: Ref<ReaderContentAPI | null>,
+  options: { chapters: Chapter[]; initialChapterId?: string | null },
 ) {
-  const readerStore = useReaderStore();
   const uiStore = useUIStore();
-  const navStack = useNavigationStack();
+  const navStack = new NavigationStack();
 
   // ── Create machine + reactive state ──
   const machine = createReaderMachine();
@@ -55,6 +57,12 @@ export function useReaderMachine(
   const unsubMachine = machine.subscribe((s) => {
     state.value = s;
   });
+
+  // ── Nav snapshot (reactive wrapper around plain NavigationStack) ──
+  const navSnapshot = shallowRef(navStack.getSnapshot());
+  function syncNavSnapshot() {
+    navSnapshot.value = navStack.getSnapshot();
+  }
 
   // ── Per-render ephemeral state ──
   const pageMargin = ref(24);
@@ -96,6 +104,9 @@ export function useReaderMachine(
     return false;
   });
 
+  const canGoBack = computed(() => navSnapshot.value.canGoBack);
+  const canGoForward = computed(() => navSnapshot.value.canGoForward);
+
   // ── Effect runner ──
   function getIframeDoc(): Document | null {
     return readerContentRef.value?.getDocument?.() ?? null;
@@ -116,7 +127,7 @@ export function useReaderMachine(
 
         // Resolve EPUB resources (mutates currentUrls in-place)
         const currentUrls = new Map(state.value.resourceUrls);
-        const parser = readerStore.currentParser;
+        const parser = getCurrentParser();
         let html = rawHtml;
         let resources: HTMLElement[] = [];
 
@@ -202,6 +213,7 @@ export function useReaderMachine(
 
       case "PUSH_HISTORY": {
         navStack.push(effect.entry);
+        syncNavSnapshot();
         break;
       }
 
@@ -210,6 +222,23 @@ export function useReaderMachine(
         if (!doc) return;
         const el = doc.querySelector<HTMLElement>(`[data-chapter-id="${effect.chapterId}"]`);
         if (el) el.scrollIntoView({ behavior: "instant", block: "start" });
+        break;
+      }
+
+      case "MEASURE_LAYOUT": {
+        const doc = getIframeDoc();
+        if (doc?.body) {
+          const contentWidth = doc.body.scrollWidth;
+          const iframeWidth = doc.documentElement.clientWidth || state.value.page.iframeWidth;
+          if (contentWidth > 0 && iframeWidth > 0) {
+            dispatch({ type: "LAYOUT_MEASURED", contentWidth, iframeWidth });
+            break;
+          }
+        }
+        // Measurement not possible (iframe not ready), reset to first page
+        if (doc?.documentElement) {
+          doc.documentElement.style.setProperty("--current-page", "0");
+        }
         break;
       }
 
@@ -240,6 +269,7 @@ export function useReaderMachine(
 
   function handleHistoryBack() {
     const entry = navStack.back();
+    syncNavSnapshot();
     if (!entry) return;
     if (entry.chapterId === currentChapterId.value) {
       dispatch({ type: "GO_TO_PAGE", page: entry.page });
@@ -250,6 +280,7 @@ export function useReaderMachine(
 
   function handleHistoryForward() {
     const entry = navStack.forward();
+    syncNavSnapshot();
     if (!entry) return;
     if (entry.chapterId === currentChapterId.value) {
       dispatch({ type: "GO_TO_PAGE", page: entry.page });
@@ -369,13 +400,13 @@ export function useReaderMachine(
 
   // ── Lifecycle ──
   function initMachine() {
-    const chapters = readerStore.chapters;
-    const initialChapterId = readerStore.currentChapter?.id;
-    const initialIdx = initialChapterId ? chapters.findIndex((c) => c.id === initialChapterId) : 0;
+    const initialIdx = options.initialChapterId
+      ? options.chapters.findIndex((c) => c.id === options.initialChapterId)
+      : 0;
     dispatch({
       type: "INIT",
       bookId: bookId.value,
-      chapters,
+      chapters: options.chapters,
       chapterIndex: Math.max(0, initialIdx),
       mode: readingMode.value === "vertical" ? "scroll" : "pagination",
     });
@@ -410,6 +441,62 @@ export function useReaderMachine(
     navStack.reset();
   });
 
+  // ── CFI navigation ──
+
+  async function navigateToCfiLocation(cfi: string, chapterId: string) {
+    const parsed = parseCfi(cfi);
+
+    let targetChapter: Chapter | undefined;
+    if (parsed) {
+      targetChapter = state.value.chapters.find((c) => c.order === parsed.spineIndex);
+    }
+    if (!targetChapter) {
+      targetChapter = state.value.chapters.find((c) => c.id === chapterId);
+    }
+    if (!targetChapter) return;
+
+    if (targetChapter.id !== currentChapterId.value) {
+      dispatch({ type: "GO_TO_CHAPTER", chapterId: targetChapter.id });
+      // GO_TO_CHAPTER → RENDER_HTML → MEASURE_LAYOUT → LAYOUT_MEASURED
+      // all run synchronously within dispatch(). When status === "ready",
+      // both the DOM and page.total are correct.
+      await new Promise<void>((resolve) => {
+        const stop = watch(
+          () => state.value.status,
+          (status) => {
+            if (status === "ready") {
+              stop();
+              resolve();
+            }
+          },
+        );
+      });
+    }
+
+    if (!parsed) return;
+
+    const doc = getIframeDoc();
+    if (!doc?.body) return;
+
+    if (state.value.mode === "pagination") {
+      const element = resolveCfiToElement(cfi, doc.body);
+      if (element) {
+        const bodyRect = doc.body.getBoundingClientRect();
+        const elRect = element.getBoundingClientRect();
+        const offset = elRect.left - bodyRect.left;
+        const step = state.value.page.iframeWidth || doc.documentElement.clientWidth;
+        if (step > 0) {
+          dispatch({ type: "GO_TO_PAGE", page: Math.floor(offset / step) });
+        }
+      }
+    } else {
+      const element = resolveCfiToElement(cfi, doc.body);
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+  }
+
   // ── ReaderSession (registered globally for plugins) ──
   const session: ReaderSession = {
     getDocument: getIframeDoc,
@@ -419,6 +506,7 @@ export function useReaderMachine(
       pageMargin.value = margin;
       void runEffect({ type: "SET_PAGE_MARGIN_CSS", margin });
     },
+    navigateToCfi: (cfi: string, chapterId: string) => navigateToCfiLocation(cfi, chapterId),
   };
 
   return {
@@ -432,6 +520,7 @@ export function useReaderMachine(
     pageMargin,
     isTransitioning,
     isRestoring,
+    currentChapterId,
     currentChapterIndex,
     isPaginationMode,
     chapterProgress,
@@ -440,24 +529,23 @@ export function useReaderMachine(
     chapterLoading,
     overlayComponents,
     headerActions,
+    canGoBack,
+    canGoForward,
     handleSelectChapter,
     nextPage,
     prevPage,
     handleHistoryBack,
     handleHistoryForward,
-    navStack,
     handleInternalLinkClick,
     handleColumnLayout,
     handleIframeReady,
     currentPage,
     totalPages,
+    navigateToCfiLocation,
     // For backward compat
     reloadForPagination: () => {
       const chId = currentChapterId.value;
       if (chId) dispatch({ type: "GO_TO_CHAPTER", chapterId: chId });
-    },
-    navigateToCfiLocation: (_cfi: string, _chapterId: string) => {
-      // CFI navigation will be re-implemented on top of the machine
     },
   };
 }

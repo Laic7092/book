@@ -15,6 +15,7 @@ export interface ReaderSession {
   getState(): ReaderState;
   getDocument(): Document | null;
   setPageMargin(margin: number): void;
+  navigateToCfi(cfi: string, chapterId: string): Promise<void>;
 }
 
 let currentSession: ReaderSession | null = null;

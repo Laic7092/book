@@ -22,59 +22,72 @@ export const readingProgressPlugin: Plugin = {
   name: "Reading Progress",
   version: "1.0.0",
   setup(ctx) {
-    const unsubs: (() => void)[] = [];
+    const unsubs: Set<() => void> = new Set();
 
+    let mounted = false;
     async function save(bookId: string) {
+      if (!mounted) return;
       const h = ctx.readerSession();
       if (!h) return;
       const s = h.getState();
       const chapter = s.chapters[s.currentChapterIndex];
       if (!chapter) return;
-      const page = s.page.current;
-      const total = s.page.total;
-      const chapterIndex = s.chapters.findIndex((c) => c.id === chapter.id);
-      const chapterPortion = 100 / Math.max(1, s.chapters.length);
-      const chapterProgress = total > 1 ? Math.round(((page + 1) / total) * 100) : 0;
-      const readingProgress = Math.round(
-        chapterIndex * chapterPortion + (chapterProgress / 100) * chapterPortion,
-      );
 
       await ctx.storage.put(progressKey(bookId), {
         chapterId: chapter.id,
-        chapterProgress,
-        readingProgress,
-        pageIndex: page,
+        chapterProgress: s.chapterProgress,
+        readingProgress: s.bookProgress,
+        pageIndex: s.page.current,
       });
     }
 
     async function restore(bookId: string) {
       const data = await ctx.storage.get<ProgressData>(progressKey(bookId));
-      if (!data) return;
+      if (!data) {
+        return;
+      }
       const h = ctx.readerSession();
-      if (!h) return;
-      h.dispatch({ type: "GO_TO_CHAPTER", chapterId: data.chapterId, targetPage: data.pageIndex });
+      if (!h) {
+        return;
+      }
+      const s = h.getState();
+      const currentChapterId = s.chapters[s.currentChapterIndex]?.id;
+
+      if (data.chapterId === currentChapterId) {
+        h.dispatch({ type: "GO_TO_PAGE", page: data.pageIndex });
+      } else {
+        h.dispatch({
+          type: "GO_TO_CHAPTER",
+          chapterId: data.chapterId,
+          targetPage: data.pageIndex,
+        });
+      }
     }
 
+    const subs = [
+      ctx.events.on("page:changed", ({ bookId }) => {
+        void save(bookId);
+      }),
+      ctx.events.on("chapter:changed", ({ bookId }) => {
+        void save(bookId);
+      }),
+      ctx.events.on("reader:unmounted", ({ bookId }) => {
+        void save(bookId);
+        mounted = false;
+      }),
+    ];
+
     ctx.events.on("reader:mounted", async ({ bookId }) => {
+      subs.forEach((sub) => unsubs.add(sub));
+
       await restore(bookId);
 
-      // Subscribe to save events only after restore is done
-      unsubs.push(
-        ctx.events.on("page:changed", ({ bookId }) => {
-          void save(bookId);
-        }),
-        ctx.events.on("chapter:changed", ({ bookId }) => {
-          void save(bookId);
-        }),
-        ctx.events.on("reader:unmounted", ({ bookId }) => {
-          void save(bookId);
-        }),
-      );
+      mounted = true;
     });
 
     ctx.onCleanup(() => {
       unsubs.forEach((fn) => fn());
-      unsubs.length = 0;
+      unsubs.clear();
     });
   },
 };
