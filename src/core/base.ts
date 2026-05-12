@@ -7,7 +7,15 @@ import { ErrorCode, createReaderError } from "./errors";
  * Generate a unique ID
  */
 export function generateId(prefix = ""): string {
-  const id = crypto.randomUUID().replace(/-/g, "");
+  let id: string;
+  if (crypto.randomUUID) {
+    id = crypto.randomUUID().replace(/-/g, "");
+  } else {
+    // 时间戳 + 随机数组合
+    const timestamp = Date.now().toString(36);
+    const randomPart = Math.random().toString(36).substring(2, 10);
+    id = timestamp + randomPart;
+  }
   return prefix ? `${prefix}_${id}` : id;
 }
 

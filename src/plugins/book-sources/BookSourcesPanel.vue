@@ -557,7 +557,7 @@ function goBack() {
   padding: 10px 14px;
   border: 1px solid var(--border-color);
   border-radius: 10px;
-  font-size: 14px;
+  font-size: 16px;
   background: var(--bg-secondary);
   color: var(--text-primary);
 }
@@ -627,7 +627,7 @@ function goBack() {
   padding: 8px 12px;
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  font-size: 13px;
+  font-size: 16px;
   background: var(--bg-secondary);
   color: var(--text-primary);
 }

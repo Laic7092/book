@@ -398,7 +398,7 @@ const formatLabel = (type: string, title?: string): string => {
   border: none;
   background: transparent;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: 16px;
   font-family: var(--font-ui);
   outline: none;
 }
