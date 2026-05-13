@@ -1,9 +1,16 @@
 <script setup lang="ts">
 import { computed, ref, nextTick } from "vue";
-import { getFooterActions, pluginStateVersion } from "../../plugins/manager/registry";
+import { useUIStore } from "../../stores/ui";
+import {
+  getHeaderActions,
+  getFooterActions,
+  getToolbarItems,
+  pluginStateVersion,
+} from "../../plugins/manager/registry";
 
 defineProps<{
-  showControls: boolean;
+  bookTitle: string;
+  chapterTitle?: string;
   isPaginationMode: boolean;
   currentPage: number;
   totalPages: number;
@@ -14,6 +21,7 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{
+  (e: "close"): void;
   (e: "prev-page"): void;
   (e: "next-page"): void;
   (e: "prev-chapter"): void;
@@ -21,7 +29,13 @@ const emit = defineEmits<{
   (e: "open-modal", modal: string): void;
 }>();
 
+const uiStore = useUIStore();
 const showMenu = ref(false);
+
+const headerActions = computed(() => {
+  void pluginStateVersion.value;
+  return getHeaderActions();
+});
 
 const barActions = computed(() => {
   void pluginStateVersion.value;
@@ -32,6 +46,12 @@ const menuActions = computed(() => {
   return getFooterActions().filter((a) => a.position === "menu");
 });
 const hasMenuActions = computed(() => menuActions.value.length > 0);
+
+const toolbarItems = computed(() => {
+  void pluginStateVersion.value;
+  return getToolbarItems();
+});
+
 function toggleMenu() {
   showMenu.value = !showMenu.value;
 }
@@ -48,8 +68,45 @@ async function openModal(modal: string) {
 </script>
 
 <template>
-  <footer class="reader-footer" :class="{ visible: showControls }">
-    <!-- Menu Popover -->
+  <header class="reader-header" :class="{ visible: uiStore.effectiveShowControls }">
+    <button class="back-btn" @click.stop="emit('close')" aria-label="Back to library">
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+      >
+        <path d="M19 12H5M12 19l-7-7 7-7" />
+      </svg>
+    </button>
+    <div class="header-center">
+      <h1 class="book-title">{{ bookTitle }}</h1>
+      <span v-if="chapterTitle" class="chapter-title">{{ chapterTitle }}</span>
+    </div>
+    <div class="header-actions">
+      <button
+        v-for="action in headerActions"
+        :key="action.id"
+        class="action-btn"
+        @click.stop="action.onClick"
+        :aria-label="action.label"
+      >
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          v-html="action.icon"
+        />
+      </button>
+    </div>
+  </header>
+
+  <footer class="reader-footer" :class="{ visible: uiStore.effectiveShowControls }">
     <Transition name="menu">
       <div v-if="showMenu" class="menu-popover" @click.stop>
         <button
@@ -72,10 +129,8 @@ async function openModal(modal: string) {
       </div>
     </Transition>
 
-    <!-- Normal Mode -->
     <div class="footer-sections">
       <div class="actions-section">
-        <!-- Plugin bar actions (e.g. bookmarks) -->
         <button
           v-for="a in barActions"
           :key="a.id"
@@ -93,7 +148,6 @@ async function openModal(modal: string) {
             v-html="a.icon"
           />
         </button>
-        <!-- Overflow menu toggle -->
         <button
           v-if="hasMenuActions"
           class="footer-btn"
@@ -134,7 +188,7 @@ async function openModal(modal: string) {
           class="footer-btn"
           @click.stop="emit('prev-chapter')"
           :disabled="!canGoToPrevChapter"
-          :aria-label="'Previous chapter'"
+          aria-label="Previous chapter"
         >
           <svg
             width="16"
@@ -151,7 +205,7 @@ async function openModal(modal: string) {
           class="footer-btn"
           @click.stop="emit('next-chapter')"
           :disabled="!canGoToNextChapter"
-          :aria-label="'Next chapter'"
+          aria-label="Next chapter"
         >
           <svg
             width="16"
@@ -161,15 +215,120 @@ async function openModal(modal: string) {
             stroke="currentColor"
             stroke-width="2"
           >
-            <path d="M9 18l6-6-6-6" />
+            <path d="M9 18l-6-6 6-6" />
           </svg>
         </button>
       </div>
     </div>
   </footer>
+
+  <div
+    v-if="toolbarItems.length > 0"
+    class="reader-toolbar"
+    :class="{ visible: uiStore.effectiveShowControls }"
+  >
+    <component v-for="item in toolbarItems" :key="item.id" :is="item.component" />
+  </div>
 </template>
 
 <style scoped>
+.reader-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  padding-top: max(12px, env(safe-area-inset-top, 12px));
+  background: var(--header-bg);
+  border-bottom: 1px solid var(--border-subtle);
+  z-index: var(--z-chrome);
+  opacity: 0;
+  transform: translateY(-100%);
+  transition: all 350ms cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: auto;
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  min-height: 52px;
+}
+
+.reader-header.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.header-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  max-width: calc(100% - 80px);
+}
+
+.book-title {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 500;
+  margin: 0;
+  letter-spacing: -0.01em;
+  color: var(--reader-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.chapter-title {
+  font-size: 12px;
+  color: var(--text-secondary);
+  opacity: 0.8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.back-btn,
+.action-btn {
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated, var(--reader-bg));
+  cursor: pointer;
+  color: var(--reader-text);
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+  min-width: 36px;
+  min-height: 36px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.back-btn:hover,
+.action-btn:hover {
+  background: var(--hover-bg);
+  border-color: var(--border);
+}
+
+.back-btn:active,
+.action-btn:active {
+  transform: scale(0.95);
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .reader-footer {
   position: fixed;
   bottom: 0;
@@ -192,7 +351,6 @@ async function openModal(modal: string) {
   pointer-events: auto;
 }
 
-/* Layout Sections */
 .footer-sections {
   display: flex;
   align-items: center;
@@ -216,7 +374,6 @@ async function openModal(modal: string) {
   min-width: 0;
 }
 
-/* Buttons */
 .footer-btn {
   display: flex;
   align-items: center;
@@ -255,7 +412,6 @@ async function openModal(modal: string) {
   color: var(--accent);
 }
 
-/* Progress Button (TOC trigger) */
 .progress-btn {
   display: flex;
   flex-direction: column;
@@ -298,18 +454,6 @@ async function openModal(modal: string) {
   line-height: 1.2;
 }
 
-.search-counter {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--reader-text);
-  padding: 8px 16px;
-  border-radius: 20px;
-  background: var(--accent-soft);
-  border: 1px solid var(--accent);
-  color: var(--accent);
-  white-space: nowrap;
-}
-
 .menu-popover {
   position: absolute;
   bottom: 100%;
@@ -350,7 +494,29 @@ async function openModal(modal: string) {
   background: var(--border-subtle);
 }
 
-/* Transitions */
+.reader-toolbar {
+  position: fixed;
+  right: 16px;
+  bottom: calc(env(safe-area-inset-bottom) + 80px);
+  z-index: var(--z-chrome);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  opacity: 0;
+  transform: translateY(12px);
+  transition:
+    opacity 250ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+
+.reader-toolbar.visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 200ms ease;
@@ -397,8 +563,20 @@ async function openModal(modal: string) {
   transform: translateY(-4px);
 }
 
-/* Responsive */
 @media (max-width: 768px) {
+  .reader-header {
+    padding: 10px 12px;
+    min-height: 48px;
+  }
+
+  .book-title {
+    font-size: 14px;
+  }
+
+  .chapter-title {
+    font-size: 11px;
+  }
+
   .footer-sections {
     padding: 8px;
     padding-bottom: max(8px, env(safe-area-inset-bottom, 8px));
@@ -431,7 +609,22 @@ async function openModal(modal: string) {
   }
 }
 
+@media (max-width: 480px) {
+  .reader-toolbar {
+    right: 10px;
+    gap: 6px;
+  }
+}
+
 @media (max-width: 380px) {
+  .reader-header {
+    padding: 8px 10px;
+  }
+
+  .book-title {
+    font-size: 13px;
+  }
+
   .footer-sections {
     padding: 6px;
     gap: 3px;
@@ -457,15 +650,23 @@ async function openModal(modal: string) {
   }
 }
 
-/* Landscape */
 @media (max-height: 500px) and (orientation: landscape) {
+  .reader-header {
+    padding: 8px 16px;
+    min-height: 44px;
+  }
+
+  .book-title,
+  .chapter-title {
+    font-size: 12px;
+  }
+
   .footer-sections {
     padding: 6px 12px;
     min-height: 44px;
   }
 }
 
-/* Safe area insets */
 @supports (padding: max(0px)) {
   .footer-sections {
     padding-left: max(12px, env(safe-area-inset-left, 0));

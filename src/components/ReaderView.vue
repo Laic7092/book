@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useReaderStore } from "../stores/reader";
 import { useUIStore } from "../stores/ui";
 import { useReaderMachine, type ReaderContentAPI } from "../composables/useReaderMachine";
-import { ReaderHeader, ReaderFooter, ReaderContent, ReaderToolbar } from "../components/reader";
-import { ModalWrapper } from "../components/modals";
+import { useIframeRenderer } from "../composables/useIframeRenderer";
+import ReaderChrome from "./reader/ReaderChrome.vue";
+import { ModalWrapper } from "./modals";
 import type { Book } from "../core/types";
 import { navigate } from "../utils/router";
 
@@ -15,7 +16,15 @@ const props = defineProps<{
 const readerStore = useReaderStore();
 const uiStore = useUIStore();
 
-const readerContentRef = ref<ReaderContentAPI | null>(null);
+const iframeRef = ref<HTMLIFrameElement | null>(null);
+const onLinkClickRef = ref<(href: string) => void>();
+
+const { initIframe, getDocument, getArticle, cleanup } = useIframeRenderer(
+  iframeRef,
+  (href: string) => onLinkClickRef.value?.(href),
+);
+
+const readerContentRef = ref<ReaderContentAPI | null>({ getDocument, getArticle });
 
 const engine = useReaderMachine(
   computed(() => props.book.id),
@@ -25,6 +34,8 @@ const engine = useReaderMachine(
     initialChapterId: readerStore.currentChapter?.id,
   },
 );
+
+onLinkClickRef.value = engine.handleInternalLinkClick;
 
 const currentChapterTitle = computed(() => {
   const s = engine.state.value;
@@ -43,34 +54,86 @@ function openModal(modal: string) {
 function closeModal() {
   uiStore.closeModal();
 }
+
+let resizeObserver: ResizeObserver | null = null;
+let mutationObserver: MutationObserver | null = null;
+let columnMeasureTimer: ReturnType<typeof setTimeout> | null = null;
+
+function measureColumns() {
+  if (!engine.isPaginationMode.value) return;
+  if (columnMeasureTimer) clearTimeout(columnMeasureTimer);
+  columnMeasureTimer = setTimeout(() => {
+    const doc = getDocument();
+    if (!doc?.body) return;
+    requestAnimationFrame(() => {
+      const iframe = iframeRef.value;
+      if (!iframe) return;
+      const contentWidth = doc.body.scrollWidth || 0;
+      const iframeWidth = iframe.clientWidth || 0;
+      if (iframeWidth > 0) {
+        engine.handleColumnLayout({ contentWidth, iframeWidth });
+      }
+    });
+  }, 150);
+}
+
+function setupObservers() {
+  if (!iframeRef.value) return;
+  const doc = getDocument();
+  if (!doc?.body) return;
+
+  resizeObserver = new ResizeObserver(() => {
+    if (engine.isPaginationMode.value) measureColumns();
+  });
+  resizeObserver.observe(doc.body);
+
+  mutationObserver = new MutationObserver(() => {
+    if (engine.isPaginationMode.value) measureColumns();
+  });
+  mutationObserver.observe(doc.body, { childList: true });
+}
+
+function handleLoad() {
+  if (!getDocument()) return;
+  measureColumns();
+  engine.handleIframeReady();
+}
+
+onMounted(() => {
+  initIframe(engine.isPaginationMode.value ? "paginated" : "scroll");
+
+  const doc = getDocument();
+  if (doc) {
+    handleLoad();
+  } else {
+    iframeRef.value?.addEventListener("load", handleLoad, { once: true });
+  }
+
+  setupObservers();
+});
+
+onUnmounted(() => {
+  cleanup();
+  resizeObserver?.disconnect();
+  mutationObserver?.disconnect();
+  if (columnMeasureTimer) clearTimeout(columnMeasureTimer);
+});
+
+defineExpose({ getDocument, getArticle });
 </script>
 
 <template>
   <div class="reader-view-container">
-    <!-- ── Content layer (z: 0) ── -->
-    <ReaderContent
-      ref="readerContentRef"
-      :is-pagination-mode="engine.isPaginationMode.value"
-      :chapter-loading="engine.chapterLoading.value"
-      :page-margin="engine.pageMargin.value"
-      :on-link-click="engine.handleInternalLinkClick"
-      @column-layout="engine.handleColumnLayout"
-      @iframe-ready="engine.handleIframeReady"
-    />
+    <div class="reader-content-wrapper">
+      <div v-if="engine.chapterLoading.value" class="chapter-loading-overlay" />
+      <iframe ref="iframeRef" class="reader-iframe" title="Reader Content" @load="handleLoad" />
+    </div>
 
-    <!-- ── Overlay layer (z: 100) ── -->
     <component v-for="(comp, name) in engine.overlayComponents.value" :key="name" :is="comp" />
 
-    <!-- ── Chrome layer (z: 200) ── -->
-    <ReaderHeader
+    <ReaderChrome
       :book-title="book.title"
       :chapter-title="currentChapterTitle"
-      :show-controls="uiStore.effectiveShowControls"
-      @close="handleClose"
-    />
-
-    <ReaderFooter
-      :show-controls="uiStore.effectiveShowControls"
       :is-pagination-mode="engine.isPaginationMode.value"
       :current-page="engine.currentPage.value"
       :total-pages="engine.totalPages.value"
@@ -80,6 +143,7 @@ function closeModal() {
       :can-go-to-next-chapter="
         engine.currentChapterIndex.value < engine.state.value.chapters.length - 1
       "
+      @close="handleClose"
       @prev-page="engine.prevPage"
       @next-page="engine.nextPage"
       @prev-chapter="
@@ -134,8 +198,6 @@ function closeModal() {
       </svg>
     </button>
 
-    <ReaderToolbar />
-
     <ModalWrapper
       :modal-type="uiStore.activeModal"
       :chapters="engine.state.value.chapters"
@@ -159,6 +221,30 @@ function closeModal() {
   position: relative;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  padding-left: env(safe-area-inset-left, 0);
+  padding-right: env(safe-area-inset-right, 0);
+}
+
+.reader-content-wrapper {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  contain: strict;
+}
+
+.reader-iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.chapter-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: var(--reader-bg, transparent);
+  cursor: wait;
 }
 
 .history-btn {
@@ -206,27 +292,5 @@ function closeModal() {
 
 .history-forward {
   right: max(12px, env(safe-area-inset-right, 0));
-}
-
-.reader-view::-webkit-scrollbar {
-  width: 7px;
-}
-
-.reader-view::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.reader-view::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 4px;
-}
-
-.reader-view::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--border) 70%, var(--reader-text));
-}
-
-.reader-view-container {
-  padding-left: env(safe-area-inset-left, 0);
-  padding-right: env(safe-area-inset-right, 0);
 }
 </style>
