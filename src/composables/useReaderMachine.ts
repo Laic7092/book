@@ -67,6 +67,8 @@ export function useReaderMachine(
   // ── Per-render ephemeral state ──
   const pageMargin = ref(24);
   const isRestoring = ref(false);
+  const isHistoryNav = ref(false);
+  const resourceUrls = ref(new Map<string, string>());
   let gestureCleanup: (() => void) | null = null;
 
   // Cached resource elements from last FETCH_CHAPTER resolution (used by RENDER_HTML effect)
@@ -91,9 +93,20 @@ export function useReaderMachine(
   const currentChapterId = computed(
     () => state.value.chapters[state.value.currentChapterIndex]?.id ?? null,
   );
-  const chapterProgress = computed(() => state.value.chapterProgress);
-  const readingProgress = computed(() => state.value.bookProgress);
-  const totalBookProgress = computed(() => state.value.bookProgress);
+  const chapterProgress = computed(() => {
+    const { page, chapters, currentChapterIndex } = state.value;
+    if (currentChapterIndex < 0 || chapters.length === 0) return 0;
+    if (page.total <= 1) return 100;
+    return ((page.current + 1) / page.total) * 100;
+  });
+  const readingProgress = computed(() => {
+    const { chapters, currentChapterIndex } = state.value;
+    const cp = chapterProgress.value;
+    if (chapters.length <= 1) return Math.max(1, Math.round(cp));
+    const portion = 100 / chapters.length;
+    return Math.round(currentChapterIndex * portion + (cp / 100) * portion);
+  });
+  const totalBookProgress = readingProgress;
   const currentPage = computed(() => state.value.page.current);
   const totalPages = computed(() => state.value.page.total);
   const isTransitioning = computed(() => state.value.status === "loading-chapter");
@@ -125,8 +138,7 @@ export function useReaderMachine(
           return;
         }
 
-        // Resolve EPUB resources (mutates currentUrls in-place)
-        const currentUrls = new Map(state.value.resourceUrls);
+        // Resolve EPUB resources (mutates resourceUrls in-place)
         const parser = getParserForFormat(bookFormat.value);
         let html = rawHtml;
         let resources: HTMLElement[] = [];
@@ -136,7 +148,7 @@ export function useReaderMachine(
             rawHtml,
             effect.bookId,
             parser,
-            currentUrls,
+            resourceUrls.value,
           );
           html = resolved.html;
           resources = resolved.resources;
@@ -144,7 +156,12 @@ export function useReaderMachine(
 
         // Content pipeline (plugin transformers)
         try {
-          html = await processChapterHtml(html, effect.bookId, effect.chapterId, currentUrls);
+          html = await processChapterHtml(
+            html,
+            effect.bookId,
+            effect.chapterId,
+            resourceUrls.value,
+          );
         } catch {
           // Use un-transformed content on error
         }
@@ -154,7 +171,6 @@ export function useReaderMachine(
           type: "CHAPTER_LOADED",
           chapterId: effect.chapterId,
           html,
-          resourceUrls: currentUrls,
         });
         break;
       }
@@ -211,12 +227,6 @@ export function useReaderMachine(
         break;
       }
 
-      case "PUSH_HISTORY": {
-        navStack.push(effect.entry);
-        syncNavSnapshot();
-        break;
-      }
-
       case "SCROLL_INTO_VIEW": {
         const doc = getIframeDoc();
         if (!doc) return;
@@ -248,10 +258,22 @@ export function useReaderMachine(
   }
 
   function dispatch(action: ReaderAction): void {
+    const snapshot = {
+      chapterId: currentChapterId.value,
+      page: currentPage.value,
+    };
     const effects = machine.dispatch(action);
-    effects.forEach((e) => {
-      void runEffect(e);
-    });
+    // Auto-push navigation history when chapter changes (skip during history back/forward)
+    if (
+      !isHistoryNav.value &&
+      snapshot.chapterId &&
+      currentChapterId.value &&
+      currentChapterId.value !== snapshot.chapterId
+    ) {
+      navStack.push({ chapterId: snapshot.chapterId, page: snapshot.page });
+      syncNavSnapshot();
+    }
+    effects.forEach((e) => void runEffect(e));
   }
 
   // ── Actions (called by ReflowableReader template) ──
@@ -271,22 +293,26 @@ export function useReaderMachine(
     const entry = navStack.back();
     syncNavSnapshot();
     if (!entry) return;
+    isHistoryNav.value = true;
     if (entry.chapterId === currentChapterId.value) {
       dispatch({ type: "GO_TO_PAGE", page: entry.page });
     } else {
       dispatch({ type: "GO_TO_CHAPTER", chapterId: entry.chapterId, targetPage: entry.page });
     }
+    isHistoryNav.value = false;
   }
 
   function handleHistoryForward() {
     const entry = navStack.forward();
     syncNavSnapshot();
     if (!entry) return;
+    isHistoryNav.value = true;
     if (entry.chapterId === currentChapterId.value) {
       dispatch({ type: "GO_TO_PAGE", page: entry.page });
     } else {
       dispatch({ type: "GO_TO_CHAPTER", chapterId: entry.chapterId, targetPage: entry.page });
     }
+    isHistoryNav.value = false;
   }
 
   // ── Iframe ready ──

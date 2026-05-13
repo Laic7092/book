@@ -16,6 +16,21 @@ function progressKey(bookId: string): string {
   return `${PROGRESS_PREFIX}:${bookId}`;
 }
 
+function calcChapterProgress(pageIndex: number, totalPages: number): number {
+  if (totalPages <= 1) return 100;
+  return ((pageIndex + 1) / totalPages) * 100;
+}
+
+function calcBookProgress(
+  chapterIndex: number,
+  totalChapters: number,
+  chapterProgress: number,
+): number {
+  if (totalChapters <= 1) return Math.max(1, Math.round(chapterProgress));
+  const portion = 100 / totalChapters;
+  return Math.round(chapterIndex * portion + (chapterProgress / 100) * portion);
+}
+
 export const readingProgressPlugin: Plugin = {
   [PLUGIN_BRAND]: true as const,
   id: "reading-progress",
@@ -33,10 +48,11 @@ export const readingProgressPlugin: Plugin = {
       const chapter = s.chapters[s.currentChapterIndex];
       if (!chapter) return;
 
+      const cp = calcChapterProgress(s.page.current, s.page.total);
       await ctx.storage.put(progressKey(bookId), {
         chapterId: chapter.id,
-        chapterProgress: s.chapterProgress,
-        readingProgress: s.bookProgress,
+        chapterProgress: cp,
+        readingProgress: calcBookProgress(s.currentChapterIndex, s.chapters.length, cp),
         pageIndex: s.page.current,
       });
     }

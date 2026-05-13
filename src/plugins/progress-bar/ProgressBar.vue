@@ -8,7 +8,8 @@ const width = ref("0%");
 function update() {
   const s = getProgressBarSession()?.getState();
   if (!s) return;
-  width.value = `${s.chapterProgress}%`;
+  const pct = s.page.total <= 1 ? 100 : ((s.page.current + 1) / s.page.total) * 100;
+  width.value = `${pct}%`;
 }
 
 const unsubPage = pluginEvents.on("page:changed", update);
