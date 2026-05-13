@@ -546,7 +546,7 @@ onMounted(() => {
                     stroke-width="1.5"
                     stroke-linecap="round"
                     v-html="action.icon"
-                  />
+                  ></svg>
                   <span>{{ action.label }}</span>
                 </button>
                 <div class="menu-divider"></div>
@@ -732,68 +732,6 @@ onMounted(() => {
                   <span v-else class="cover-initial" aria-hidden="true">{{
                     bookInitials.get(book.id)
                   }}</span>
-                  <span class="cover-format">{{ book.format.toUpperCase() }}</span>
-                  <span v-if="book.lastReadAt" class="cover-read-badge" title="Reading started">
-                    <svg
-                      width="10"
-                      height="10"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="3"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    >
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                  </span>
-                </div>
-                <div class="book-info">
-                  <h3
-                    v-if="renamingBookId !== book.id"
-                    class="book-title"
-                    :title="book.title"
-                    @click.stop="startRename(book)"
-                  >
-                    {{ book.title }}
-                  </h3>
-                  <input
-                    v-else
-                    v-model="renameValue"
-                    class="rename-input"
-                    @keydown.enter="saveRename"
-                    @keydown.escape="cancelRename"
-                    @blur="saveRename"
-                    @click.stop
-                  />
-                  <p class="book-author" :class="{ unknown: !book.author }">
-                    {{ book.author || "Unknown author" }}
-                  </p>
-                  <div class="book-card-footer">
-                    <div v-if="book.folderId" class="book-folder-tag">
-                      <svg
-                        width="10"
-                        height="10"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                      >
-                        <path
-                          d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2v11z"
-                        />
-                      </svg>
-                      <span>{{
-                        bookshelfStore.folders.find((f) => f.id === book.folderId)?.name
-                      }}</span>
-                    </div>
-                    <div v-if="book.lastReadAt" class="book-meta">
-                      <span class="meta-dot"></span>
-                      <span class="meta-date">{{
-                        new Date(book.lastReadAt).toLocaleDateString()
-                      }}</span>
-                    </div>
-                  </div>
                 </div>
                 <button
                   class="btn-folder"
@@ -862,68 +800,6 @@ onMounted(() => {
               <span v-else class="cover-initial" aria-hidden="true">{{
                 bookInitials.get(book.id)
               }}</span>
-              <span class="cover-format">{{ book.format.toUpperCase() }}</span>
-              <span v-if="book.lastReadAt" class="cover-read-badge" title="Reading started">
-                <svg
-                  width="10"
-                  height="10"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="3"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              </span>
-            </div>
-            <div class="book-info">
-              <h3
-                v-if="renamingBookId !== book.id"
-                class="book-title"
-                :title="book.title"
-                @click.stop="startRename(book)"
-              >
-                {{ book.title }}
-              </h3>
-              <input
-                v-else
-                v-model="renameValue"
-                class="rename-input"
-                @keydown.enter="saveRename"
-                @keydown.escape="cancelRename"
-                @blur="saveRename"
-                @click.stop
-              />
-              <p class="book-author" :class="{ unknown: !book.author }">
-                {{ book.author || "Unknown author" }}
-              </p>
-              <div class="book-card-footer">
-                <div v-if="book.folderId" class="book-folder-tag">
-                  <svg
-                    width="10"
-                    height="10"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                  >
-                    <path
-                      d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2v11z"
-                    />
-                  </svg>
-                  <span>{{
-                    bookshelfStore.folders.find((f) => f.id === book.folderId)?.name
-                  }}</span>
-                </div>
-                <div v-if="book.lastReadAt" class="book-meta">
-                  <span class="meta-dot"></span>
-                  <span class="meta-date">{{
-                    new Date(book.lastReadAt).toLocaleDateString()
-                  }}</span>
-                </div>
-              </div>
             </div>
             <button
               class="btn-folder"
@@ -990,20 +866,6 @@ onMounted(() => {
             <span v-else class="list-cover-initial" aria-hidden="true">{{
               bookInitials.get(book.id)
             }}</span>
-            <span v-if="book.lastReadAt" class="list-cover-read-badge" title="Reading started">
-              <svg
-                width="8"
-                height="8"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="3"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-            </span>
           </div>
           <div class="list-info">
             <h3 class="list-title">{{ book.title }}</h3>
@@ -1013,12 +875,6 @@ onMounted(() => {
                 bookshelfStore.folders.find((f) => f.id === book.folderId)?.name
               }}</span>
             </div>
-          </div>
-          <div class="list-meta">
-            <span class="list-format">{{ book.format.toUpperCase() }}</span>
-            <span v-if="book.lastReadAt" class="list-last-read">{{
-              new Date(book.lastReadAt).toLocaleDateString()
-            }}</span>
           </div>
           <button
             class="btn-folder btn-folder-list"
@@ -1659,42 +1515,13 @@ onMounted(() => {
 
 .book-card {
   position: relative;
-  background: var(--bg-elevated);
   border-radius: 12px;
-  padding: 14px;
   cursor: pointer;
   transition: all var(--transition-base);
-  border: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
   animation: fadeInUp 0.45s ease-out backwards;
   box-shadow: var(--shadow-xs);
-}
-
-.book-card::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 12px;
-  pointer-events: none;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
-}
-
-.book-card:hover {
-  transform: translateY(-6px);
-  box-shadow:
-    0 12px 32px rgba(0, 0, 0, 0.1),
-    0 2px 8px rgba(0, 0, 0, 0.06);
-  border-color: transparent;
-}
-
-.book-card:active {
-  transform: translateY(-2px);
-}
-
-.book-card:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 
 /* Cover */
@@ -1705,7 +1532,6 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 12px;
   overflow: hidden;
   box-shadow:
     var(--shadow-sm),
@@ -1742,37 +1568,6 @@ onMounted(() => {
 
 .book-card:hover .cover-initial {
   transform: scale(1.1);
-}
-
-.cover-format {
-  position: absolute;
-  bottom: 7px;
-  right: 7px;
-  font-size: 9px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.85);
-  background: rgba(0, 0, 0, 0.2);
-  padding: 2px 6px;
-  border-radius: 4px;
-  backdrop-filter: blur(6px);
-  letter-spacing: 0.04em;
-  transition: background var(--transition-fast);
-}
-
-.cover-read-badge {
-  position: absolute;
-  top: 7px;
-  left: 7px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.93);
-  color: #16a34a;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
-  backdrop-filter: blur(4px);
 }
 
 /* Subtle paper texture on covers */
@@ -2046,22 +1841,6 @@ onMounted(() => {
   align-items: center;
   gap: 12px;
   flex-shrink: 0;
-}
-
-.list-format {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  background: var(--bg-tertiary);
-  padding: 2px 6px;
-  border-radius: 4px;
-  letter-spacing: 0.04em;
-}
-
-.list-last-read {
-  font-size: 11px;
-  color: var(--text-secondary);
-  font-family: var(--font-ui);
 }
 
 /* ==========================================

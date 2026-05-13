@@ -160,8 +160,7 @@ function onAnimationEnd() {
 }
 
 .modal-panel {
-  height: 85vh;
-  max-height: 600px;
+  height: 95vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -173,13 +172,6 @@ function onAnimationEnd() {
   }
   to {
     transform: translateY(0);
-  }
-}
-
-@media (max-width: 768px) {
-  .modal-content {
-    border-radius: 14px 14px 0 0;
-    max-height: 80vh;
   }
 }
 </style>
