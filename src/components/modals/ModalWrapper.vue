@@ -109,6 +109,7 @@ function onAnimationEnd() {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -124,6 +125,7 @@ function onAnimationEnd() {
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
   }
+
   to {
     opacity: 0;
     backdrop-filter: blur(0px);
@@ -139,6 +141,7 @@ function onAnimationEnd() {
   from {
     transform: translateY(0);
   }
+
   to {
     transform: translateY(100%);
   }
@@ -160,7 +163,7 @@ function onAnimationEnd() {
 }
 
 .modal-panel {
-  height: 95vh;
+  height: 95%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -170,6 +173,7 @@ function onAnimationEnd() {
   from {
     transform: translateY(100%);
   }
+
   to {
     transform: translateY(0);
   }
