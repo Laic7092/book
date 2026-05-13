@@ -215,7 +215,7 @@ async function openModal(modal: string) {
             stroke="currentColor"
             stroke-width="2"
           >
-            <path d="M9 18l-6-6 6-6" />
+            <path d="M9 18l6-6-6-6" />
           </svg>
         </button>
       </div>
