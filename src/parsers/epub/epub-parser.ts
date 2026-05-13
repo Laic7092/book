@@ -3,7 +3,7 @@
 import type { Entry, FileEntry, ZipReader } from "@zip.js/zip.js";
 import { BaseBookParser, generateId, parseXML, cleanHtml } from "../base";
 
-import { revokeResourceUrls as revokeUrls } from "../../storage/resources";
+import { revokeResourceUrls as revokeUrls } from "../../storage/books";
 
 let _zipModule: typeof import("@zip.js/zip.js") | null = null;
 async function getZipModule() {
@@ -51,12 +51,7 @@ export class EpubParser extends BaseBookParser implements BookParser {
 
   // ── Format-specific lifecycle (called by core storage layer) ──
 
-  async saveResources(bookId: string, resources: Map<string, ArrayBuffer>): Promise<void> {
-    const { saveResource, getMimeTypeFromExtension } = await import("../../storage/resources");
-    for (const [resourceId, data] of resources) {
-      await saveResource(bookId, resourceId, data, getMimeTypeFromExtension(resourceId));
-    }
-  }
+  // Resources are now extracted lazily from the stored zip — no pre-extraction.
 
   async saveRawData(bookId: string, rawData: ArrayBuffer, fileSize: number): Promise<void> {
     const { saveZip } = await import("./zips");

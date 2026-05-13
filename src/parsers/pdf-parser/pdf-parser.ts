@@ -1,7 +1,6 @@
-import type { BookParser, ParsedBook, Chapter, Resource } from "../../core/types";
+import type { BookParser, ParsedBook, Chapter } from "../../core/types";
 import { BaseBookParser, generateId } from "../base";
-import { STORES, dbPut, dbGet } from "../../storage/db";
-import { revokeResourceUrls as revokeUrls } from "../../storage/resources";
+import { revokeResourceUrls as revokeUrls } from "../../storage/books";
 
 async function getPdfjsModule() {
   const pdfjsLib = await import("pdfjs-dist");
@@ -23,18 +22,7 @@ export class PdfParser extends BaseBookParser implements BookParser {
 
   // ── Format-specific lifecycle ──
 
-  async saveResources(bookId: string, resources: Map<string, ArrayBuffer>): Promise<void> {
-    for (const [resourceId, data] of resources) {
-      const resource: Resource = {
-        bookId,
-        resourceId,
-        data,
-        mimeType: "image/jpeg",
-        type: "image",
-      };
-      await dbPut(STORES.RESOURCES, resource);
-    }
-  }
+  // Resources are now extracted lazily from the stored zip — no pre-extraction.
 
   async saveRawData(bookId: string, rawData: ArrayBuffer, fileSize: number): Promise<void> {
     const { saveZip } = await import("../epub/zips");
@@ -49,13 +37,6 @@ export class PdfParser extends BaseBookParser implements BookParser {
     const pageNum = parseInt(chapter.href, 10);
     if (isNaN(pageNum)) return undefined;
 
-    // Check cache first
-    const stored = await dbGet<Resource>(STORES.RESOURCES, [bookId, chapter.href]);
-    if (stored) {
-      const url = URL.createObjectURL(new Blob([stored.data], { type: stored.mimeType }));
-      return PdfParser.pageToHtml(url, pageNum);
-    }
-
     const { getZip } = await import("../epub/zips");
     const zipData = await getZip(bookId);
     if (!zipData) return undefined;
@@ -63,17 +44,6 @@ export class PdfParser extends BaseBookParser implements BookParser {
     try {
       const imgBlob = await PdfParser.renderPage(zipData, pageNum);
       const url = URL.createObjectURL(imgBlob);
-
-      // Cache rendered page
-      const data = await imgBlob.arrayBuffer();
-      const resource: Resource = {
-        bookId,
-        resourceId: chapter.href,
-        data,
-        mimeType: "image/jpeg",
-        type: "image",
-      };
-      await dbPut(STORES.RESOURCES, resource).catch(() => {});
 
       return PdfParser.pageToHtml(url, pageNum);
     } catch (err) {
@@ -83,11 +53,6 @@ export class PdfParser extends BaseBookParser implements BookParser {
   }
 
   async resolveResourceUrl(bookId: string, path: string): Promise<string | null> {
-    const stored = await dbGet<Resource>(STORES.RESOURCES, [bookId, path]);
-    if (stored) {
-      return URL.createObjectURL(new Blob([stored.data], { type: stored.mimeType }));
-    }
-
     const pageNum = parseInt(path, 10);
     if (isNaN(pageNum)) return null;
 

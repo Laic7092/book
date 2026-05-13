@@ -1,9 +1,8 @@
 import type { FileEntry } from "@zip.js/zip.js";
-import type { BookParser, ParsedBook, Chapter, Resource } from "../../core/types";
+import type { BookParser, ParsedBook, Chapter } from "../../core/types";
 import { ErrorCode, createReaderError } from "../../core/errors";
 import { BaseBookParser, generateId } from "../base";
-import { STORES, dbPut, dbGet } from "../../storage/db";
-import { revokeResourceUrls as revokeUrls } from "../../storage/resources";
+import { revokeResourceUrls as revokeUrls } from "../../storage/books";
 
 const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp", "bmp"]);
 
@@ -43,19 +42,7 @@ export class CbzParser extends BaseBookParser implements BookParser {
 
   // ── Format-specific lifecycle ──
 
-  async saveResources(bookId: string, resources: Map<string, ArrayBuffer>): Promise<void> {
-    for (const [resourceId, data] of resources) {
-      const ext = resourceId.split(".").pop() || "jpg";
-      const resource: Resource = {
-        bookId,
-        resourceId,
-        data,
-        mimeType: getMimeType(ext),
-        type: "image",
-      };
-      await dbPut(STORES.RESOURCES, resource);
-    }
-  }
+  // Resources are now extracted lazily from the stored zip — no pre-extraction.
 
   async saveRawData(bookId: string, rawData: ArrayBuffer, fileSize: number): Promise<void> {
     const { saveZip } = await import("../epub/zips");
@@ -67,13 +54,6 @@ export class CbzParser extends BaseBookParser implements BookParser {
     chapter: { id: string; href?: string },
   ): Promise<string | undefined> {
     if (!chapter.href) return undefined;
-
-    // Check cache first
-    const stored = await dbGet<Resource>(STORES.RESOURCES, [bookId, chapter.href]);
-    if (stored) {
-      const url = URL.createObjectURL(new Blob([stored.data], { type: stored.mimeType }));
-      return CbzParser.pageToHtml(url);
-    }
 
     const { getZip } = await import("../epub/zips");
     const zipData = await getZip(bookId);
@@ -87,16 +67,6 @@ export class CbzParser extends BaseBookParser implements BookParser {
       const mimeType = getMimeType(ext);
       const url = URL.createObjectURL(new Blob([data], { type: mimeType }));
 
-      // Cache extracted image
-      const resource: Resource = {
-        bookId,
-        resourceId: chapter.href,
-        data,
-        mimeType,
-        type: "image",
-      };
-      await dbPut(STORES.RESOURCES, resource).catch(() => {});
-
       return CbzParser.pageToHtml(url);
     } catch (err) {
       console.error("[CBZ Parser] Failed to extract image:", err);
@@ -105,11 +75,6 @@ export class CbzParser extends BaseBookParser implements BookParser {
   }
 
   async resolveResourceUrl(bookId: string, path: string): Promise<string | null> {
-    const stored = await dbGet<Resource>(STORES.RESOURCES, [bookId, path]);
-    if (stored) {
-      return URL.createObjectURL(new Blob([stored.data], { type: stored.mimeType }));
-    }
-
     const { getZip } = await import("../epub/zips");
     const zipData = await getZip(bookId);
     if (!zipData) return null;

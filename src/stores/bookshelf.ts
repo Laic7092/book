@@ -6,7 +6,7 @@ import { dbGetAll, STORES } from "../storage/db";
 import { getCoverBlob, deleteCoverBlob } from "../storage/books";
 import { pluginEvents } from "../plugins/context";
 import * as booksStore from "../storage/books";
-import * as folderStore from "../storage/folders";
+import * as folderStore from "../storage/books";
 import { assertValidBookFile } from "../utils/validation";
 
 export interface BookshelfState {

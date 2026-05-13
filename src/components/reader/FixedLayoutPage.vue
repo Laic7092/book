@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, nextTick } from "vue";
 import { getZip } from "../../parsers/epub/zips";
-import { STORES, dbPut, dbGet } from "../../storage/db";
-import type { Resource } from "../../core/types";
 import { openPdf } from "../../parsers/pdf-parser/pdf-renderer";
 
 const props = defineProps<{
@@ -56,16 +54,6 @@ async function loadCbzImage(filename: string): Promise<void> {
     currentBlobUrl = null;
   }
 
-  const cached = await dbGet<Resource>(STORES.RESOURCES, [props.bookId, filename]);
-  if (cached) {
-    currentBlobUrl = URL.createObjectURL(new Blob([cached.data], { type: cached.mimeType }));
-    imageUrl.value = currentBlobUrl;
-    nextTick(() => {
-      isCbzReady.value = true;
-    });
-    return;
-  }
-
   const zipData = await getZip(props.bookId);
   if (!zipData) return;
 
@@ -81,14 +69,6 @@ async function loadCbzImage(filename: string): Promise<void> {
     const mimeType = getMimeType(ext);
     currentBlobUrl = URL.createObjectURL(new Blob([data], { type: mimeType }));
     imageUrl.value = currentBlobUrl;
-    const resource: Resource = {
-      bookId: props.bookId,
-      resourceId: filename,
-      data,
-      mimeType,
-      type: "image",
-    };
-    dbPut(STORES.RESOURCES, resource).catch(() => {});
     nextTick(() => {
       isCbzReady.value = true;
     });

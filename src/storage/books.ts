@@ -1,9 +1,10 @@
 // Books storage module
 
-import type { Book, ParsedBook } from "../core/types";
+import type { Book, Folder, ParsedBook } from "../core/types";
 import { STORES, dbPut, dbGet, dbGetAll, dbTransaction, dbDelete } from "./db";
 import type { BookParser } from "../core/types";
 import { getParserForFormat } from "../parsers";
+import { generateId } from "../parsers/base";
 
 const PLUGIN_ID = "_covers";
 
@@ -46,11 +47,7 @@ const extractionInProgress = new Map<string, Promise<string>>();
  * Save a parsed book to the database
  */
 export async function saveBook(parsedBook: ParsedBook, parser: BookParser): Promise<void> {
-  const storeNames = parsedBook.resources?.size
-    ? [STORES.BOOKS, STORES.CHAPTERS, STORES.RESOURCES]
-    : [STORES.BOOKS, STORES.CHAPTERS];
-
-  await dbTransaction(storeNames, "readwrite", async (stores) => {
+  await dbTransaction([STORES.BOOKS, STORES.CHAPTERS], "readwrite", async (stores) => {
     const booksStore = stores.get(STORES.BOOKS)!;
     const chaptersStore = stores.get(STORES.CHAPTERS)!;
 
@@ -69,11 +66,6 @@ export async function saveBook(parsedBook: ParsedBook, parser: BookParser): Prom
       });
     }
   });
-
-  // Format-specific resource storage
-  if (parsedBook.resources && parsedBook.resources.size > 0) {
-    await parser.saveResources?.(parsedBook.book.id, parsedBook.resources);
-  }
 
   // Format-specific raw data storage (for lazy extraction)
   if (parsedBook.rawData) {
@@ -119,42 +111,24 @@ export async function getAllBooks(): Promise<Book[]> {
  * Delete a book and all its associated data
  */
 export async function deleteBook(bookId: string): Promise<void> {
-  await dbTransaction(
-    [STORES.BOOKS, STORES.CHAPTERS, STORES.RESOURCES, STORES.ZIPS],
-    "readwrite",
-    async (stores) => {
-      // Delete book metadata
-      stores.get(STORES.BOOKS)!.delete(bookId);
+  await dbTransaction([STORES.BOOKS, STORES.CHAPTERS, STORES.ZIPS], "readwrite", async (stores) => {
+    // Delete book metadata
+    stores.get(STORES.BOOKS)!.delete(bookId);
 
-      // Delete all chapters for this book
-      const chaptersStore = stores.get(STORES.CHAPTERS)!;
-      const chaptersIndex = chaptersStore.index("bookId");
+    // Delete all chapters for this book
+    const chaptersStore = stores.get(STORES.CHAPTERS)!;
+    const chaptersIndex = chaptersStore.index("bookId");
 
-      await new Promise<void>((resolve, reject) => {
-        const request = chaptersIndex.getAllKeys(IDBKeyRange.only(bookId));
-        request.onsuccess = () => {
-          const keys = request.result as Array<[string, string]>;
-          keys.forEach((key) => chaptersStore.delete(key));
-          resolve();
-        };
-        request.onerror = () => reject(request.error);
-      });
-
-      // Delete resources for this book
-      const resourcesStore = stores.get(STORES.RESOURCES)!;
-      const resourcesIndex = resourcesStore.index("bookId");
-
-      await new Promise<void>((resolve, reject) => {
-        const request = resourcesIndex.getAllKeys(IDBKeyRange.only(bookId));
-        request.onsuccess = () => {
-          const keys = request.result as Array<[string, string]>;
-          keys.forEach((key) => resourcesStore.delete(key));
-          resolve();
-        };
-        request.onerror = () => reject(request.error);
-      });
-    },
-  );
+    await new Promise<void>((resolve, reject) => {
+      const request = chaptersIndex.getAllKeys(IDBKeyRange.only(bookId));
+      request.onsuccess = () => {
+        const keys = request.result as Array<[string, string]>;
+        keys.forEach((key) => chaptersStore.delete(key));
+        resolve();
+      };
+      request.onerror = () => reject(request.error);
+    });
+  });
 
   // Also clean up plugin_store entries for this book (any plugin)
   await dbTransaction([STORES.PLUGIN_STORE], "readwrite", async (stores) => {
@@ -307,6 +281,101 @@ export async function getChapterIds(bookId: string): Promise<string[]> {
     };
     request.onerror = () => reject(request.error);
   });
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Folder helpers (stored in plugin_store under _folders token)
+// ══════════════════════════════════════════════════════════════════════════════
+
+const FOLDERS_PLUGIN_ID = "_folders";
+const FOLDERS_KEY = "index";
+
+interface FolderEntry {
+  pluginId: string;
+  key: string;
+  value: Folder[];
+  createdAt: number;
+}
+
+async function readFolders(): Promise<Folder[]> {
+  const entry = await dbGet<FolderEntry>(STORES.PLUGIN_STORE, [FOLDERS_PLUGIN_ID, FOLDERS_KEY]);
+  return entry?.value ?? [];
+}
+
+async function writeFolders(folders: Folder[]): Promise<void> {
+  await dbPut(STORES.PLUGIN_STORE, {
+    pluginId: FOLDERS_PLUGIN_ID,
+    key: FOLDERS_KEY,
+    value: folders,
+    createdAt: Date.now(),
+  } as FolderEntry);
+}
+
+export async function getAllFolders(): Promise<Folder[]> {
+  return readFolders();
+}
+
+export async function createFolder(name: string, order?: number): Promise<Folder> {
+  const all = await readFolders();
+  const folder: Folder = {
+    id: generateId("folder"),
+    name,
+    createdAt: Date.now(),
+    order: order ?? all.length,
+  };
+  all.push(folder);
+  await writeFolders(all);
+  return folder;
+}
+
+export async function getFolder(id: string): Promise<Folder | undefined> {
+  const all = await readFolders();
+  return all.find((f) => f.id === id);
+}
+
+export async function updateFolder(
+  id: string,
+  partial: Partial<Pick<Folder, "name" | "order">>,
+): Promise<void> {
+  const all = await readFolders();
+  const folder = all.find((f) => f.id === id);
+  if (!folder) return;
+  Object.assign(folder, partial);
+  await writeFolders(all);
+}
+
+export async function deleteFolder(id: string): Promise<void> {
+  const all = await readFolders();
+  await writeFolders(all.filter((f) => f.id !== id));
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Resource helpers (used by lazy extraction path)
+// ══════════════════════════════════════════════════════════════════════════════
+
+export function getMimeTypeFromExtension(path: string): string {
+  const ext = path.split(".").pop()?.toLowerCase();
+  const mimeTypes: Record<string, string> = {
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    svg: "image/svg+xml",
+    webp: "image/webp",
+    bmp: "image/bmp",
+    css: "text/css",
+    woff: "font/woff",
+    woff2: "font/woff2",
+    ttf: "font/ttf",
+    otf: "font/otf",
+  };
+  return mimeTypes[ext || ""] || "application/octet-stream";
+}
+
+export function revokeResourceUrls(urlMap: Map<string, string>): void {
+  for (const [, blobUrl] of urlMap) {
+    URL.revokeObjectURL(blobUrl);
+  }
 }
 
 /**
