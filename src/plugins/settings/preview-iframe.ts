@@ -52,7 +52,7 @@ export function createPreviewIframe(
     </head>
     <body class="reader-content">
       <p style="margin-top: 0;">Preview</p>
-      <p>This is a preview. Adjust the settings to see how your reading experience changes.</p>
+      <p style="margin-bottom: 0;">This is a preview. Adjust the settings to see how your reading experience changes.</p>
     </body>
     </html>
   `);
