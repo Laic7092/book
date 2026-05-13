@@ -1,1 +1,0 @@
-import{u as e}from"./books-DUoj2g2y.js";import{t}from"./zips-694XbtKA.js";async function n(n,r,i){if(!i)return null;let a=await t(n);if(!a)return null;try{let t=await i(a,r),n=e(r);return URL.createObjectURL(new Blob([t],{type:n}))}catch{return null}}export{n as getResourceUrl};
