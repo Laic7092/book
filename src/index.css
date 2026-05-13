@@ -1,27 +1,21 @@
-/* Theme variables - set dynamically by CssAPI.setTheme() via JS on :root.
- * The values live in ThemeRegistry (src/core/theme-registry.ts).
- * Plugins can register/override themes via ctx.themes.register(). */
-
 :root {
-  /* Sepia defaults — matches DEFAULT_SETTINGS.theme in settings plugin.
-   * Overridden at runtime by CssAPI.setTheme(). Fresh visitors never see flash. */
-  --reader-bg: #f5f0e6;
-  --reader-text: #3d352a;
-  --text-secondary: #7a6f5a;
-  --header-bg: rgba(245, 240, 230, 0.9);
-  --border: #c9bfa8;
-  --border-subtle: rgba(61, 53, 42, 0.08);
-  --hover-bg: #ebe5d5;
-  --accent: #8b5a3a;
-  --accent-soft: rgba(139, 90, 58, 0.1);
-  --accent-muted: rgba(139, 90, 58, 0.15);
-  --accent-hover: #6d462a;
-  --modal-bg: #f5f0e6;
-  --modal-text: #3d352a;
-  --progress-track: #c9bfa8;
-  --bg-elevated: #ebe5d5;
-  --bg-secondary: #ebe5d5;
-  --bg-tertiary: #dfd6c2;
+  --reader-bg: #f5f5f4;
+  --reader-text: #1c1917;
+  --text-secondary: #78716c;
+  --header-bg: rgba(245, 245, 244, 0.9);
+  --border: #d6d3d1;
+  --border-subtle: rgba(28, 25, 23, 0.08);
+  --hover-bg: #e7e5e4;
+  --accent: #57534e;
+  --accent-soft: rgba(87, 83, 78, 0.08);
+  --accent-muted: rgba(87, 83, 78, 0.15);
+  --accent-hover: #44403c;
+  --modal-bg: #f5f5f4;
+  --modal-text: #1c1917;
+  --progress-track: #d6d3d1;
+  --bg-elevated: #fafaf9;
+  --bg-secondary: #e7e5e4;
+  --bg-tertiary: #dcd9d4;
 }
 
 /* ===== Responsive media element styles ===== */

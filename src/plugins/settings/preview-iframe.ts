@@ -35,7 +35,7 @@ export function createPreviewIframe(
     };
   }
 
-  const themeCSS = generateThemeCSS(settings.theme, settings.contrast);
+  const themeCSS = settings.theme ? generateThemeCSS(settings.theme, settings.contrast) : "";
   const baseCSS = generateBaseCSS();
   const typographyCSS = generateTypographyCSS(settings);
 
@@ -65,7 +65,9 @@ export function createPreviewIframe(
       const themeStyle = doc.getElementById("theme-style");
       const typographyStyle = doc.getElementById("typography-style");
       if (themeStyle) {
-        themeStyle.textContent = generateThemeCSS(newSettings.theme, newSettings.contrast);
+        themeStyle.textContent = newSettings.theme
+          ? generateThemeCSS(newSettings.theme, newSettings.contrast)
+          : "";
       }
       if (typographyStyle) {
         typographyStyle.textContent = generateTypographyCSS(newSettings);

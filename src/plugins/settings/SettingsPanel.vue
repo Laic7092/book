@@ -38,10 +38,11 @@ const emit = defineEmits<{
               v-for="theme in THEME_OPTIONS"
               :key="theme.value"
               :class="['theme-btn', { active: settings.theme === theme.value }]"
-              @click="state.update({ theme: theme.value })"
+              @click="state.update({ theme: settings.theme === theme.value ? null : theme.value })"
             >
               <div class="theme-preview" :style="{ background: themePreviewBg(theme.value) }"></div>
               <span>{{ theme.label }}</span>
+              <span v-if="settings.theme === theme.value" class="theme-check">✓</span>
             </button>
           </div>
         </div>
@@ -205,6 +206,7 @@ const emit = defineEmits<{
   border-radius: 8px;
   background: var(--modal-bg);
   cursor: pointer;
+  position: relative;
   transition: all 150ms ease;
   font-size: 13px;
   color: var(--modal-text);
@@ -225,6 +227,23 @@ const emit = defineEmits<{
   height: 32px;
   border-radius: 6px;
   border: 1px solid var(--border);
+  position: relative;
+}
+
+.theme-check {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  font-size: 10px;
+  background: var(--accent);
+  color: #fff;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 
 .size-btn {

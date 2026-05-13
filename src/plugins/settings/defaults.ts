@@ -4,7 +4,7 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
   fontSize: 20,
   fontFamily: "Literata, Georgia, serif",
   lineHeight: 1.6,
-  theme: "sepia",
+  theme: null,
   margin: 24,
   letterSpacing: 0,
   paragraphSpacing: 1.2,

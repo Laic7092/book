@@ -103,8 +103,8 @@ const BUILTIN_THEMES: ThemeDefinition[] = [
       accentHover: "#6d242e",
     },
     content: {
-      background: "#ffffff",
-      text: "#333333",
+      background: "#fdfcfb",
+      text: "#1f1a17",
     },
   },
   {
@@ -130,8 +130,8 @@ const BUILTIN_THEMES: ThemeDefinition[] = [
       accentHover: "#a94d58",
     },
     content: {
-      background: "#1a1a1a",
-      text: "#e0e0e0",
+      background: "#1a1816",
+      text: "#e8e4de",
     },
   },
   {
@@ -157,8 +157,8 @@ const BUILTIN_THEMES: ThemeDefinition[] = [
       accentHover: "#6d462a",
     },
     content: {
-      background: "#f4ecd8",
-      text: "#5b4636",
+      background: "#f5f0e6",
+      text: "#3d352a",
     },
   },
 ];

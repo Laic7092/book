@@ -37,7 +37,8 @@ const GEAR_ICON =
 export const loadOn = "reader" as const;
 
 function buildFullCSS(s: ReaderSettings): string {
-  return generateBaseCSS() + generateThemeCSS(s.theme, s.contrast) + generateTypographyCSS(s);
+  const themeCSS = s.theme ? generateThemeCSS(s.theme, s.contrast) : "";
+  return generateBaseCSS() + themeCSS + generateTypographyCSS(s);
 }
 
 // ── Plugin ──
@@ -82,17 +83,26 @@ export const settingsPlugin: Plugin = {
       return s.value.customTypography ? s.value.margin : DEFAULT_SETTINGS.margin;
     }
 
-    function saveBgToStorage(theme: string) {
-      try {
-        localStorage.setItem("reader-bg", ctx.themes.get(theme).chrome.bg);
-      } catch {
-        /* localStorage may be unavailable */
+    function applyTheme(theme: string | null) {
+      if (theme) {
+        ctx.ui.setTheme(theme);
+        try {
+          localStorage.setItem("reader-bg", ctx.themes.get(theme).chrome.bg);
+        } catch {
+          /* localStorage may be unavailable */
+        }
+      } else {
+        ctx.ui.clearTheme();
+        try {
+          localStorage.removeItem("reader-bg");
+        } catch {
+          /* localStorage may be unavailable */
+        }
       }
     }
 
     function syncToHost() {
-      ctx.ui.setTheme(s.value.theme);
-      saveBgToStorage(s.value.theme);
+      applyTheme(s.value.theme);
       ctx.ui.injectIframeStyle("typography", buildFullCSS(s.value));
       const host = ctx.readerSession();
       if (host) {
@@ -135,9 +145,8 @@ export const settingsPlugin: Plugin = {
     // Watch settings changes → drive core
     watch(
       () => s.value.theme,
-      (theme) => {
-        ctx.ui.setTheme(theme);
-        saveBgToStorage(theme);
+      () => {
+        applyTheme(s.value.theme);
         ctx.ui.injectIframeStyle("typography", buildFullCSS(s.value));
       },
     );
@@ -181,6 +190,11 @@ export const settingsPlugin: Plugin = {
 
     ctx.onCleanup(() => {
       _store = null;
+      try {
+        localStorage.removeItem("reader-bg");
+      } catch {
+        /* localStorage may be unavailable */
+      }
     });
   },
 };

@@ -98,8 +98,10 @@ export interface HeaderAction {
 // ── CSS injection API ──
 
 export interface CssAPI {
-  /** Set theme class on document.body + .reader-view-container. Auto-cleaned on teardown. */
+  /** Apply a theme from the registry — sets CSS variables on :root. */
   setTheme(theme: string): void;
+  /** Remove all inline theme CSS variables — falls back to index.css defaults. */
+  clearTheme(): void;
   /** Inject or update a <style> element in the reader iframe. */
   injectIframeStyle(id: string, css: string): void;
   /** Remove an injected <style> from the reader iframe. */
@@ -138,8 +140,10 @@ export interface UISlots {
   registerPage(name: string, component: Component | (() => Promise<Component>)): void;
   /** Open a modal by name (delegates to uiStore). */
   openModal(name: string): void;
-  /** Set theme class on document.body + .reader-view-container. Auto-cleaned on teardown. */
+  /** Apply a theme from the registry — sets CSS variables on :root. */
   setTheme(theme: string): void;
+  /** Remove all inline theme CSS variables — falls back to index.css defaults. */
+  clearTheme(): void;
   /** Inject or update a <style> element in the reader iframe. Auto-cleaned on teardown. */
   injectIframeStyle(id: string, css: string): void;
   /** Remove an injected <style> from the reader iframe. */

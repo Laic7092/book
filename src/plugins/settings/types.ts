@@ -2,7 +2,8 @@ export interface ReaderSettings {
   fontSize: number;
   fontFamily: string;
   lineHeight: number;
-  theme: "light" | "dark" | "sepia";
+  /** null = no theme applied — falls back to index.css neutral defaults */
+  theme: "light" | "dark" | "sepia" | null;
   margin: number;
   letterSpacing?: number;
   paragraphSpacing?: number;

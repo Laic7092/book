@@ -115,7 +115,7 @@ function resolveComponent(v: Component | (() => Promise<Component>)): Component 
 
 export function createUISlots(): Omit<
   UISlots,
-  "openModal" | "setTheme" | "injectIframeStyle" | "removeIframeStyle"
+  "openModal" | "setTheme" | "clearTheme" | "injectIframeStyle" | "removeIframeStyle"
 > {
   return {
     registerModal(name: string, component: Component | (() => Promise<Component>)) {
@@ -236,6 +236,32 @@ export const pluginEvents = new EventBus<PluginEventMap>();
 
 // ── CssAPI implementation ──
 
+/** Remove all inline theme CSS variables — falls back to index.css neutral defaults. */
+function resetThemeVars() {
+  const root = document.documentElement;
+  const props = [
+    "--reader-bg",
+    "--reader-text",
+    "--text-secondary",
+    "--header-bg",
+    "--border",
+    "--border-subtle",
+    "--hover-bg",
+    "--accent",
+    "--accent-soft",
+    "--accent-muted",
+    "--accent-hover",
+    "--modal-bg",
+    "--modal-text",
+    "--progress-track",
+    "--bg-elevated",
+    "--bg-secondary",
+    "--bg-tertiary",
+  ] as const;
+  for (const p of props) root.style.removeProperty(p);
+  root.removeAttribute("data-theme");
+}
+
 export function createCssAPI(): CssAPI {
   return {
     setTheme(theme: string) {
@@ -260,6 +286,9 @@ export function createCssAPI(): CssAPI {
       root.style.setProperty("--accent-muted", c.accentMuted);
       root.style.setProperty("--accent-hover", c.accentHover);
       root.setAttribute("data-theme", theme);
+    },
+    clearTheme() {
+      resetThemeVars();
     },
     injectIframeStyle(id: string, css: string) {
       const doc = getReaderSession()?.getDocument();
@@ -295,6 +324,7 @@ export function createPluginContext(id: string, bootstrap: PluginBootstrap): Plu
         uiStore.openModal(name);
       },
       setTheme: (t) => css.setTheme(t),
+      clearTheme: () => css.clearTheme(),
       injectIframeStyle: (id, c) => css.injectIframeStyle(id, c),
       removeIframeStyle: (id) => css.removeIframeStyle(id),
     },
@@ -312,10 +342,18 @@ export function createPluginContext(id: string, bootstrap: PluginBootstrap): Plu
 function createTrackedCss(cleanupFns: (() => void | Promise<void>)[]): CssAPI {
   const raw = createCssAPI();
   const injectedStyles: string[] = [];
+  let themeApplied = false;
 
   return {
     setTheme(theme: string) {
+      if (!themeApplied) {
+        themeApplied = true;
+        cleanupFns.push(() => resetThemeVars());
+      }
       raw.setTheme(theme);
+    },
+    clearTheme() {
+      raw.clearTheme();
     },
     injectIframeStyle(id: string, css: string) {
       raw.injectIframeStyle(id, css);
@@ -417,6 +455,7 @@ export function createTrackedContext(id: string, bootstrap: PluginBootstrap): Tr
       uiStore.openModal(name);
     },
     setTheme: (t) => trackedCss.setTheme(t),
+    clearTheme: () => trackedCss.clearTheme(),
     injectIframeStyle: (id, c) => trackedCss.injectIframeStyle(id, c),
     removeIframeStyle: (id) => trackedCss.removeIframeStyle(id),
   };
