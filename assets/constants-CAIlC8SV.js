@@ -1,1 +1,0 @@
-var e=3e3,t=5e4,n=1e5,r=.3,i=.7,a=100*1024*1024,o=[`.txt`,`.epub`,`.pdf`,`.cbz`];export{r as a,a as i,n,i as o,t as r,e as s,o as t};

@@ -1,0 +1,1 @@
+var e=3e3,t=5e4,n=1e5,r=.3,i=.7,a=100*1024*1024,o=[`.txt`,`.epub`,`.pdf`,`.cbz`];function s(e,t=10){if(e.length<=t)return e;let n=e.slice(0,t),r=n.lastIndexOf(` `);return r>t-5?n.slice(0,r)+`…`:n.trimEnd()+`…`}function c(e,t){return{title:s(e),message:t}}export{r as a,c,a as i,n,i as o,t as r,e as s,o as t};
