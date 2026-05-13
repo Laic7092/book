@@ -1,6 +1,7 @@
 import type { BookParser, ParsedBook, Chapter, Resource } from "../../core/types";
 import { BaseBookParser, generateId } from "../base";
 import { STORES, dbPut, dbGet } from "../../storage/db";
+import { revokeResourceUrls as revokeUrls } from "../../storage/resources";
 
 async function getPdfjsModule() {
   const pdfjsLib = await import("pdfjs-dist");
@@ -103,9 +104,7 @@ export class PdfParser extends BaseBookParser implements BookParser {
   }
 
   revokeResourceUrls(urls: Map<string, string>): void {
-    for (const [, url] of urls) {
-      URL.revokeObjectURL(url);
-    }
+    revokeUrls(urls);
   }
 
   // ── Phase 1: Parse ──

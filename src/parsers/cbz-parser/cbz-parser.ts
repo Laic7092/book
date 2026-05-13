@@ -3,6 +3,7 @@ import type { BookParser, ParsedBook, Chapter, Resource } from "../../core/types
 import { ErrorCode, createReaderError } from "../../core/errors";
 import { BaseBookParser, generateId } from "../base";
 import { STORES, dbPut, dbGet } from "../../storage/db";
+import { revokeResourceUrls as revokeUrls } from "../../storage/resources";
 
 const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp", "bmp"]);
 
@@ -124,9 +125,7 @@ export class CbzParser extends BaseBookParser implements BookParser {
   }
 
   revokeResourceUrls(urls: Map<string, string>): void {
-    for (const [, url] of urls) {
-      URL.revokeObjectURL(url);
-    }
+    revokeUrls(urls);
   }
 
   // ── Phase 1: Parse ──

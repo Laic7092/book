@@ -3,6 +3,8 @@
 import type { Entry, FileEntry, ZipReader } from "@zip.js/zip.js";
 import { BaseBookParser, generateId, parseXML, cleanHtml } from "../base";
 
+import { revokeResourceUrls as revokeUrls } from "../../storage/resources";
+
 let _zipModule: typeof import("@zip.js/zip.js") | null = null;
 async function getZipModule() {
   if (!_zipModule) _zipModule = await import("@zip.js/zip.js");
@@ -50,8 +52,7 @@ export class EpubParser extends BaseBookParser implements BookParser {
   // ── Format-specific lifecycle (called by core storage layer) ──
 
   async saveResources(bookId: string, resources: Map<string, ArrayBuffer>): Promise<void> {
-    const { saveResource } = await import("./resources");
-    const { getMimeTypeFromExtension } = await import("./resources");
+    const { saveResource, getMimeTypeFromExtension } = await import("../../storage/resources");
     for (const [resourceId, data] of resources) {
       await saveResource(bookId, resourceId, data, getMimeTypeFromExtension(resourceId));
     }
@@ -81,9 +82,7 @@ export class EpubParser extends BaseBookParser implements BookParser {
   }
 
   revokeResourceUrls(urls: Map<string, string>): void {
-    for (const [, url] of urls) {
-      URL.revokeObjectURL(url);
-    }
+    revokeUrls(urls);
   }
 
   /**
