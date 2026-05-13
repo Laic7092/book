@@ -242,7 +242,7 @@ watch(speed, (val) => {
 
 <template>
   <!-- Toolbar button -->
-  <button
+  <div
     class="tts-btn"
     :class="{ active: isActive || expanded }"
     @click.stop="toggleExpanded"
@@ -262,7 +262,7 @@ watch(speed, (val) => {
       <path d="M19.07 4.93a10 10 0 010 14.14" />
       <path d="M15.54 8.46a5 5 0 010 7.07" />
     </svg>
-  </button>
+  </div>
 
   <!-- Expanded panel -->
   <div v-if="expanded" class="tts-panel" @click.stop>
@@ -387,32 +387,18 @@ watch(speed, (val) => {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  border: 1px solid var(--border-subtle, #ddd);
-  background: var(--bg-elevated, #fff);
+  backdrop-filter: blur(4px);
   color: var(--reader-text, #333);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0.5;
-  transition:
-    opacity 200ms,
-    background 200ms,
-    box-shadow 200ms;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   -webkit-tap-highlight-color: transparent;
 }
 
 .tts-btn:hover {
-  opacity: 1;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-}
-
-.tts-btn.active {
-  opacity: 1;
-  border-color: var(--accent, #5b9aff);
-  color: var(--accent, #5b9aff);
-  box-shadow: 0 2px 12px rgba(91, 154, 255, 0.3);
 }
 
 /* ── Panel ── */

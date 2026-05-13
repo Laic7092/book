@@ -1,22 +1,27 @@
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from "vue";
-import { getAutoReadSession } from "./index";
+import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import { getAutoReadSession, setAutoAdvancing, setOnUserPageChange } from "./index";
 
 const isPlaying = ref(false);
-const speed = ref(1);
-const isDragging = ref(false);
+const intervalSec = ref(5);
 const progress = ref(0);
 
 let timer: number | null = null;
-let longPressTimer: number | null = null;
-let startY = 0;
+let raf: number | null = null;
 let lastTick = 0;
 
-const MIN_SPEED = 1;
-const MAX_SPEED = 5;
-const BASE_INTERVAL = 5000;
+const PRESETS = [2, 3, 4, 5, 7, 10, 15];
+const interval = computed(() => intervalSec.value * 1000);
 
-const interval = computed(() => Math.round(BASE_INTERVAL / speed.value));
+function prevPreset() {
+  const idx = PRESETS.indexOf(intervalSec.value);
+  intervalSec.value = PRESETS[(idx - 1 + PRESETS.length) % PRESETS.length];
+}
+
+function nextPreset() {
+  const idx = PRESETS.indexOf(intervalSec.value);
+  intervalSec.value = PRESETS[(idx + 1) % PRESETS.length];
+}
 
 function tick() {
   lastTick = Date.now();
@@ -24,11 +29,12 @@ function tick() {
   const s = getAutoReadSession();
   if (!s) return;
   const prevPage = s.getState().page.current;
+  setAutoAdvancing(true);
   s.dispatch({ type: "NEXT_PAGE" });
-  // Stop if we're at the end (state didn't change after dispatch)
+  setAutoAdvancing(false);
   requestAnimationFrame(() => {
     const newState = s.getState();
-    if (newState.status === "loading-chapter") return; // still transitioning
+    if (newState.status === "loading-chapter") return;
     if (
       newState.page.current === prevPage &&
       newState.currentChapterIndex >= newState.chapters.length - 1
@@ -39,16 +45,15 @@ function tick() {
 }
 
 function start() {
+  if (raf !== null) return;
   const s = getAutoReadSession();
   if (!s) return;
-  const st = s.getState();
-  if (st.page.total <= 1 && st.currentChapterIndex >= st.chapters.length - 1) return;
   isPlaying.value = true;
   lastTick = Date.now();
   progress.value = 0;
   tick();
   timer = window.setInterval(tick, interval.value);
-  requestAnimationFrame(updateProgress);
+  raf = requestAnimationFrame(updateProgress);
 }
 
 function updateProgress() {
@@ -66,158 +71,186 @@ function stop() {
     clearInterval(timer);
     timer = null;
   }
-}
-
-function setSpeed(s: number) {
-  speed.value = Math.max(MIN_SPEED, Math.min(MAX_SPEED, s));
-}
-
-function onWheel(e: WheelEvent) {
-  e.preventDefault();
-  setSpeed(speed.value + (e.deltaY > 0 ? -1 : 1));
-}
-
-function onPointerDown(e: PointerEvent) {
-  startY = e.clientY;
-  isDragging.value = false;
-  longPressTimer = window.setTimeout(() => {
-    isDragging.value = true;
-  }, 300);
-}
-
-function onPointerMove(e: PointerEvent) {
-  if (!isDragging.value) return;
-  const delta = startY - e.clientY;
-  if (Math.abs(delta) > 20) {
-    setSpeed(speed.value + (delta > 0 ? 1 : -1));
-    startY = e.clientY;
+  if (raf !== null) {
+    cancelAnimationFrame(raf);
+    raf = null;
   }
 }
 
-function onPointerUp() {
-  if (longPressTimer) {
-    clearTimeout(longPressTimer);
-    longPressTimer = null;
-  }
-  if (!isDragging.value) {
-    if (isPlaying.value) stop();
-    else start();
-  }
-  isDragging.value = false;
+function toggle() {
+  if (isPlaying.value) stop();
+  else start();
 }
 
-watch(speed, () => {
+watch(intervalSec, () => {
   if (isPlaying.value) {
     stop();
     start();
   }
 });
 
-onUnmounted(() => stop());
+onMounted(() => {
+  setOnUserPageChange(() => {
+    if (isPlaying.value) {
+      stop();
+      start();
+    }
+  });
+});
+
+onUnmounted(() => {
+  setOnUserPageChange(null);
+  stop();
+});
 </script>
 
 <template>
-  <div
-    class="auto-read"
-    :class="{ playing: isPlaying }"
-    @wheel="onWheel"
-    @pointerdown="onPointerDown"
-    @pointermove="onPointerMove"
-    @pointerup="onPointerUp"
-    @pointercancel="onPointerUp"
-  >
-    <div class="icon">
-      <svg v-if="isPlaying" viewBox="0 0 24 24">
-        <rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor" />
-        <rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor" />
+  <div class="auto-read" :class="{ playing: isPlaying }">
+    <button class="btn adj" title="Slower" @click="prevPreset">
+      <svg viewBox="0 0 16 16">
+        <path
+          d="M4 8h8"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          fill="none"
+        />
       </svg>
-      <svg v-else viewBox="0 0 24 24">
-        <path d="M8 5.5v13l10-6.5L8 5.5z" fill="currentColor" />
+    </button>
+    <button class="btn display" title="Tap to cycle speed" @click="nextPreset">
+      {{ intervalSec }}<span class="unit">s</span>
+    </button>
+    <button class="btn adj" title="Faster" @click="nextPreset">
+      <svg viewBox="0 0 16 16">
+        <path
+          d="M8 4v8M4 8h8"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          fill="none"
+        />
       </svg>
-    </div>
-    <svg v-if="isPlaying" class="progress-ring" viewBox="0 0 48 48">
-      <circle
-        class="ring"
-        cx="24"
-        cy="24"
-        r="21"
-        :stroke-dashoffset="131.94 * (1 - progress / 100)"
-      />
-    </svg>
+    </button>
+    <div class="sep" />
+    <button class="btn play" title="Play / Pause" @click="toggle">
+      <svg v-if="isPlaying" viewBox="0 0 20 20">
+        <rect x="5" y="3.5" width="3.5" height="13" rx="1" fill="currentColor" />
+        <rect x="11.5" y="3.5" width="3.5" height="13" rx="1" fill="currentColor" />
+      </svg>
+      <svg v-else viewBox="0 0 20 20">
+        <path d="M6 4.5v11l9-5.5L6 4.5z" fill="currentColor" />
+      </svg>
+      <svg v-if="isPlaying" class="progress-ring" viewBox="0 0 36 36">
+        <circle
+          cx="18"
+          cy="18"
+          r="15.5"
+          stroke-dasharray="97.4"
+          :stroke-dashoffset="97.4 * (1 - progress / 100)"
+        />
+      </svg>
+    </button>
   </div>
 </template>
 
 <style scoped>
 .auto-read {
-  position: relative;
-  width: 44px;
-  height: 44px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  opacity: 0.5;
-  border-radius: 50%;
-  border: 1px solid var(--border-subtle, #ddd);
-  background: var(--bg-elevated, #fff);
-  color: var(--reader-text, #333);
-  transition:
-    opacity 200ms,
-    background 200ms,
-    box-shadow 200ms;
+  gap: 2px;
+  height: 36px;
+  padding: 0 4px;
+  border-radius: 18px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(4px);
   -webkit-tap-highlight-color: transparent;
   user-select: none;
+  touch-action: none;
 }
 
 .auto-read:hover {
-  opacity: 1;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
 }
 
 .auto-read.playing {
-  opacity: 1;
   border-color: var(--accent, #5b9aff);
-  color: var(--accent, #5b9aff);
   box-shadow: 0 2px 12px rgba(91, 154, 255, 0.3);
 }
 
-.auto-read:active .icon {
-  transform: scale(0.9);
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--reader-text, #333);
+  cursor: pointer;
+  padding: 0;
+  border-radius: 50%;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.icon {
-  width: 24px;
-  height: 24px;
-  color: var(--accent);
-  transition: transform 150ms;
+.adj {
+  width: 28px;
+  height: 28px;
+  color: var(--text-secondary, #888);
+}
+
+.adj svg {
+  width: 14px;
+  height: 14px;
+}
+
+.display {
+  width: 36px;
+  height: 28px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+}
+
+.unit {
+  font-size: 10px;
+  font-weight: 400;
+  margin-left: 1px;
+}
+
+.sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border-subtle, #ddd);
+  margin: 0 2px;
+}
+
+.play {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  color: var(--accent, #5b9aff);
+}
+
+.play svg:not(.progress-ring) {
+  width: 18px;
+  height: 18px;
 }
 
 .progress-ring {
   position: absolute;
   top: 0;
-  width: 44px;
-  height: 44px;
+  left: 0;
+  width: 30px;
+  height: 30px;
   transform: rotate(-90deg);
   pointer-events: none;
 }
 
-.ring {
+.progress-ring circle {
   fill: none;
-  stroke: var(--accent);
-  stroke-width: 2;
-  stroke-dasharray: 131.94;
+  stroke: var(--accent, #5b9aff);
+  stroke-width: 2.5;
   stroke-linecap: round;
   transition: stroke-dashoffset 100ms linear;
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 0.3;
-  }
-  50% {
-    opacity: 0.6;
-  }
 }
 </style>

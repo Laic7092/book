@@ -501,7 +501,7 @@ async function openModal(modal: string) {
   z-index: var(--z-chrome);
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-end;
   gap: 8px;
   opacity: 0;
   transform: translateY(12px);
