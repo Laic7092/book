@@ -1,4 +1,4 @@
-import{at as e,g as t,k as n,nt as r,rt as i}from"./reactivity.esm-bundler-BUwYshLn.js";import{C as a,O as o,S as ee,T as s,g as te,k as ne,l as c,m as l,r as u,s as d,u as f,w as p}from"./runtime-core.esm-bundler-UN3GZPho.js";import"./theme-registry-BxZmJp4N.js";import{t as m}from"./ModalHeader-BSpD5VWL.js";import{t as h}from"./plugin-vueexport-helper-Bcq5wbmL.js";import{n as g,r as _,t as v}from"./useIframeRenderer-BMBKTNaV.js";import{a as y,i as b,n as x,s as S,t as C}from"./options-BzOkYQnU.js";import{r as w,t as T}from"./settings-CElxhh5r.js";function E(e,t){let n=document.createElement(`iframe`);n.className=`preview-iframe`,n.setAttribute(`frameborder`,`0`),Object.assign(n.style,{width:`100%`,height:`100%`,border:`none`,display:`block`}),e.appendChild(n);let r=n.contentDocument||n.contentWindow?.document;if(!r)return{updateStyles(){},destroy(){e.removeChild(n)}};let i=t.theme?g(t.theme,t.contrast):``,a=v(),o=_(t);return r.open(),r.write(`
+import{at as e,g as t,k as n,nt as r,rt as i}from"./reactivity.esm-bundler-BUwYshLn.js";import{C as a,O as o,S as ee,T as s,g as te,k as ne,l as c,m as l,r as u,s as d,u as f,w as p}from"./runtime-core.esm-bundler-UN3GZPho.js";import"./theme-registry-BxZmJp4N.js";import{t as m}from"./ModalHeader-BSpD5VWL.js";import{t as h}from"./plugin-vueexport-helper-Bcq5wbmL.js";import{n as g,r as _,t as v}from"./useIframeRenderer-BMBKTNaV.js";import{a as y,i as b,n as x,s as S,t as C}from"./options-BzOkYQnU.js";import{r as w,t as T}from"./settings-B7JDddse.js";function E(e,t){let n=document.createElement(`iframe`);n.className=`preview-iframe`,n.setAttribute(`frameborder`,`0`),Object.assign(n.style,{width:`100%`,height:`100%`,border:`none`,display:`block`}),e.appendChild(n);let r=n.contentDocument||n.contentWindow?.document;if(!r)return{updateStyles(){},destroy(){e.removeChild(n)}};let i=t.theme?g(t.theme,t.contrast):``,a=v(),o=_(t);return r.open(),r.write(`
     <!DOCTYPE html>
     <html data-mode="scroll" style="overflow: hidden;">
     <head>
@@ -8,7 +8,7 @@ import{at as e,g as t,k as n,nt as r,rt as i}from"./reactivity.esm-bundler-BUwYs
       <style id="base-style">${a}</style>
       <style id="typography-style">${o}</style>
     </head>
-    <body class="reader-content">
+    <body class="reader-content" style="padding-bottom: 0;">
       <p style="margin-top: 0;">Preview</p>
       <p style="margin-bottom: 0;">This is a preview. Adjust the settings to see how your reading experience changes.</p>
     </body>
