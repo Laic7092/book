@@ -4,7 +4,7 @@ import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
 import { createEntityStore, type EntityStore } from "../store-factory";
 import type { Annotation } from "../../core/types";
-import type { ReaderSession } from "../../core/reader-host";
+import type { ReaderSession } from "../../core/session";
 
 export const loadOn = "reader" as const;
 

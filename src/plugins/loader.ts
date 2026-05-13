@@ -7,7 +7,7 @@ import {
 import { PLUGIN_BRAND } from "./types";
 import type { Plugin, Scene } from "./types";
 import { getAllPluginStates } from "./manager/plugin-states";
-import { pluginManifest } from "./plugin-manifest";
+import PLUGIN_METADATA from "./plugin-metadata.json";
 
 function isPlugin(obj: unknown): obj is Plugin {
   return (
@@ -33,7 +33,7 @@ interface PluginMeta {
 const metas: PluginMeta[] = [];
 const pluginLoaders = import.meta.glob<Record<string, unknown>>("./*/index.ts");
 
-for (const meta of pluginManifest) {
+for (const meta of PLUGIN_METADATA) {
   if (!meta.loadOn || (Array.isArray(meta.loadOn) && meta.loadOn.length === 0)) continue;
   const loader = pluginLoaders[`./${meta.dir}/index.ts`];
   if (!loader) continue;
@@ -58,7 +58,7 @@ async function ensureSceneMap(): Promise<void> {
     if (!loader) continue;
 
     // Check if this is a parser plugin (has formats in manifest)
-    const manifestEntry = pluginManifest.find((m) => m.dir === meta.dir);
+    const manifestEntry = PLUGIN_METADATA.find((m) => m.dir === meta.dir);
     const isParser = manifestEntry ? !!manifestEntry.formats?.length : false;
 
     // Always register a stub from manifest metadata so the plugin is visible in the panel
@@ -115,7 +115,7 @@ export async function loadPluginsFor(scene: Scene): Promise<void> {
  * Uses the build-time manifest to find the right plugin without loading all parsers.
  */
 export async function loadParserForFormat(format: string): Promise<void> {
-  const entry = pluginManifest.find((m) => m.formats?.includes(format));
+  const entry = PLUGIN_METADATA.find((m) => m.formats?.includes(format));
   if (!entry) return;
 
   const loader = pluginLoaders[`./${entry.dir}/index.ts`];

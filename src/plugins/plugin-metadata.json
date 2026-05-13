@@ -1,0 +1,48 @@
+[
+  { "pluginId": "annotations", "name": "Annotations", "loadOn": "reader", "dir": "annotations" },
+  { "pluginId": "auto-read", "name": "Auto Read", "loadOn": "reader", "dir": "auto-read" },
+  { "pluginId": "book-sources", "name": "书源导入", "loadOn": "bookshelf", "dir": "book-sources" },
+  { "pluginId": "bookmarks", "name": "Bookmarks", "loadOn": "reader", "dir": "bookmarks" },
+  {
+    "pluginId": "cbz-parser",
+    "name": "CBZ Parser",
+    "loadOn": ["book-import"],
+    "dir": "cbz-parser",
+    "formats": ["cbz"]
+  },
+  {
+    "pluginId": "epub",
+    "name": "EPUB Parser",
+    "loadOn": ["book-import"],
+    "dir": "epub",
+    "formats": ["epub"]
+  },
+  { "pluginId": "last-book", "name": "Last Book Restore", "loadOn": "app", "dir": "last-book" },
+  { "pluginId": "manager", "name": "Manager", "loadOn": "app", "dir": "manager" },
+  { "pluginId": "opds", "name": "OPDS Catalog", "loadOn": "bookshelf", "dir": "opds" },
+  {
+    "pluginId": "pdf-parser",
+    "name": "PDF Parser",
+    "loadOn": ["book-import"],
+    "dir": "pdf-parser",
+    "formats": ["pdf"]
+  },
+  { "pluginId": "progress-bar", "name": "Progress Bar", "loadOn": "reader", "dir": "progress-bar" },
+  {
+    "pluginId": "reading-progress",
+    "name": "Reading Progress",
+    "loadOn": "reader",
+    "dir": "reading-progress"
+  },
+  { "pluginId": "search", "name": "Full-Text Search", "loadOn": "reader", "dir": "search" },
+  { "pluginId": "settings", "name": "Settings", "loadOn": "reader", "dir": "settings" },
+  { "pluginId": "stats", "name": "Reading Statistics", "loadOn": "reader", "dir": "stats" },
+  { "pluginId": "tts", "name": "Text to Speech", "loadOn": "reader", "dir": "tts" },
+  {
+    "pluginId": "txt-parser",
+    "name": "TXT Parser",
+    "loadOn": ["book-import"],
+    "dir": "txt-parser",
+    "formats": ["txt"]
+  }
+]

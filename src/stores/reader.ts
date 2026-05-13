@@ -7,7 +7,7 @@ import { getParsers, getParserForFormat } from "../plugins/manager/registry";
 import { loadPluginsFor, loadParserForFormat } from "../plugins/loader";
 import { pluginEvents } from "../plugins/context";
 import * as booksStore from "../storage/books";
-import { setCurrentParser } from "../core/reader-context";
+import { setCurrentParser } from "../core/session";
 import { assertValidBookFile, validateBookId } from "../utils/validation";
 
 const EXTENSION_MIME_MAP: Record<string, string> = {

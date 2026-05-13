@@ -22,9 +22,9 @@ import { injectResources } from "../reader-engine/iframe-resources";
 import {
   registerReaderSession,
   unregisterReaderSession,
+  getCurrentParser,
   type ReaderSession,
-} from "../core/reader-host";
-import { getCurrentParser } from "../core/reader-context";
+} from "../core/session";
 import { TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../utils/constants";
 import { parseCfi, resolveCfiToElement } from "../utils/epub-cfi";
 import * as booksStore from "../storage/books";

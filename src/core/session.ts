@@ -1,14 +1,6 @@
-// ReaderSession — the API surface exposed to plugins for interacting with
-// the active reader session. Replaces the old 20-method ReaderHost with
-// three focused primitives:
-//
-//   dispatch(action) — send an action to the state machine
-//   getState()      — read current machine state
-//   getDocument()   — access the iframe document (for DOM plugins)
-//
-// A session is registered when a book is opened and cleared when closed.
-
 import type { ReaderAction, ReaderState } from "../reader-engine/reader-machine";
+
+// ── ReaderSession (plugin bridge) ──
 
 export interface ReaderSession {
   dispatch(action: ReaderAction): void;
@@ -30,4 +22,18 @@ export function unregisterReaderSession(): void {
 
 export function getReaderSession(): ReaderSession | null {
   return currentSession;
+}
+
+// ── Current parser (bridge-level state) ──
+
+import type { BookParser } from "./types";
+
+let _currentParser: BookParser | null = null;
+
+export function setCurrentParser(parser: BookParser | null): void {
+  _currentParser = parser;
+}
+
+export function getCurrentParser(): BookParser | null {
+  return _currentParser;
 }

@@ -5,7 +5,7 @@ import { useUIStore } from "../stores/ui";
 import { useReaderMachine, type ReaderContentAPI } from "../composables/useReaderMachine";
 import { useIframeRenderer } from "../composables/useIframeRenderer";
 import ReaderChrome from "./reader/ReaderChrome.vue";
-import { ModalWrapper } from "./modals";
+import ModalWrapper from "./modals/ModalWrapper.vue";
 import type { Book } from "../core/types";
 import { navigate } from "../utils/router";
 

@@ -1,6 +1,6 @@
 import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
-import type { ReaderSession } from "../../core/reader-host";
+import type { ReaderSession } from "../../core/session";
 
 export const loadOn = "reader" as const;
 

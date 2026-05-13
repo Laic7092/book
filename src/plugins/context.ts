@@ -17,7 +17,7 @@ import type {
   ContentTransformer,
   ToolbarItem,
 } from "./types";
-import { getReaderSession } from "../core/reader-host";
+import { getReaderSession } from "../core/session";
 import { navigate as routerNavigate } from "../utils/router";
 import { createServerClient } from "../utils/api";
 import { useUIStore } from "../stores/ui";

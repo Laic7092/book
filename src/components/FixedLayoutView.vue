@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useReaderStore } from "../stores/reader";
 import FixedLayoutReader from "./reader/FixedLayoutReader.vue";
-import { useNavigationStack } from "../composables";
+import { useNavigationStack } from "../composables/useNavigationStack";
 import type { Book } from "../core/types";
 import { navigate } from "../utils/router";
 import { TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../utils/constants";

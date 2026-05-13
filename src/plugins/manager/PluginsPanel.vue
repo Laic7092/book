@@ -6,7 +6,7 @@ import {
   setPluginEnabled,
   pluginStateVersion,
 } from "../../plugins/manager/registry";
-import { pluginManifest } from "../../plugins/plugin-manifest";
+import PLUGIN_METADATA from "../../plugins/plugin-metadata.json";
 import type { Plugin } from "../../plugins/types";
 
 // ── Scene metadata ──
@@ -25,7 +25,7 @@ const SCENE_ORDER = ["reader", "book-import", "bookshelf", "app"];
 const pluginSceneMap = new Map<string, string | string[]>();
 const sceneCount = new Map<string, number>();
 
-for (const meta of pluginManifest) {
+for (const meta of PLUGIN_METADATA) {
   if (!meta.loadOn) continue;
   pluginSceneMap.set(meta.dir, meta.loadOn);
   const scenes = Array.isArray(meta.loadOn) ? meta.loadOn : [meta.loadOn];

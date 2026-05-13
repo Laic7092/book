@@ -3,7 +3,7 @@
 
 import type { ReadingSession, BookReadingStats } from "../../core/types";
 import type { PluginStorageAdapter } from "../types";
-import type { ReaderSession } from "../../core/reader-host";
+import type { ReaderSession } from "../../core/session";
 
 const SESSIONS_KEY = "sessions";
 

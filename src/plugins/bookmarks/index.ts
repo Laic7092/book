@@ -2,13 +2,13 @@ import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
 import { createEntityStore, type EntityStore } from "../store-factory";
 import type { Bookmark } from "../../core/types";
-import type { ReaderSession } from "../../core/reader-host";
+import type { ReaderSession } from "../../core/session";
 import {
   LEGACY_FALLBACK_CFI,
   generateCfiFromElement,
   generateCfiFromCharOffset,
 } from "../../utils/epub-cfi";
-import { stripHtml } from "../../utils/dom";
+import { stripHtml } from "../../utils/validation";
 
 export const loadOn = "reader" as const;
 

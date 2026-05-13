@@ -3,10 +3,10 @@ import { computed, onMounted, ref } from "vue";
 import { useBookshelfStore } from "../stores/bookshelf";
 import { useUIStore } from "../stores/ui";
 import { getBookGradient, getInitial } from "../utils/colors";
-import { formatBookToast } from "../utils/toast";
+import { formatBookToast } from "../utils/constants";
 import { validateBookFile } from "../utils/validation";
 import type { Book } from "../core/types";
-import { ModalWrapper } from "./modals";
+import ModalWrapper from "./modals/ModalWrapper.vue";
 import ToastNotification from "./ToastNotification.vue";
 import ConfirmDialog from "./ConfirmDialog.vue";
 import {
