@@ -1,1 +1,0 @@
-import{n as e}from"./chunk-DECur_0Z.js";import{o as t,r as n,t as r}from"./db-FoBi2uWr.js";var i=e({getZip:()=>o,saveZip:()=>a});async function a(e,n,i){await t(r.ZIPS,{bookId:e,data:n,fileSize:i})}async function o(e){return(await n(r.ZIPS,e))?.data}export{i as n,o as t};
