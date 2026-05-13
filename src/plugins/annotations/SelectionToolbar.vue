@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { HIGHLIGHT_COLORS } from "../../config/colors";
+import { HIGHLIGHT_COLORS } from "../../utils/colors";
 
 defineProps<{
   visible: boolean;

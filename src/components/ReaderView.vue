@@ -6,7 +6,7 @@ import { useReaderMachine, type ReaderContentAPI } from "../composables/useReade
 import { ReaderHeader, ReaderFooter, ReaderContent, ReaderToolbar } from "../components/reader";
 import { ModalWrapper } from "../components/modals";
 import type { Book } from "../core/types";
-import { navigate } from "../router";
+import { navigate } from "../utils/router";
 
 const props = defineProps<{
   book: Book;
@@ -189,6 +189,7 @@ function closeModal() {
     color 200ms ease,
     box-shadow 200ms ease;
 }
+
 .history-btn:hover {
   opacity: 1;
   border-color: var(--accent);
@@ -198,9 +199,11 @@ function closeModal() {
     0 6px 20px rgba(0, 0, 0, 0.14),
     0 2px 6px rgba(0, 0, 0, 0.08);
 }
+
 .history-back {
   left: max(12px, env(safe-area-inset-left, 0));
 }
+
 .history-forward {
   right: max(12px, env(safe-area-inset-right, 0));
 }

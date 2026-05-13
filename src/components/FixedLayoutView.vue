@@ -4,8 +4,8 @@ import { useReaderStore } from "../stores/reader";
 import FixedLayoutReader from "./reader/FixedLayoutReader.vue";
 import { useNavigationStack } from "../composables";
 import type { Book } from "../core/types";
-import { navigate } from "../router";
-import { TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../config/constants";
+import { navigate } from "../utils/router";
+import { TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../utils/constants";
 
 const props = defineProps<{ book: Book }>();
 
@@ -600,17 +600,21 @@ onUnmounted(() => {
 .outline-leave-active {
   transition: opacity 200ms ease;
 }
+
 .outline-enter-active .fl-outline-panel,
 .outline-leave-active .fl-outline-panel {
   transition: transform 200ms ease;
 }
+
 .outline-enter-from,
 .outline-leave-to {
   opacity: 0;
 }
+
 .outline-enter-from .fl-outline-panel {
   transform: translateX(100%);
 }
+
 .outline-leave-to .fl-outline-panel {
   transform: translateX(100%);
 }

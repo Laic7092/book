@@ -1,6 +1,6 @@
 import type { Annotation } from "../../core/types";
 import { resolveCfiRange, compareCfi } from "../../utils/epub-cfi";
-import { hexToRgba } from "../../config/colors";
+import { hexToRgba } from "../../utils/colors";
 import { useDocumentMarker } from "../../composables/useDocumentMarker";
 
 export interface SelectionInfo {

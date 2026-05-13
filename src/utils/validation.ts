@@ -1,5 +1,5 @@
 import { createReaderError, ErrorCode } from "../core/errors";
-import { ALLOWED_FILE_EXTENSIONS, MAX_FILE_SIZE_BYTES } from "../config/constants";
+import { ALLOWED_FILE_EXTENSIONS, MAX_FILE_SIZE_BYTES } from "./constants";
 
 export interface ValidationResult {
   valid: boolean;

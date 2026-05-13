@@ -3,7 +3,7 @@ import { computed, watch, defineAsyncComponent } from "vue";
 import Bookshelf from "./components/Bookshelf.vue";
 import { useReaderStore } from "./stores/reader";
 import { useUIStore } from "./stores/ui";
-import { currentRoute, navigate } from "./router";
+import { currentRoute, navigate } from "./utils/router";
 import { getPageComponent } from "./plugins/manager/registry";
 
 const ReaderView = defineAsyncComponent(() => import("./components/ReaderView.vue"));

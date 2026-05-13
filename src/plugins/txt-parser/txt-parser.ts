@@ -7,7 +7,7 @@ import {
   MAX_CHARS_PER_CHUNK,
   MAX_CHARS_PER_CHAPTER,
   MAX_FILE_SIZE_BYTES,
-} from "../../config/constants";
+} from "../../utils/constants";
 
 // Chapter detection pattern configuration
 const MARKER_DEDUPLICATION_THRESHOLD = 30; // Minimum distance between chapter markers

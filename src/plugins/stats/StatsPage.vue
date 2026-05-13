@@ -2,10 +2,10 @@
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { getStatsEngine } from "./engine";
 import { useBookshelfStore } from "../../stores/bookshelf";
-import { getBookGradient, getInitial } from "../../config/colors";
+import { getBookGradient, getInitial } from "../../utils/colors";
 import type { BookReadingStats, Book } from "../../core/types";
 import { formatDuration, formatRelativeTime, formatHour } from "../../utils/time";
-import { navigate } from "../../router";
+import { navigate } from "../../utils/router";
 
 const bookshelfStore = useBookshelfStore();
 
@@ -646,19 +646,24 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 .stats-page-fade-enter-active {
   transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
+
 .stats-page-fade-leave-active {
   transition: all 0.2s ease-in;
 }
+
 .stats-page-fade-enter-from {
   opacity: 0;
 }
+
 .stats-page-fade-leave-to {
   opacity: 0;
 }
+
 .stats-page-fade-enter-from .stats-page {
   transform: scale(0.95) translateY(12px);
   opacity: 0;
 }
+
 .stats-page-fade-leave-to .stats-page {
   transform: scale(0.97);
   opacity: 0;

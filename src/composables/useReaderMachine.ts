@@ -25,7 +25,7 @@ import {
   type ReaderSession,
 } from "../core/reader-host";
 import { getCurrentParser } from "../core/reader-context";
-import { TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../config/constants";
+import { TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../utils/constants";
 import { parseCfi, resolveCfiToElement } from "../utils/epub-cfi";
 import * as booksStore from "../storage/books";
 import type { Chapter } from "../core/types";

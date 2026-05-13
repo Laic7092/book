@@ -18,7 +18,7 @@ import type {
   ToolbarItem,
 } from "./types";
 import { getReaderSession } from "../core/reader-host";
-import { navigate as routerNavigate } from "../router";
+import { navigate as routerNavigate } from "../utils/router";
 import { createServerClient } from "../utils/api";
 import { useUIStore } from "../stores/ui";
 

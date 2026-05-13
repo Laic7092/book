@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from "vue";
 import type { Annotation } from "../../core/types";
-import { HIGHLIGHT_COLORS } from "../../config/colors";
+import { HIGHLIGHT_COLORS } from "../../utils/colors";
 
 const POPOVER_WIDTH = 280;
 const POPOVER_GAP = 4;
