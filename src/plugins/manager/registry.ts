@@ -17,7 +17,6 @@ import {
   type TrackedContext,
 } from "../context";
 import type { ContentTransformer, SearchApi, ToolbarItem, HeaderAction } from "../types";
-import type { BookParser } from "../../core/types";
 
 // ── Internal state ──
 
@@ -148,7 +147,6 @@ export async function initializePlugins(bootstrap?: PluginBootstrap): Promise<vo
   // Reset dynamic capabilities only on first initialization
   const isFirstInit = pluginContexts.size === 0;
   if (isFirstInit) {
-    dynamicCapabilities.parsers.length = 0;
     dynamicCapabilities.searchApis.length = 0;
   }
 
@@ -407,19 +405,6 @@ export function getHeaderActions(): HeaderAction[] {
 
 export function getPageComponent(name: string): Component | undefined {
   return registeredPages.value[name];
-}
-
-// ── Capability collectors ──
-
-export function getParsers(): BookParser[] {
-  return [...dynamicCapabilities.parsers];
-}
-
-export function getParserForFormat(format: string): BookParser | null {
-  for (const p of getParsers()) {
-    if (p.format === format) return p;
-  }
-  return null;
 }
 
 /** Returns all registered search APIs from plugins (dynamic capabilities + static provides). */

@@ -3,7 +3,7 @@
 import type { Book, ParsedBook } from "../core/types";
 import { STORES, dbPut, dbGet, dbGetAll, dbTransaction, dbDelete } from "./db";
 import type { BookParser } from "../core/types";
-import { getParserForFormat } from "../plugins/manager/registry";
+import { getParserForFormat } from "../parsers";
 
 const PLUGIN_ID = "_covers";
 

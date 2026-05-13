@@ -3,12 +3,13 @@
 import { defineStore } from "pinia";
 import type { Book, Chapter, ParsedBook, BookParser } from "../core/types";
 import { ErrorCode, createReaderError } from "../core/errors";
-import { getParsers, getParserForFormat } from "../plugins/manager/registry";
-import { loadPluginsFor, loadParserForFormat } from "../plugins/loader";
-import { pluginEvents } from "../plugins/context";
+import { loadPluginsFor } from "../plugins/loader";
+import { getParsers, getParserForFormat, loadParserForFormat } from "../parsers";
 import * as booksStore from "../storage/books";
-import { setCurrentParser } from "../core/session";
+import { pluginEvents } from "../plugins/context";
 import { assertValidBookFile, validateBookId } from "../utils/validation";
+
+const REFLOWABLE_FORMATS = new Set(["epub", "txt"]);
 
 const EXTENSION_MIME_MAP: Record<string, string> = {
   txt: "text/plain",
@@ -39,7 +40,6 @@ function getParserForFile(file: File): BookParser | null {
 export interface ReaderState {
   currentBook: Book | null;
   currentChapter: Chapter | null;
-  currentParser: BookParser | null;
   chapters: Chapter[];
 }
 
@@ -47,7 +47,6 @@ export const useReaderStore = defineStore("reader", {
   state: (): ReaderState => ({
     currentBook: null,
     currentChapter: null,
-    currentParser: null,
     chapters: [],
   }),
 
@@ -82,13 +81,15 @@ export const useReaderStore = defineStore("reader", {
         throw createReaderError("Book not found", ErrorCode.BOOK_NOT_FOUND);
       }
 
-      await loadPluginsFor("reader");
+      if (REFLOWABLE_FORMATS.has(book.format)) {
+        await loadPluginsFor("reader");
+      }
       await loadParserForFormat(book.format);
 
       const parser = getParserForFormat(book.format);
       if (!parser) {
         throw createReaderError(
-          `No parser available for format "${book.format}". The corresponding plugin may be disabled.`,
+          `No parser available for format "${book.format}".`,
           ErrorCode.UNSUPPORTED_FORMAT,
         );
       }
@@ -103,8 +104,6 @@ export const useReaderStore = defineStore("reader", {
         inToc: ch.inToc,
       }));
 
-      this.currentParser = parser;
-      setCurrentParser(parser);
       this.chapters = chapters;
 
       await booksStore.updateLastRead(bookId);
@@ -123,8 +122,6 @@ export const useReaderStore = defineStore("reader", {
 
       this.currentBook = null;
       this.currentChapter = null;
-      this.currentParser = null;
-      setCurrentParser(null);
       this.chapters = [];
 
       if (bookId) {
@@ -133,7 +130,6 @@ export const useReaderStore = defineStore("reader", {
     },
 
     reset() {
-      setCurrentParser(null);
       this.$reset();
     },
   },

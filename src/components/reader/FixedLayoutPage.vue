@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, nextTick } from "vue";
-import { getZip } from "../../plugins/epub/zips";
+import { getZip } from "../../parsers/epub/zips";
 import { STORES, dbPut, dbGet } from "../../storage/db";
 import type { Resource } from "../../core/types";
 import { openPdf } from "../../reader-engine/pdf-renderer";
@@ -161,7 +161,7 @@ async function initPdf() {
 
   // Forward internal link clicks from the link service
   eventBus.on("pagenumberchanged", () => {
-    // handled by FixedLayoutView via chapter navigation
+    // handled by FixedLayoutReader via chapter navigation
   });
   eventBus.on("linkclicked", (evt: any) => {
     if (evt.source instanceof HTMLAnchorElement) return; // external links handled by browser

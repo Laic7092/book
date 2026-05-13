@@ -1,6 +1,6 @@
 import type { Component, App } from "vue";
 import type { Pinia } from "pinia";
-import type { BookParser, SearchResult } from "../core/types";
+import type { SearchResult } from "../core/types";
 import type { ReaderSettings } from "./settings/types";
 import type { ReaderSession } from "../core/session";
 import type { ServerClient } from "../utils/api";
@@ -174,7 +174,6 @@ export interface PluginBootstrap {
 // ── Capability map ──
 
 export interface CapabilityMap {
-  parsers: BookParser[];
   searchApis: SearchApi[];
 }
 

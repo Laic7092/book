@@ -28,6 +28,7 @@ const readerContentRef = ref<ReaderContentAPI | null>({ getDocument, getArticle 
 
 const engine = useReaderMachine(
   computed(() => props.book.id),
+  computed(() => props.book.format),
   readerContentRef,
   {
     chapters: readerStore.chapters,

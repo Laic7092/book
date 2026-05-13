@@ -512,7 +512,6 @@ export function createTrackedContext(id: string, bootstrap: PluginBootstrap): Tr
 type CapabilityArrayMap = { [K in keyof CapabilityMap]: CapabilityMap[K][number][] };
 
 export const dynamicCapabilities: CapabilityArrayMap = {
-  parsers: [],
   searchApis: [],
 };
 

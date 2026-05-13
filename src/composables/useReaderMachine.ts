@@ -19,10 +19,10 @@ import {
 import { pluginEvents } from "../plugins/context";
 import { resolveChapterResources } from "../reader-engine/resource-resolver";
 import { injectResources } from "../reader-engine/iframe-resources";
+import { getParserForFormat } from "../parsers";
 import {
   registerReaderSession,
   unregisterReaderSession,
-  getCurrentParser,
   type ReaderSession,
 } from "../core/session";
 import { TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../utils/constants";
@@ -45,6 +45,7 @@ export type { ReaderState, ReaderAction, ReaderEffect };
 
 export function useReaderMachine(
   bookId: Ref<string>,
+  bookFormat: Ref<string>,
   readerContentRef: Ref<ReaderContentAPI | null>,
   options: { chapters: Chapter[]; initialChapterId?: string | null },
 ) {
@@ -127,7 +128,7 @@ export function useReaderMachine(
 
         // Resolve EPUB resources (mutates currentUrls in-place)
         const currentUrls = new Map(state.value.resourceUrls);
-        const parser = getCurrentParser();
+        const parser = getParserForFormat(bookFormat.value);
         let html = rawHtml;
         let resources: HTMLElement[] = [];
 
@@ -254,7 +255,7 @@ export function useReaderMachine(
     });
   }
 
-  // ── Actions (called by ReaderView template) ──
+  // ── Actions (called by ReflowableReader template) ──
   function handleSelectChapter(chapterId: string, targetPage: number = 0) {
     dispatch({ type: "GO_TO_CHAPTER", chapterId, targetPage });
   }

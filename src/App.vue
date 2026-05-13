@@ -6,8 +6,8 @@ import { useUIStore } from "./stores/ui";
 import { currentRoute, navigate } from "./utils/router";
 import { getPageComponent } from "./plugins/manager/registry";
 
-const ReaderView = defineAsyncComponent(() => import("./components/ReaderView.vue"));
-const FixedLayoutView = defineAsyncComponent(() => import("./components/FixedLayoutView.vue"));
+const ReflowableReader = defineAsyncComponent(() => import("./components/ReflowableReader.vue"));
+const FixedLayoutReader = defineAsyncComponent(() => import("./components/FixedLayoutReader.vue"));
 
 const readerStore = useReaderStore();
 const uiStore = useUIStore();
@@ -54,11 +54,11 @@ watch(
       key="page"
     />
     <template v-else-if="currentRoute.name === 'reader'" key="reader">
-      <FixedLayoutView
+      <FixedLayoutReader
         v-if="readerStore.currentBook && isFixedLayout"
         :book="readerStore.currentBook"
       />
-      <ReaderView v-else-if="readerStore.currentBook" :book="readerStore.currentBook" />
+      <ReflowableReader v-else-if="readerStore.currentBook" :book="readerStore.currentBook" />
       <div v-else class="reader-loading" />
     </template>
     <Bookshelf v-else key="bookshelf" />

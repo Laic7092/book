@@ -23,17 +23,3 @@ export function unregisterReaderSession(): void {
 export function getReaderSession(): ReaderSession | null {
   return currentSession;
 }
-
-// ── Current parser (bridge-level state) ──
-
-import type { BookParser } from "./types";
-
-let _currentParser: BookParser | null = null;
-
-export function setCurrentParser(parser: BookParser | null): void {
-  _currentParser = parser;
-}
-
-export function getCurrentParser(): BookParser | null {
-  return _currentParser;
-}
