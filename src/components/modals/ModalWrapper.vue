@@ -146,7 +146,7 @@ function onAnimationEnd() {
 
 .modal-content {
   background: var(--modal-bg, var(--bg-elevated));
-  color: var(--modal-text, var(--text-primary));
+  color: var(--modal-text, var(--reader-text));
   border-radius: 16px 16px 0 0;
   width: 100%;
   max-width: 560px;

@@ -37,13 +37,13 @@ const uiStore = useUIStore();
 }
 
 .confirm-dialog {
-  background: var(--bg-primary);
+  background: var(--reader-bg);
   border-radius: 16px;
   padding: 28px;
   max-width: 340px;
   width: 90%;
   animation: scaleIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   box-shadow:
     0 16px 48px rgba(0, 0, 0, 0.15),
     0 4px 12px rgba(0, 0, 0, 0.08);
@@ -54,7 +54,7 @@ const uiStore = useUIStore();
   font-size: 20px;
   font-weight: 500;
   margin: 0 0 8px;
-  color: var(--text-primary);
+  color: var(--reader-text);
 }
 
 .confirm-message {
@@ -73,19 +73,19 @@ const uiStore = useUIStore();
   flex: 1;
   padding: 11px 16px;
   border-radius: 10px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: all var(--transition-fast);
   font-family: var(--font-ui);
   background: var(--bg-secondary);
-  color: var(--text-primary);
+  color: var(--reader-text);
 }
 
 .confirm-btn:hover {
   background: var(--bg-tertiary);
-  border-color: var(--color-accent-muted);
+  border-color: var(--accent-muted);
 }
 
 .confirm-danger {

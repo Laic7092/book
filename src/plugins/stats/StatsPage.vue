@@ -47,7 +47,7 @@ const avgSpeed = computed(() => {
 const activeHourTotals = computed(() => {
   const hours = new Map<number, number>();
   for (const stat of allStats.value) {
-    for (const h of stat.activeHours) {
+    for (const h of stat.activeHours ?? []) {
       hours.set(h, (hours.get(h) || 0) + 1);
     }
   }
@@ -88,7 +88,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 </script>
 
 <template>
-  <Teleport to="body">
+  <div class="stats-page-wrapper">
     <transition name="stats-page-fade">
       <div v-if="true" class="stats-page-backdrop" @click.self="navigate('/')">
         <div class="stats-page">
@@ -207,7 +207,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
                           a 15.9155 15.9155 0 0 1 0 31.831
                           a 15.9155 15.9155 0 0 1 0 -31.831"
                         fill="none"
-                        stroke="var(--border-color)"
+                        stroke="var(--border)"
                         stroke-width="3"
                       />
                       <path
@@ -216,7 +216,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
                           a 15.9155 15.9155 0 0 1 0 31.831
                           a 15.9155 15.9155 0 0 1 0 -31.831"
                         fill="none"
-                        stroke="var(--color-accent)"
+                        stroke="var(--accent)"
                         stroke-width="3"
                         stroke-linecap="round"
                         :stroke-dasharray="`${(entry.stats.totalReadingTime / (summary?.totalReadingTime || 1)) * 100}, 100`"
@@ -265,7 +265,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
         </div>
       </div>
     </transition>
-  </Teleport>
+  </div>
 </template>
 
 <style scoped>
@@ -285,9 +285,9 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 .stats-page {
   width: min(720px, calc(100vw - 40px));
   height: min(90vh, 760px);
-  background: var(--bg-primary);
+  background: var(--reader-bg);
   border-radius: 20px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -316,14 +316,14 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   font-size: 26px;
   font-weight: 500;
   margin: 0;
-  color: var(--text-primary);
+  color: var(--reader-text);
   letter-spacing: -0.02em;
   line-height: 1;
 }
 
 .sp-subtitle {
   font-size: 13px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-family: var(--font-ui);
 }
 
@@ -331,7 +331,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   background: var(--bg-elevated);
   color: var(--text-secondary);
   cursor: pointer;
@@ -344,8 +344,8 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 
 .sp-close:hover {
   background: var(--bg-secondary);
-  color: var(--text-primary);
-  border-color: var(--color-accent-muted);
+  color: var(--reader-text);
+  border-color: var(--accent-muted);
 }
 
 /* ── Body ── */
@@ -377,7 +377,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 .ov-card--primary {
   grid-column: span 3;
   text-align: center;
-  background: linear-gradient(135deg, var(--color-accent), var(--color-accent-muted, #a0454e));
+  background: linear-gradient(135deg, var(--accent), var(--accent-muted, #a0454e));
   color: #fff;
   border: none;
 }
@@ -390,7 +390,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   font-family: var(--font-display);
   font-size: 22px;
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--reader-text);
   letter-spacing: -0.01em;
   line-height: 1.1;
 }
@@ -403,14 +403,14 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 .ov-unit {
   font-size: 13px;
   font-weight: 500;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-family: var(--font-ui);
   letter-spacing: 0;
 }
 
 .ov-label {
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-family: var(--font-ui);
   font-weight: 500;
   text-transform: uppercase;
@@ -427,13 +427,13 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   font-size: 19px;
   font-weight: 500;
   margin: 0 0 2px;
-  color: var(--text-primary);
+  color: var(--reader-text);
   letter-spacing: -0.01em;
 }
 
 .sp-section-desc {
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   margin: 0 0 16px;
   font-family: var(--font-ui);
 }
@@ -456,7 +456,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   border-radius: 5px;
   background: color-mix(
     in srgb,
-    var(--color-accent) calc(var(--intensity, 0) * 100%),
+    var(--accent) calc(var(--intensity, 0) * 100%),
     var(--bg-elevated) 0%
   );
   display: flex;
@@ -473,12 +473,12 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 }
 
 .hour-cell.active {
-  border: 1px solid color-mix(in srgb, var(--color-accent) 30%, transparent 70%);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent 70%);
 }
 
 .hour-cell-label {
   font-size: 8px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   opacity: 0;
   transition: opacity var(--transition-fast);
   pointer-events: none;
@@ -538,7 +538,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   font-size: 14px;
   font-weight: 600;
   margin: 0 0 4px;
-  color: var(--text-primary);
+  color: var(--reader-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -550,7 +550,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   align-items: center;
   gap: 6px;
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-family: var(--font-ui);
   flex-wrap: wrap;
 }
@@ -559,11 +559,11 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   width: 3px;
   height: 3px;
   border-radius: 50%;
-  background: var(--border-color);
+  background: var(--border);
 }
 
 .bsr-last-read {
-  color: var(--color-accent);
+  color: var(--accent);
   font-weight: 500;
 }
 
@@ -595,7 +595,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   justify-content: center;
   font-size: 10px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--reader-text);
   font-family: var(--font-ui);
 }
 
@@ -621,12 +621,12 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   font-size: 20px;
   font-weight: 500;
   margin: 0 0 6px;
-  color: var(--text-primary);
+  color: var(--reader-text);
 }
 
 .sp-empty-desc {
   font-size: 13px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   margin: 0;
   max-width: 280px;
   line-height: 1.5;
@@ -635,8 +635,8 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 .sp-loader {
   width: 28px;
   height: 28px;
-  border: 2px solid var(--border-color);
-  border-top-color: var(--color-accent);
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   margin-bottom: 14px;

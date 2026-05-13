@@ -82,8 +82,17 @@ export const settingsPlugin: Plugin = {
       return s.value.customTypography ? s.value.margin : DEFAULT_SETTINGS.margin;
     }
 
+    function saveBgToStorage(theme: string) {
+      try {
+        localStorage.setItem("reader-bg", ctx.themes.get(theme).chrome.bg);
+      } catch {
+        /* localStorage may be unavailable */
+      }
+    }
+
     function syncToHost() {
       ctx.ui.setTheme(s.value.theme);
+      saveBgToStorage(s.value.theme);
       ctx.ui.injectIframeStyle("typography", buildFullCSS(s.value));
       const host = ctx.readerSession();
       if (host) {
@@ -128,6 +137,7 @@ export const settingsPlugin: Plugin = {
       () => s.value.theme,
       (theme) => {
         ctx.ui.setTheme(theme);
+        saveBgToStorage(theme);
         ctx.ui.injectIframeStyle("typography", buildFullCSS(s.value));
       },
     );

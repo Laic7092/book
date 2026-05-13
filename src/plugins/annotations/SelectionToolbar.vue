@@ -161,7 +161,7 @@ let noteText = ref("");
 
 .toolbar-btn:hover {
   background: var(--hover-bg, #f3f4f6);
-  color: var(--text-primary, #111827);
+  color: var(--reader-text, #111827);
 }
 
 .note-input-row {
@@ -177,7 +177,7 @@ let noteText = ref("");
   border-radius: 6px;
   font-size: 16px;
   font-family: inherit;
-  color: var(--text-primary, #111827);
+  color: var(--reader-text, #111827);
   background: var(--bg, #fff);
   resize: none;
   outline: none;

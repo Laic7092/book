@@ -263,7 +263,7 @@ function formatDate(ts: number) {
 
 .popover-preview {
   font-size: 13px;
-  color: var(--text-primary, #111827);
+  color: var(--reader-text, #111827);
   line-height: 1.5;
   margin-bottom: 8px;
   display: -webkit-box;
@@ -293,7 +293,7 @@ function formatDate(ts: number) {
   border-radius: 6px;
   font-size: 16px;
   font-family: inherit;
-  color: var(--text-primary, #111827);
+  color: var(--reader-text, #111827);
   background: var(--bg, #fff);
   resize: none;
   outline: none;
@@ -394,7 +394,7 @@ function formatDate(ts: number) {
 }
 
 .mini-color-btn.active {
-  border-color: var(--text-primary, #111827);
+  border-color: var(--reader-text, #111827);
 }
 
 .mini-color-btn:hover {

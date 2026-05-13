@@ -266,7 +266,7 @@ function formatDate(ts: number): string {
 
 .annotation-preview {
   font-size: 13px;
-  color: var(--text-primary, #111827);
+  color: var(--reader-text, #111827);
   line-height: 1.5;
   margin: 0;
   display: -webkit-box;

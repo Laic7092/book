@@ -58,7 +58,7 @@ const emit = defineEmits<{
   font-family: var(--font-display);
   font-size: 18px;
   font-weight: 500;
-  color: var(--modal-text, var(--text-primary));
+  color: var(--modal-text, var(--reader-text));
 }
 
 .modal-close {
@@ -77,6 +77,6 @@ const emit = defineEmits<{
 
 .modal-close:hover {
   background: var(--bg-secondary);
-  color: var(--text-primary);
+  color: var(--reader-text);
 }
 </style>

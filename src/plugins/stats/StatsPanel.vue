@@ -213,7 +213,7 @@ const emit = defineEmits<{
 .progress-number {
   font-size: 28px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--reader-text);
   font-family: var(--font-display);
 }
 
@@ -246,7 +246,7 @@ const emit = defineEmits<{
 .progress-percentage {
   font-size: 13px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--reader-text);
   min-width: 40px;
 }
 
@@ -307,7 +307,7 @@ const emit = defineEmits<{
 .history-value {
   font-size: 14px;
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--reader-text);
 }
 
 .no-stats {
@@ -328,6 +328,6 @@ const emit = defineEmits<{
 .no-stats-hint {
   font-size: 13px;
   margin-top: 8px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 </style>

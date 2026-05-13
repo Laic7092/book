@@ -1,5 +1,3 @@
-// IndexedDB wrapper with Promise-based API
-
 const DB_NAME = "reader-db";
 const DB_VERSION = 11;
 
@@ -7,7 +5,6 @@ export const STORES = {
   BOOKS: "books",
   CHAPTERS: "chapters",
   ZIPS: "zips",
-  /** v9: isolated per-plugin key-value storage. Compound key: [pluginId, key]. */
   PLUGIN_STORE: "plugin_store",
 } as const;
 
@@ -56,7 +53,6 @@ export async function openDB(): Promise<IDBDatabase> {
         booksStore.createIndex("addedAt", "addedAt");
       }
 
-      // Chapters store (content storage)
       if (!db.objectStoreNames.contains(STORES.CHAPTERS)) {
         const chaptersStore = db.createObjectStore(STORES.CHAPTERS, {
           keyPath: ["bookId", "chapterId"],
@@ -65,31 +61,16 @@ export async function openDB(): Promise<IDBDatabase> {
         chaptersStore.createIndex("order", "order");
       }
 
-      // v2: title field added (optional, no index needed)
-      // v3: order field added for proper chapter sorting
-
-      // v6: CFI field added to bookmarks (migration handled lazily in getBookmarks)
-
-      // v8: Raw zip storage for lazy EPUB extraction
       if (!db.objectStoreNames.contains(STORES.ZIPS)) {
         db.createObjectStore(STORES.ZIPS, { keyPath: "bookId" });
       }
 
-      // v9: Isolated plugin key-value store
       if (!db.objectStoreNames.contains("plugin_store")) {
         const ps = db.createObjectStore("plugin_store", {
           keyPath: ["pluginId", "key"],
         });
         ps.createIndex("pluginId", "pluginId", { unique: false });
         ps.createIndex("createdAt", "createdAt", { unique: false });
-      }
-
-      // v11: Remove RESOURCES and FOLDERS stores (folded into books domain)
-      if (db.objectStoreNames.contains("resources")) {
-        db.deleteObjectStore("resources");
-      }
-      if (db.objectStoreNames.contains("folders")) {
-        db.deleteObjectStore("folders");
       }
     };
   });

@@ -14,17 +14,5 @@ export interface ReaderSettings {
   customTypography?: boolean;
 }
 
-export const THEME_COLORS = {
-  light: {
-    background: "#ffffff",
-    text: "#333333",
-  },
-  dark: {
-    background: "#1a1a1a",
-    text: "#e0e0e0",
-  },
-  sepia: {
-    background: "#f4ecd8",
-    text: "#5b4636",
-  },
-};
+/** @deprecated Use ThemeRegistry (src/core/theme-registry.ts) instead. */
+export const THEME_COLORS = {} as Record<string, { background: string; text: string }>;

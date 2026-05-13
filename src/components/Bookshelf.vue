@@ -1143,8 +1143,8 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   height: 100dvh;
-  background: var(--bg-primary);
-  color: var(--text-primary);
+  background: var(--reader-bg);
+  color: var(--reader-text);
   padding: 40px 56px 0;
   transition:
     background-color var(--transition-base),
@@ -1169,7 +1169,7 @@ onMounted(() => {
   flex-shrink: 0;
   margin-bottom: 24px;
   padding-bottom: 18px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border);
 }
 
 .header-bar {
@@ -1187,7 +1187,7 @@ onMounted(() => {
 }
 
 .header-mark {
-  color: var(--color-accent);
+  color: var(--accent);
   opacity: 0.7;
   flex-shrink: 0;
 }
@@ -1198,7 +1198,7 @@ onMounted(() => {
   font-weight: 500;
   margin: 0;
   letter-spacing: -0.02em;
-  color: var(--text-primary);
+  color: var(--reader-text);
   line-height: 1;
   white-space: nowrap;
 }
@@ -1210,7 +1210,7 @@ onMounted(() => {
   min-width: 24px;
   height: 22px;
   padding: 0 7px;
-  background: var(--color-accent);
+  background: var(--accent);
   color: #fff;
   border-radius: 11px;
   font-size: 11px;
@@ -1236,36 +1236,36 @@ onMounted(() => {
 .search-icon {
   position: absolute;
   left: 12px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   pointer-events: none;
   transition: color var(--transition-fast);
 }
 
 .search-container.focused .search-icon {
-  color: var(--color-accent);
+  color: var(--accent);
 }
 
 .search-input {
   width: 100%;
   padding: 8px 34px 8px 36px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   border-radius: 10px;
   font-size: 16px;
   background: var(--bg-secondary);
-  color: var(--text-primary);
+  color: var(--reader-text);
   font-family: var(--font-ui);
   transition: all var(--transition-fast);
 }
 
 .search-input::placeholder {
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
 .search-input:focus {
   outline: none;
-  border-color: var(--color-accent);
-  background: var(--bg-primary);
-  box-shadow: 0 0 0 3px var(--color-accent-soft);
+  border-color: var(--accent);
+  background: var(--reader-bg);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .search-clear {
@@ -1275,7 +1275,7 @@ onMounted(() => {
   border: none;
   background: transparent;
   cursor: pointer;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   border-radius: 6px;
   display: flex;
   align-items: center;
@@ -1284,7 +1284,7 @@ onMounted(() => {
 }
 
 .search-clear:hover {
-  color: var(--text-primary);
+  color: var(--reader-text);
 }
 
 /* ----- Header actions ----- */
@@ -1301,7 +1301,7 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   padding: 8px 14px;
-  background: var(--color-accent);
+  background: var(--accent);
   color: #fff;
   border-radius: 9px;
   cursor: pointer;
@@ -1319,7 +1319,7 @@ onMounted(() => {
 .btn-add:hover {
   filter: brightness(1.12);
   transform: translateY(-1px);
-  box-shadow: 0 4px 14px var(--color-accent-soft);
+  box-shadow: 0 4px 14px var(--accent-soft);
 }
 
 .btn-add:active {
@@ -1343,7 +1343,7 @@ onMounted(() => {
   justify-content: center;
   width: 36px;
   height: 36px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   border-radius: 9px;
   background: var(--bg-elevated);
   color: var(--text-secondary);
@@ -1353,8 +1353,8 @@ onMounted(() => {
 
 .btn-menu:hover,
 .btn-menu.open {
-  border-color: var(--color-accent);
-  color: var(--text-primary);
+  border-color: var(--accent);
+  color: var(--reader-text);
 }
 
 /* ==========================================
@@ -1366,7 +1366,7 @@ onMounted(() => {
   min-width: 200px;
   padding: 6px;
   background: var(--bg-elevated);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: var(--shadow-lg);
   z-index: 1001;
@@ -1381,7 +1381,7 @@ onMounted(() => {
   padding: 6px 10px 2px;
   font-size: 10px;
   font-weight: 600;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   font-family: var(--font-ui);
@@ -1396,7 +1396,7 @@ onMounted(() => {
   border: none;
   border-radius: 8px;
   background: transparent;
-  color: var(--text-primary);
+  color: var(--reader-text);
   font-size: 13px;
   font-family: var(--font-ui);
   cursor: pointer;
@@ -1410,7 +1410,7 @@ onMounted(() => {
 
 .menu-item svg:first-child {
   flex-shrink: 0;
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
 .menu-item span {
@@ -1419,7 +1419,7 @@ onMounted(() => {
 
 .check-icon {
   flex-shrink: 0;
-  color: var(--color-accent);
+  color: var(--accent);
 }
 
 .menu-divider {
@@ -1472,7 +1472,7 @@ onMounted(() => {
   font-family: var(--font-display);
   font-size: 26px;
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--reader-text);
   line-height: 1;
   letter-spacing: -0.02em;
 }
@@ -1482,7 +1482,7 @@ onMounted(() => {
   height: 1px;
   background: linear-gradient(
     to right,
-    var(--border-color) 0%,
+    var(--border) 0%,
     var(--border-subtle) 70%,
     transparent 100%
   );
@@ -1491,7 +1491,7 @@ onMounted(() => {
 .shelf-count {
   font-size: 11px;
   font-weight: 500;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-family: var(--font-ui);
 }
 
@@ -1563,8 +1563,8 @@ onMounted(() => {
 .upload-spinner {
   width: 32px;
   height: 32px;
-  border: 2px solid var(--border-color);
-  border-top-color: var(--color-accent);
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -1596,15 +1596,15 @@ onMounted(() => {
   height: 96px;
   border-radius: 50%;
   background: var(--bg-secondary);
-  color: var(--text-muted);
-  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
   transition: all var(--transition-base);
 }
 
 .empty-state:hover .empty-symbol-inner {
-  border-color: var(--color-accent-muted);
-  color: var(--color-accent);
-  background: var(--color-accent-soft);
+  border-color: var(--accent-muted);
+  color: var(--accent);
+  background: var(--accent-soft);
   transform: scale(1.03);
 }
 
@@ -1624,7 +1624,7 @@ onMounted(() => {
   font-size: 28px;
   font-weight: 500;
   margin: 0 0 10px;
-  color: var(--text-primary);
+  color: var(--reader-text);
   letter-spacing: -0.02em;
 }
 
@@ -1693,7 +1693,7 @@ onMounted(() => {
 }
 
 .book-card:focus-visible {
-  outline: 2px solid var(--color-accent);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -1812,7 +1812,7 @@ onMounted(() => {
   font-size: 14px;
   font-weight: 600;
   margin: 0;
-  color: var(--text-primary);
+  color: var(--reader-text);
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
@@ -1832,7 +1832,7 @@ onMounted(() => {
 }
 
 .book-author.unknown {
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-style: italic;
 }
 
@@ -1853,7 +1853,7 @@ onMounted(() => {
 .meta-dot {
   width: 4px;
   height: 4px;
-  background: var(--color-accent);
+  background: var(--accent);
   border-radius: 50%;
   flex-shrink: 0;
   opacity: 0.7;
@@ -1861,7 +1861,7 @@ onMounted(() => {
 
 .meta-date {
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-family: var(--font-ui);
 }
 
@@ -1929,7 +1929,7 @@ onMounted(() => {
 }
 
 .book-list-item:focus-visible {
-  outline: 2px solid var(--color-accent);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -2011,7 +2011,7 @@ onMounted(() => {
   font-size: 14px;
   font-weight: 600;
   margin: 0;
-  color: var(--text-primary);
+  color: var(--reader-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2030,7 +2030,7 @@ onMounted(() => {
 
 .list-folder-tag {
   font-size: 10px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   background: var(--bg-tertiary);
   padding: 1px 6px;
   border-radius: 4px;
@@ -2051,7 +2051,7 @@ onMounted(() => {
 .list-format {
   font-size: 10px;
   font-weight: 600;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   background: var(--bg-tertiary);
   padding: 2px 6px;
   border-radius: 4px;
@@ -2060,7 +2060,7 @@ onMounted(() => {
 
 .list-last-read {
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-family: var(--font-ui);
 }
 
@@ -2080,7 +2080,7 @@ onMounted(() => {
 }
 
 .no-results strong {
-  color: var(--text-primary);
+  color: var(--reader-text);
 }
 
 /* ═══════════════════════════════════════════════
@@ -2106,7 +2106,7 @@ onMounted(() => {
   flex-shrink: 0;
   padding: 5px 12px;
   border-radius: 16px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   background: var(--bg-elevated);
   color: var(--text-secondary);
   font-size: 12px;
@@ -2119,14 +2119,14 @@ onMounted(() => {
 }
 
 .folder-chip:hover {
-  border-color: var(--color-accent);
-  color: var(--text-primary);
+  border-color: var(--accent);
+  color: var(--reader-text);
 }
 
 .folder-chip.active {
-  background: var(--color-accent);
+  background: var(--accent);
   color: #fff;
-  border-color: var(--color-accent);
+  border-color: var(--accent);
 }
 
 .new-folder-btn {
@@ -2144,9 +2144,9 @@ onMounted(() => {
   width: 110px;
   padding: 5px 10px;
   border-radius: 16px;
-  border: 1px solid var(--color-accent);
+  border: 1px solid var(--accent);
   background: var(--bg-elevated);
-  color: var(--text-primary);
+  color: var(--reader-text);
   font-size: 12px;
   font-family: var(--font-ui);
   outline: none;
@@ -2162,10 +2162,10 @@ onMounted(() => {
   font-size: 14px;
   font-weight: 600;
   font-family: var(--font-ui);
-  border: 1px solid var(--color-accent);
+  border: 1px solid var(--accent);
   border-radius: 4px;
   background: var(--bg-elevated);
-  color: var(--text-primary);
+  color: var(--reader-text);
   outline: none;
   line-height: 1.35;
   box-sizing: border-box;
@@ -2184,7 +2184,7 @@ onMounted(() => {
   align-items: center;
   gap: 4px;
   font-size: 10px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   line-height: 1;
 }
 
@@ -2231,7 +2231,7 @@ onMounted(() => {
 
 .btn-folder:hover {
   background: #f0f5ff;
-  color: var(--color-accent);
+  color: var(--accent);
   box-shadow: 0 3px 10px rgba(91, 154, 255, 0.18);
 }
 
@@ -2249,7 +2249,7 @@ onMounted(() => {
   min-width: 170px;
   padding: 6px;
   background: var(--bg-elevated);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: var(--shadow-lg);
 }
@@ -2258,7 +2258,7 @@ onMounted(() => {
   padding: 6px 10px 4px;
   font-size: 10px;
   font-weight: 600;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   font-family: var(--font-ui);
@@ -2273,7 +2273,7 @@ onMounted(() => {
   border: none;
   border-radius: 8px;
   background: transparent;
-  color: var(--text-primary);
+  color: var(--reader-text);
   font-size: 13px;
   font-family: var(--font-ui);
   cursor: pointer;
@@ -2286,13 +2286,13 @@ onMounted(() => {
 }
 
 .folder-dropdown-item.selected {
-  color: var(--color-accent);
+  color: var(--accent);
   font-weight: 600;
 }
 
 .folder-dropdown-item svg {
   flex-shrink: 0;
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
 /* ═══════════════════════════════════════════════
@@ -2305,7 +2305,7 @@ onMounted(() => {
   min-width: 130px;
   padding: 6px;
   background: var(--bg-elevated);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: var(--shadow-lg);
 }
@@ -2318,7 +2318,7 @@ onMounted(() => {
   border: none;
   border-radius: 8px;
   background: transparent;
-  color: var(--text-primary);
+  color: var(--reader-text);
   font-size: 13px;
   font-family: var(--font-ui);
   cursor: pointer;

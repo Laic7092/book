@@ -17,6 +17,7 @@ import type {
   ContentTransformer,
   ToolbarItem,
 } from "./types";
+import { themeRegistry } from "../core/theme-registry";
 import { getReaderSession } from "../reader-engine/session";
 import { navigate as routerNavigate } from "../utils/router";
 import { createServerClient } from "../utils/api";
@@ -236,23 +237,29 @@ export const pluginEvents = new EventBus<PluginEventMap>();
 // ── CssAPI implementation ──
 
 export function createCssAPI(): CssAPI {
-  let currentTheme: string | null = null;
-
   return {
     setTheme(theme: string) {
-      if (currentTheme) {
-        document.body.classList.remove(`theme-${currentTheme}`);
-        const container = document.querySelector(".reader-view-container");
-        if (container) {
-          container.classList.remove(`theme-${currentTheme}`);
-        }
-      }
-      document.body.classList.add(`theme-${theme}`);
-      const container = document.querySelector(".reader-view-container");
-      if (container) {
-        container.classList.add(`theme-${theme}`);
-      }
-      currentTheme = theme;
+      const def = themeRegistry.get(theme);
+      const c = def.chrome;
+      const root = document.documentElement;
+      root.style.setProperty("--reader-bg", c.bg);
+      root.style.setProperty("--reader-text", c.text);
+      root.style.setProperty("--text-secondary", c.textSecondary);
+      root.style.setProperty("--header-bg", c.headerBg);
+      root.style.setProperty("--border", c.border);
+      root.style.setProperty("--border-subtle", c.borderSubtle);
+      root.style.setProperty("--hover-bg", c.hoverBg);
+      root.style.setProperty("--accent", c.accent);
+      root.style.setProperty("--accent-soft", c.accentSoft);
+      root.style.setProperty("--modal-bg", c.modalBg);
+      root.style.setProperty("--modal-text", c.modalText);
+      root.style.setProperty("--progress-track", c.progressTrack);
+      root.style.setProperty("--bg-elevated", c.bgElevated);
+      root.style.setProperty("--bg-secondary", c.bgSecondary);
+      root.style.setProperty("--bg-tertiary", c.bgTertiary);
+      root.style.setProperty("--accent-muted", c.accentMuted);
+      root.style.setProperty("--accent-hover", c.accentHover);
+      root.setAttribute("data-theme", theme);
     },
     injectIframeStyle(id: string, css: string) {
       const doc = getReaderSession()?.getDocument();
@@ -298,28 +305,16 @@ export function createPluginContext(id: string, bootstrap: PluginBootstrap): Plu
     registerContentTransformer,
     navigate: routerNavigate,
     server: createServerClient(),
+    themes: themeRegistry,
   };
 }
 
 function createTrackedCss(cleanupFns: (() => void | Promise<void>)[]): CssAPI {
   const raw = createCssAPI();
   const injectedStyles: string[] = [];
-  let lastTheme: string | null = null;
 
   return {
     setTheme(theme: string) {
-      if (lastTheme === null) {
-        cleanupFns.push(() => {
-          if (lastTheme) {
-            document.body.classList.remove(`theme-${lastTheme}`);
-            const container = document.querySelector(".reader-view-container");
-            if (container) {
-              container.classList.remove(`theme-${lastTheme}`);
-            }
-          }
-        });
-      }
-      lastTheme = theme;
       raw.setTheme(theme);
     },
     injectIframeStyle(id: string, css: string) {
@@ -467,6 +462,7 @@ export function createTrackedContext(id: string, bootstrap: PluginBootstrap): Tr
     },
     navigate: routerNavigate,
     server: createServerClient(),
+    themes: themeRegistry,
     async runCleanup() {
       const unsubResults = await Promise.allSettled(
         eventUnsubs.map((fn) => {

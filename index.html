@@ -5,17 +5,50 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>book</title>
+    <script>
+      try {
+        var bg = localStorage.getItem("reader-bg");
+        if (bg) document.documentElement.style.setProperty("--reader-bg", bg || "#f5f0e6");
+      } catch (e) {}
+    </script>
     <style>
-      /* 禁止长按菜单 */
       * {
         -webkit-touch-callout: none;
         -webkit-user-select: none;
         user-select: none;
       }
 
-      /* 禁止高亮 */
       * {
         -webkit-tap-highlight-color: transparent;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        height: 100%;
+        overflow: hidden;
+      }
+
+      body {
+        font-family: var(--font-ui);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        color: var(--reader-text);
+        transition:
+          background-color var(--transition-base),
+          color var(--transition-base);
+        /* Subtle paper grain texture */
+      }
+
+      body {
+        background-color: var(--reader-bg);
       }
 
       #app {

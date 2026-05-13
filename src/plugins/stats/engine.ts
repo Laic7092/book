@@ -112,8 +112,17 @@ export function createStatsEngine(
   }
 
   async function getAllStats(): Promise<BookReadingStats[]> {
-    const all = await storage.getAll<{ value: BookReadingStats }>();
-    return all.map((r) => r.value ?? (r as unknown as BookReadingStats));
+    const all = await storage.getAll<BookReadingStats>();
+    // Filter out the sessions entry ("{ sessions: [...] }") that snuck in
+    return all
+      .filter((s): s is BookReadingStats => {
+        const r = s as unknown as Record<string, unknown>;
+        return typeof r.bookId === "string" && typeof r.totalReadingTime === "number";
+      })
+      .map((s) => {
+        if (!Array.isArray(s.activeHours)) s.activeHours = [];
+        return s;
+      });
   }
 
   async function updateStats(bookId: string): Promise<BookReadingStats> {

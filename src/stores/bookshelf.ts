@@ -6,7 +6,6 @@ import { dbGetAll, STORES } from "../storage/db";
 import { getCoverBlob, deleteCoverBlob } from "../storage/books";
 import { pluginEvents } from "../plugins/context";
 import * as booksStore from "../storage/books";
-import * as folderStore from "../storage/books";
 import { assertValidBookFile } from "../utils/validation";
 
 export interface BookshelfState {
@@ -105,17 +104,17 @@ export const useBookshelfStore = defineStore("bookshelf", {
     // ── Folder actions ──
 
     async loadFolders() {
-      this.folders = await folderStore.getAllFolders();
+      this.folders = await booksStore.getAllFolders();
     },
 
     async createFolder(name: string) {
-      const folder = await folderStore.createFolder(name);
+      const folder = await booksStore.createFolder(name);
       this.folders.push(folder);
       return folder;
     },
 
     async renameFolder(id: string, name: string) {
-      await folderStore.updateFolder(id, { name });
+      await booksStore.updateFolder(id, { name });
       const f = this.folders.find((f) => f.id === id);
       if (f) f.name = name;
     },
@@ -133,7 +132,7 @@ export const useBookshelfStore = defineStore("bookshelf", {
           ? `${count} book${count === 1 ? "" : "s"} will be moved out of this folder.`
           : "This folder is empty.",
         async () => {
-          await folderStore.deleteFolder(id);
+          await booksStore.deleteFolder(id);
           // Remove folderId from affected books
           for (const book of this.books.filter((b) => b.folderId === id)) {
             book.folderId = undefined;

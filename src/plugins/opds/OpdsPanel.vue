@@ -376,7 +376,7 @@ const formatLabel = (type: string, title?: string): string => {
   gap: 0;
   margin-bottom: 16px;
   background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
   transition:
@@ -384,32 +384,32 @@ const formatLabel = (type: string, title?: string): string => {
     box-shadow var(--transition-fast);
 }
 .opds-url-bar:focus-within {
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px var(--color-accent-soft);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .opds-url-icon {
   flex-shrink: 0;
   margin-left: 12px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 .opds-url-input {
   flex: 1;
   padding: 10px 10px;
   border: none;
   background: transparent;
-  color: var(--text-primary);
+  color: var(--reader-text);
   font-size: 16px;
   font-family: var(--font-ui);
   outline: none;
 }
 .opds-url-input::placeholder {
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 .opds-load-btn {
   flex-shrink: 0;
   padding: 10px 18px;
   border: none;
-  background: var(--color-accent);
+  background: var(--accent);
   color: #fff;
   font-size: 13px;
   font-weight: 500;
@@ -418,7 +418,7 @@ const formatLabel = (type: string, title?: string): string => {
   transition: background var(--transition-fast);
 }
 .opds-load-btn:hover:not(:disabled) {
-  background: var(--color-accent-hover);
+  background: var(--accent-hover);
 }
 .opds-load-btn:disabled {
   opacity: 0.4;
@@ -439,7 +439,7 @@ const formatLabel = (type: string, title?: string): string => {
   justify-content: center;
   width: 28px;
   height: 28px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   border-radius: 7px;
   background: var(--bg-elevated);
   color: var(--text-secondary);
@@ -447,14 +447,14 @@ const formatLabel = (type: string, title?: string): string => {
   transition: all var(--transition-fast);
 }
 .opds-back-btn:hover {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .opds-breadcrumb-label {
   font-family: var(--font-display);
   font-size: 16px;
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--reader-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -464,7 +464,7 @@ const formatLabel = (type: string, title?: string): string => {
 .opds-breadcrumb-count {
   flex-shrink: 0;
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-family: var(--font-ui);
   letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -476,7 +476,7 @@ const formatLabel = (type: string, title?: string): string => {
   align-items: center;
   gap: 10px;
   padding: 24px 0;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: 13px;
   font-family: var(--font-ui);
   justify-content: center;
@@ -484,8 +484,8 @@ const formatLabel = (type: string, title?: string): string => {
 .opds-loading-spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid var(--border-color);
-  border-top-color: var(--color-accent);
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: opdsSpin 0.6s linear infinite;
 }
@@ -516,7 +516,7 @@ const formatLabel = (type: string, title?: string): string => {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   margin-bottom: 8px;
   padding-left: 2px;
 }
@@ -536,28 +536,28 @@ const formatLabel = (type: string, title?: string): string => {
   gap: 10px;
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--bg-elevated);
   cursor: pointer;
   font-family: var(--font-ui);
   font-size: 13px;
-  color: var(--text-primary);
+  color: var(--reader-text);
   transition: all var(--transition-fast);
   text-align: left;
 }
 .opds-nav-card:hover {
-  border-color: var(--color-accent);
-  background: var(--color-accent-soft);
+  border-color: var(--accent);
+  background: var(--accent-soft);
   transform: translateX(2px);
 }
 .opds-nav-icon {
   flex-shrink: 0;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   display: flex;
 }
 .opds-nav-card:hover .opds-nav-icon {
-  color: var(--color-accent);
+  color: var(--accent);
 }
 .opds-nav-label {
   flex: 1;
@@ -568,12 +568,12 @@ const formatLabel = (type: string, title?: string): string => {
 }
 .opds-nav-arrow {
   flex-shrink: 0;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   transition: transform var(--transition-fast);
 }
 .opds-nav-card:hover .opds-nav-arrow {
   transform: translateX(2px);
-  color: var(--color-accent);
+  color: var(--accent);
 }
 
 /* ── Book cards ── */
@@ -582,7 +582,7 @@ const formatLabel = (type: string, title?: string): string => {
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   border-radius: 9px;
   background: var(--bg-elevated);
   transition:
@@ -590,7 +590,7 @@ const formatLabel = (type: string, title?: string): string => {
     box-shadow var(--transition-fast);
 }
 .opds-book-card:hover {
-  border-color: var(--border-color);
+  border-color: var(--border);
   box-shadow: var(--shadow-sm);
 }
 
@@ -605,7 +605,7 @@ const formatLabel = (type: string, title?: string): string => {
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 .opds-book-cover.has-cover {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
@@ -634,7 +634,7 @@ const formatLabel = (type: string, title?: string): string => {
   font-size: 14px;
   font-weight: 500;
   line-height: 1.3;
-  color: var(--text-primary);
+  color: var(--reader-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -662,7 +662,7 @@ const formatLabel = (type: string, title?: string): string => {
   align-items: center;
   gap: 3px;
   padding: 4px 9px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   border-radius: 5px;
   background: var(--bg-secondary);
   color: var(--text-secondary);
@@ -674,18 +674,18 @@ const formatLabel = (type: string, title?: string): string => {
   transition: all var(--transition-fast);
 }
 .opds-format-pill:hover:not(:disabled) {
-  border-color: var(--color-accent);
-  background: var(--color-accent-soft);
-  color: var(--color-accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 .opds-format-pill:disabled {
   opacity: 0.5;
   cursor: default;
 }
 .opds-format-pill-single {
-  color: var(--color-accent);
-  border-color: var(--color-accent-muted);
-  background: var(--color-accent-soft);
+  color: var(--accent);
+  border-color: var(--accent-muted);
+  background: var(--accent-soft);
 }
 
 /* Spinner in pill */
@@ -701,7 +701,7 @@ const formatLabel = (type: string, title?: string): string => {
   align-items: center;
   gap: 12px;
   padding: 48px 20px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: 13px;
   font-family: var(--font-ui);
   text-align: center;
@@ -724,7 +724,7 @@ const formatLabel = (type: string, title?: string): string => {
   align-items: center;
   gap: 5px;
   padding: 7px 14px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   border-radius: 7px;
   background: var(--bg-elevated);
   color: var(--text-secondary);
@@ -735,8 +735,8 @@ const formatLabel = (type: string, title?: string): string => {
   transition: all var(--transition-fast);
 }
 .opds-page-btn:hover {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
-  background: var(--color-accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
 }
 </style>

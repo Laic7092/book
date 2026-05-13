@@ -66,138 +66,47 @@ watch(
 </template>
 
 <style>
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
 :root {
-  /* Editorial accent - deep burgundy */
-  --color-accent: #8b2e3a;
-  --color-accent-hover: #6d242e;
-  --color-accent-soft: rgba(139, 46, 58, 0.08);
-  --color-accent-muted: rgba(139, 46, 58, 0.15);
-
-  /* Warm paper palette - inspired by fine book paper */
-  --bg-primary: #fdfcfb;
-  --bg-secondary: #f7f5f2;
-  --bg-tertiary: #efece6;
-  --bg-elevated: #ffffff;
-  --text-primary: #1f1a17;
-  --text-secondary: #5a5248;
-  --text-muted: #9a8f80;
-  --border-color: #e6e2d8;
-  --border-subtle: rgba(90, 82, 72, 0.08);
-
-  /* Sophisticated shadows - soft, diffused, natural */
   --shadow-xs: 0 1px 2px rgba(31, 26, 23, 0.04);
   --shadow-sm: 0 2px 8px rgba(31, 26, 23, 0.06);
   --shadow-md: 0 4px 16px rgba(31, 26, 23, 0.08);
   --shadow-lg: 0 8px 32px rgba(31, 26, 23, 0.1);
   --shadow-xl: 0 16px 64px rgba(31, 26, 23, 0.12);
   --shadow-inner: inset 0 1px 0 rgba(255, 255, 255, 0.8);
-
-  /* Dark theme - rich charcoal with warmth */
-  --bg-primary-dark: #1a1816;
-  --bg-secondary-dark: #221f1c;
-  --bg-tertiary-dark: #2d2924;
-  --bg-elevated-dark: #25221f;
-  --text-primary-dark: #e8e4de;
-  --text-secondary-dark: #b8b0a4;
-  --text-muted-dark: #6d6558;
-  --border-color-dark: #3d3630;
-  --border-subtle-dark: rgba(232, 228, 222, 0.06);
   --shadow-dark-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
   --shadow-dark-md: 0 4px 16px rgba(0, 0, 0, 0.5);
   --shadow-dark-lg: 0 8px 32px rgba(0, 0, 0, 0.6);
 
-  /* Sepia theme - aged paper elegance */
-  --bg-primary-sepia: #f5f0e6;
-  --bg-secondary-sepia: #ebe5d5;
-  --bg-tertiary-sepia: #dfd6c2;
-  --text-primary-sepia: #3d352a;
-  --text-secondary-sepia: #6b5f4a;
-  --text-muted-sepia: #9a8a70;
-  --border-color-sepia: #c9bfa8;
-
-  /* Z-axis layering: content → overlay → chrome */
   --z-content: 0;
   --z-overlay: 100;
   --z-chrome: 200;
 
-  /* Typography */
   --font-ui: "Instrument Sans", -apple-system, BlinkMacSystemFont, sans-serif;
   --font-display: "Cormorant", Georgia, serif;
   --font-reading: "Literata", Georgia, serif;
 
-  /* Transitions - refined easing */
   --transition-fast: 120ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-base: 280ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-slow: 480ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-spring: 520ms cubic-bezier(0.34, 1.56, 0.64, 1);
   --transition-page: 350ms cubic-bezier(0.4, 0, 0.2, 1);
 }
-
-html,
-body {
-  height: 100%;
-  overflow: hidden;
-}
-
-body {
-  font-family: var(--font-ui);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  color: var(--text-primary);
-  transition:
-    background-color var(--transition-base),
-    color var(--transition-base);
-  /* Subtle paper grain texture */
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.025'/%3E%3C/svg%3E");
-}
-
-body:has(.reader-view) {
-  background-color: var(--reader-bg);
-}
-
-body.theme-light {
-  --reader-bg: #ffffff;
-}
-
-body.theme-dark {
-  --reader-bg: #1a1a1a;
-}
-
-body.theme-sepia {
-  --reader-bg: #f4ecd8;
-}
-
-/* Smooth scrolling */
-@media (prefers-reduced-motion: no-preference) {
-  html {
-    scroll-behavior: smooth;
-  }
-}
-
 /* Focus styles - refined focus rings */
 :focus-visible {
-  outline: 2px solid var(--color-accent);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: 6px;
 }
 
 /* Selection color - warm accent */
 ::selection {
-  background-color: var(--color-accent-muted);
-  color: var(--text-primary);
+  background-color: var(--accent-muted);
+  color: var(--reader-text);
 }
 
 .reader-loading {
   height: 100%;
-  background: var(--reader-bg, var(--bg-primary));
+  background: var(--reader-bg);
 }
 
 .app.transitioning {

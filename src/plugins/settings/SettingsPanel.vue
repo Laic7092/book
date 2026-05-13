@@ -8,10 +8,15 @@ import {
 } from "./options";
 import { getSettingsState } from "./index";
 import { useUIStore } from "../../stores/ui";
+import { themeRegistry } from "../../core/theme-registry";
 
 const state = getSettingsState();
 if (!state) throw new Error("SettingsPanel: settings plugin not initialized");
 const settings = state.settings;
+
+function themePreviewBg(themeId: string): string {
+  return themeRegistry.get(themeId).chrome.bg;
+}
 
 const emit = defineEmits<{
   (e: "close"): void;
@@ -35,7 +40,7 @@ const emit = defineEmits<{
               :class="['theme-btn', { active: settings.theme === theme.value }]"
               @click="state.update({ theme: theme.value })"
             >
-              <div :class="['theme-preview', `theme-${theme.value}`]"></div>
+              <div class="theme-preview" :style="{ background: themePreviewBg(theme.value) }"></div>
               <span>{{ theme.label }}</span>
             </button>
           </div>
@@ -196,7 +201,7 @@ const emit = defineEmits<{
   align-items: center;
   gap: 6px;
   padding: 10px 8px;
-  border: 1.5px solid var(--border-color);
+  border: 1.5px solid var(--border);
   border-radius: 8px;
   background: var(--modal-bg);
   cursor: pointer;
@@ -206,36 +211,26 @@ const emit = defineEmits<{
 }
 
 .theme-btn:hover {
-  border-color: var(--border-color);
+  border-color: var(--border);
   background: var(--bg-secondary);
 }
 
 .theme-btn.active {
-  border-color: var(--color-accent);
-  background: var(--color-accent-soft);
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .theme-preview {
   width: 32px;
   height: 32px;
   border-radius: 6px;
-  border: 1px solid var(--border-color);
-}
-
-.theme-preview.theme-light {
-  background: #fff;
-}
-.theme-preview.theme-dark {
-  background: #1a1a1a;
-}
-.theme-preview.theme-sepia {
-  background: #f4ecd8;
+  border: 1px solid var(--border);
 }
 
 .size-btn {
   flex: 1;
   padding: 10px;
-  border: 1.5px solid var(--border-color);
+  border: 1.5px solid var(--border);
   border-radius: 8px;
   background: var(--modal-bg);
   cursor: pointer;
@@ -246,13 +241,13 @@ const emit = defineEmits<{
 }
 
 .size-btn:hover {
-  border-color: var(--color-accent);
+  border-color: var(--accent);
   background: var(--bg-secondary);
 }
 
 .size-btn.active {
-  border-color: var(--color-accent);
-  background: var(--color-accent);
+  border-color: var(--accent);
+  background: var(--accent);
   color: white;
 }
 
@@ -263,7 +258,7 @@ const emit = defineEmits<{
   align-items: center;
   gap: 4px;
   padding: 12px;
-  border: 1.5px solid var(--border-color);
+  border: 1.5px solid var(--border);
   border-radius: 8px;
   background: var(--modal-bg);
   cursor: pointer;
@@ -271,13 +266,13 @@ const emit = defineEmits<{
 }
 
 .mode-btn:hover {
-  border-color: var(--border-color);
+  border-color: var(--border);
   background: var(--bg-secondary);
 }
 
 .mode-btn.active {
-  border-color: var(--color-accent);
-  background: var(--color-accent-soft);
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .mode-btn span:first-of-type {
@@ -299,7 +294,7 @@ const emit = defineEmits<{
   width: 100%;
   padding: 14px 16px;
   margin-top: 20px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--bg-elevated, var(--modal-bg));
   cursor: pointer;
@@ -311,8 +306,8 @@ const emit = defineEmits<{
 }
 
 .typography-btn:hover {
-  border-color: var(--color-accent);
-  background: var(--color-accent-soft);
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .typography-btn .arrow-icon {
@@ -331,7 +326,7 @@ const emit = defineEmits<{
   align-items: center;
   justify-content: center;
   padding: 10px;
-  border: 1.5px solid var(--border-color);
+  border: 1.5px solid var(--border);
   border-radius: 8px;
   background: var(--modal-bg);
   cursor: pointer;
@@ -341,12 +336,12 @@ const emit = defineEmits<{
 }
 
 .anim-btn:hover {
-  border-color: var(--border-color);
+  border-color: var(--border);
   background: var(--bg-secondary);
 }
 
 .anim-btn.active {
-  border-color: var(--color-accent);
-  background: var(--color-accent-soft);
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 </style>

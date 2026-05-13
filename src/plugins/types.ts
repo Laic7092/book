@@ -1,6 +1,7 @@
 import type { Component, App } from "vue";
 import type { Pinia } from "pinia";
 import type { SearchResult } from "../core/types";
+import type { ThemeRegistry } from "../core/theme-registry";
 import type { ReaderSettings } from "./settings/types";
 import type { ReaderSession } from "../reader-engine/session";
 import type { ServerClient } from "../utils/api";
@@ -172,6 +173,8 @@ export interface PluginContext {
   navigate: (url: string, replace?: boolean) => void;
   /** Access Node capabilities (net, fs, …) through the proxy server. */
   server: ServerClient;
+  /** Theme registry — register new themes or override builtin color schemes. */
+  themes: ThemeRegistry;
 }
 
 export interface PluginBootstrap {

@@ -26,7 +26,12 @@
     "dir": "reading-progress"
   },
   { "pluginId": "search", "name": "Full-Text Search", "loadOn": "reader", "dir": "search" },
-  { "pluginId": "settings", "name": "Settings", "loadOn": "reader", "dir": "settings" },
-  { "pluginId": "stats", "name": "Reading Statistics", "loadOn": "reader", "dir": "stats" },
+  { "pluginId": "settings", "name": "Settings", "loadOn": "app", "dir": "settings" },
+  {
+    "pluginId": "stats",
+    "name": "Reading Statistics",
+    "loadOn": ["bookshelf", "reader"],
+    "dir": "stats"
+  },
   { "pluginId": "tts", "name": "Text to Speech", "loadOn": "reader", "dir": "tts" }
 ]

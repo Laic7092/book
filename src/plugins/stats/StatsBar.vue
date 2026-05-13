@@ -59,13 +59,13 @@ onUnmounted(() => setStatsRefreshHandler(() => {}));
 .stat-value {
   font-size: 12px;
   font-weight: 550;
-  color: var(--text-primary);
+  color: var(--reader-text);
   font-family: var(--font-ui);
 }
 
 .stat-label {
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-family: var(--font-ui);
 }
 
@@ -73,7 +73,7 @@ onUnmounted(() => setStatsRefreshHandler(() => {}));
   width: 3px;
   height: 3px;
   border-radius: 50%;
-  background: var(--border-color);
+  background: var(--border);
   flex-shrink: 0;
 }
 </style>

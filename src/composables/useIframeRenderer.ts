@@ -1,6 +1,6 @@
 import { type Ref } from "vue";
 import type { ReaderSettings } from "../plugins/settings/types";
-import { THEME_COLORS } from "../plugins/settings/types";
+import { themeRegistry } from "../core/theme-registry";
 
 /**
  * Initialize the iframe with the base HTML skeleton and link-click handler.
@@ -89,13 +89,14 @@ export function useIframeRenderer(
 }
 
 /**
- * 生成主题 CSS 变量（仅颜色相关）
+ * 生成主题 CSS 变量（仅颜色相关）— 从 ThemeRegistry 读取色值
  */
 export function generateThemeCSS(theme: string, contrast?: string): string {
-  const colors = THEME_COLORS[theme as keyof typeof THEME_COLORS] || THEME_COLORS.light;
-  let bg = colors.background;
-  let text = colors.text;
+  const def = themeRegistry.get(theme);
+  let bg = def.content.background;
+  let text = def.content.text;
 
+  // Contrast overrides (dark-mode-specific)
   if (theme === "dark" && contrast) {
     if (contrast === "soft") {
       bg = "#2a2a2a";
@@ -106,12 +107,17 @@ export function generateThemeCSS(theme: string, contrast?: string): string {
     }
   }
 
+  const textSecondary =
+    def.content.textSecondary ?? (theme === "dark" ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.55)");
+  const borderSubtle =
+    def.content.borderSubtle ?? (theme === "dark" ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)");
+
   return `
     :root {
       --reader-bg: ${bg};
       --reader-text: ${text};
-      --border-subtle: ${theme === "dark" ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)"};
-      --text-secondary: ${theme === "dark" ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.55)"};
+      --border-subtle: ${borderSubtle};
+      --text-secondary: ${textSecondary};
     }
     body {
       background-color: var(--reader-bg);

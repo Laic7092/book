@@ -167,7 +167,7 @@ defineEmits<{ close: [] }>();
   display: flex;
   gap: 8px;
   padding: 12px 20px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
 }
 
@@ -179,9 +179,9 @@ defineEmits<{ close: [] }>();
   font-size: 13px;
   font-weight: 500;
   border-radius: 20px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   cursor: pointer;
   transition:
     background 150ms,
@@ -191,12 +191,12 @@ defineEmits<{ close: [] }>();
 
 .pill:hover {
   background: var(--hover-bg);
-  color: var(--text-primary);
+  color: var(--reader-text);
 }
 
 .pill.active {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
+  background: var(--accent);
+  border-color: var(--accent);
   color: #fff;
 }
 
@@ -227,7 +227,7 @@ defineEmits<{ close: [] }>();
 
 .plugin-hint {
   font-size: 13px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   margin: 16px 0;
   line-height: 1.5;
 }
@@ -291,7 +291,7 @@ defineEmits<{ close: [] }>();
 
 .plugin-id {
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   white-space: nowrap;
 }
 
@@ -314,7 +314,7 @@ defineEmits<{ close: [] }>();
 
 .empty-tab {
   text-align: center;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: 14px;
   padding: 40px 0;
 }
@@ -325,8 +325,8 @@ defineEmits<{ close: [] }>();
   padding: 1px 8px;
   border-radius: 8px;
   background: var(--hover-bg);
-  color: var(--text-muted);
-  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
   white-space: nowrap;
 }
 
@@ -349,7 +349,7 @@ defineEmits<{ close: [] }>();
   width: 44px;
   height: 26px;
   border-radius: 13px;
-  background: var(--border-color);
+  background: var(--border);
   transition: background-color 200ms ease;
   display: flex;
   align-items: center;
@@ -358,7 +358,7 @@ defineEmits<{ close: [] }>();
 }
 
 input:checked + .toggle-track {
-  background: var(--color-accent);
+  background: var(--accent);
 }
 
 .toggle-thumb {

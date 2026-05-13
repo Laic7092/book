@@ -120,11 +120,11 @@ function highlightMatch(context: string): string {
 .search-input {
   flex: 1;
   padding: 10px 14px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   border-radius: 9px;
   font-size: 16px;
   background: var(--bg-secondary);
-  color: var(--text-primary);
+  color: var(--reader-text);
   font-family: var(--font-ui);
   outline: none;
   transition:
@@ -133,8 +133,8 @@ function highlightMatch(context: string): string {
 }
 
 .search-input:focus {
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px var(--color-accent-soft);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .search-submit {
@@ -144,14 +144,14 @@ function highlightMatch(context: string): string {
   padding: 10px 14px;
   border: none;
   border-radius: 9px;
-  background: var(--color-accent);
+  background: var(--accent);
   color: #fff;
   cursor: pointer;
   transition: background var(--transition-fast);
 }
 
 .search-submit:hover {
-  background: var(--color-accent-hover);
+  background: var(--accent-hover);
 }
 
 .search-results-info {
@@ -163,15 +163,15 @@ function highlightMatch(context: string): string {
 
 .results-count {
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
 .clear-highlights {
   padding: 4px 12px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   border-radius: 6px;
   background: transparent;
-  color: var(--color-accent);
+  color: var(--accent);
   font-size: 12px;
   cursor: pointer;
   font-family: var(--font-ui);
@@ -179,7 +179,7 @@ function highlightMatch(context: string): string {
 }
 
 .clear-highlights:hover {
-  background: var(--color-accent-soft);
+  background: var(--accent-soft);
 }
 
 .search-results {
@@ -199,7 +199,7 @@ function highlightMatch(context: string): string {
 
 .search-result:hover {
   background: var(--bg-secondary);
-  border-color: var(--border-color);
+  border-color: var(--border);
 }
 
 .result-header {
@@ -212,12 +212,12 @@ function highlightMatch(context: string): string {
 .result-chapter {
   font-size: 13px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--reader-text);
 }
 
 .result-index {
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   background: var(--bg-secondary);
   padding: 3px 9px;
   border-radius: 8px;
@@ -236,8 +236,8 @@ function highlightMatch(context: string): string {
 }
 
 .search-mark {
-  background: var(--color-accent-soft);
-  color: var(--color-accent);
+  background: var(--accent-soft);
+  color: var(--accent);
   padding: 1px 5px;
   border-radius: 3px;
   font-weight: 600;
@@ -246,7 +246,7 @@ function highlightMatch(context: string): string {
 .no-results {
   text-align: center;
   padding: 40px 20px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: 14px;
 }
 </style>

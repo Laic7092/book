@@ -479,14 +479,14 @@ function goBack() {
 }
 
 .back-btn:hover {
-  color: var(--text-primary);
+  color: var(--reader-text);
   background: var(--hover-bg);
 }
 
 .section-label {
   font-size: 12px;
   font-weight: 600;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: 10px;
@@ -501,7 +501,7 @@ function goBack() {
 
 .source-warn {
   font-size: 13px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   margin-bottom: 10px;
 }
 
@@ -520,12 +520,12 @@ function goBack() {
 
 .source-card:hover {
   background: var(--hover-bg);
-  border-color: var(--color-accent);
+  border-color: var(--accent);
 }
 
 .source-card.active {
-  border-color: var(--color-accent);
-  background: var(--color-accent-soft, #eef2ff);
+  border-color: var(--accent);
+  background: var(--accent-soft, #eef2ff);
 }
 
 .source-row {
@@ -542,13 +542,13 @@ function goBack() {
 
 .source-url {
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   margin-top: 2px;
 }
 
 .source-group {
   font-size: 10px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   background: var(--bg-tertiary);
   padding: 1px 6px;
   border-radius: 4px;
@@ -566,16 +566,16 @@ function goBack() {
 .search-input {
   flex: 1;
   padding: 10px 14px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   border-radius: 10px;
   font-size: 16px;
   background: var(--bg-secondary);
-  color: var(--text-primary);
+  color: var(--reader-text);
 }
 
 .search-input:focus {
   outline: none;
-  border-color: var(--color-accent);
+  border-color: var(--accent);
 }
 
 .search-btn {
@@ -583,7 +583,7 @@ function goBack() {
   align-items: center;
   gap: 6px;
   padding: 10px 18px;
-  background: var(--color-accent);
+  background: var(--accent);
   color: #fff;
   border: none;
   border-radius: 10px;
@@ -614,7 +614,7 @@ function goBack() {
   align-items: center;
   gap: 6px;
   background: none;
-  border: 1px dashed var(--border-color);
+  border: 1px dashed var(--border);
   padding: 8px 14px;
   border-radius: 8px;
   font-size: 13px;
@@ -626,8 +626,8 @@ function goBack() {
 }
 
 .import-toggle:hover {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .import-panel {
@@ -645,21 +645,21 @@ function goBack() {
 .import-input {
   flex: 1;
   padding: 8px 12px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   border-radius: 8px;
   font-size: 16px;
   background: var(--bg-secondary);
-  color: var(--text-primary);
+  color: var(--reader-text);
 }
 
 .import-input:focus {
   outline: none;
-  border-color: var(--color-accent);
+  border-color: var(--accent);
 }
 
 .import-submit {
   padding: 8px 16px;
-  background: var(--color-accent);
+  background: var(--accent);
   color: #fff;
   border: none;
   border-radius: 8px;
@@ -676,7 +676,7 @@ function goBack() {
   display: inline-block;
   padding: 6px 12px;
   background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   border-radius: 8px;
   font-size: 12px;
   color: var(--text-secondary);
@@ -684,7 +684,7 @@ function goBack() {
 }
 
 .file-label:hover {
-  border-color: var(--color-accent);
+  border-color: var(--accent);
 }
 
 /* Delete */
@@ -701,7 +701,7 @@ function goBack() {
 
 .delete-btn.subtle {
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
 .delete-btn.subtle:hover {
@@ -724,15 +724,15 @@ function goBack() {
 
 .import-hint {
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   margin: 0;
 }
 
 .spinner {
   width: 28px;
   height: 28px;
-  border: 2px solid var(--border-color);
-  border-top-color: var(--color-accent);
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -753,7 +753,7 @@ function goBack() {
 
 .progress-fill {
   height: 100%;
-  background: var(--color-accent);
+  background: var(--accent);
   border-radius: 3px;
   transition: width 0.3s ease;
 }
@@ -828,12 +828,12 @@ function goBack() {
 
 .book-author {
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
 .chevron {
   flex-shrink: 0;
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
 .book-detail-header {
@@ -891,7 +891,7 @@ function goBack() {
 .detail-kind {
   margin: 0;
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   background: var(--bg-tertiary);
   padding: 2px 8px;
   border-radius: 4px;
@@ -908,7 +908,7 @@ function goBack() {
 .import-btn {
   margin-top: 8px;
   padding: 8px 18px;
-  background: var(--color-accent);
+  background: var(--accent);
   color: #fff;
   border: none;
   border-radius: 8px;
@@ -948,7 +948,7 @@ function goBack() {
 }
 
 .chapter-index {
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: 11px;
   width: 28px;
   text-align: right;
