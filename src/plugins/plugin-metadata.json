@@ -1,11 +1,23 @@
 [
   { "pluginId": "annotations", "name": "Annotations", "loadOn": "reader", "dir": "annotations" },
   { "pluginId": "auto-read", "name": "Auto Read", "loadOn": "reader", "dir": "auto-read" },
-  { "pluginId": "book-sources", "name": "书源导入", "loadOn": "bookshelf", "dir": "book-sources" },
+  {
+    "pluginId": "book-sources",
+    "name": "书源导入",
+    "loadOn": "bookshelf",
+    "dir": "book-sources",
+    "defaultEnabled": false
+  },
   { "pluginId": "bookmarks", "name": "Bookmarks", "loadOn": "reader", "dir": "bookmarks" },
   { "pluginId": "last-book", "name": "Last Book Restore", "loadOn": "app", "dir": "last-book" },
   { "pluginId": "manager", "name": "Manager", "loadOn": "app", "dir": "manager" },
-  { "pluginId": "opds", "name": "OPDS Catalog", "loadOn": "bookshelf", "dir": "opds" },
+  {
+    "pluginId": "opds",
+    "name": "OPDS Catalog",
+    "loadOn": "bookshelf",
+    "dir": "opds",
+    "defaultEnabled": false
+  },
   { "pluginId": "progress-bar", "name": "Progress Bar", "loadOn": "reader", "dir": "progress-bar" },
   {
     "pluginId": "reading-progress",

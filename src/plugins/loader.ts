@@ -28,6 +28,8 @@ interface PluginMeta {
   name?: string;
   /** Path relative to src/plugins/, e.g. "annotations/index.ts" */
   dir: string;
+  /** Whether to enable by default when no stored state exists. Defaults to true. */
+  defaultEnabled?: boolean;
 }
 
 const metas: PluginMeta[] = [];
@@ -37,7 +39,13 @@ for (const meta of PLUGIN_METADATA) {
   if (!meta.loadOn || (Array.isArray(meta.loadOn) && meta.loadOn.length === 0)) continue;
   const loader = pluginLoaders[`./${meta.dir}/index.ts`];
   if (!loader) continue;
-  metas.push({ loadOn: meta.loadOn, pluginId: meta.pluginId, name: meta.name, dir: meta.dir });
+  metas.push({
+    loadOn: meta.loadOn,
+    pluginId: meta.pluginId,
+    name: meta.name,
+    dir: meta.dir,
+    defaultEnabled: meta.defaultEnabled,
+  });
 }
 
 // ── Lazy scene map built once we know enable states ──
@@ -59,20 +67,22 @@ async function ensureSceneMap(): Promise<void> {
 
     // Always register a stub from manifest metadata so the plugin is visible in the panel
     if (meta.pluginId) {
+      const effectiveEnabled = states?.[meta.pluginId] ?? meta.defaultEnabled ?? true;
+
       registerPlugin({
         [PLUGIN_BRAND]: true as const,
         id: meta.pluginId,
         name: meta.name ?? meta.pluginId,
         version: "0.0.0",
-        enabled: states?.[meta.pluginId] !== false,
+        enabled: effectiveEnabled,
         core: false,
       });
-    }
 
-    // If disabled, store the loader for later and skip scene loading
-    if (meta.pluginId && states?.[meta.pluginId] === false) {
-      if (loader) pluginModuleLoaders.set(meta.pluginId, loader);
-      continue;
+      // If disabled, store the loader for later and skip scene loading
+      if (!effectiveEnabled) {
+        if (loader) pluginModuleLoaders.set(meta.pluginId, loader);
+        continue;
+      }
     }
 
     // The manifest values are guaranteed to be valid Scene values
