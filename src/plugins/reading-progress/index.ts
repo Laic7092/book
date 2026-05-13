@@ -22,10 +22,8 @@ export const readingProgressPlugin: Plugin = {
   version: "1.0.0",
   setup(ctx) {
     const unsubs: Set<() => void> = new Set();
-    let mounted = false;
 
     async function save(bookId: string) {
-      if (!mounted) return;
       const h = ctx.readerSession();
       if (!h) return;
       const s = h.getState();
@@ -43,7 +41,6 @@ export const readingProgressPlugin: Plugin = {
       ctx.events.on("chapter:changed", ({ bookId }) => void save(bookId)),
       ctx.events.on("reader:unmounted", ({ bookId }) => {
         void save(bookId);
-        mounted = false;
       }),
     ];
 
@@ -53,7 +50,6 @@ export const readingProgressPlugin: Plugin = {
       config.chapterIndex = data.chapterIndex;
       config.initialPage = { ...config.initialPage, pendingTarget: data.pageIndex };
       subs.forEach((sub) => unsubs.add(sub));
-      mounted = true;
     });
 
     ctx.onCleanup(() => {
