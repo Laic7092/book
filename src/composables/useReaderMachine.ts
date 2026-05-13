@@ -8,7 +8,7 @@ import {
   type ReaderAction,
   type ReaderEffect,
 } from "../reader-engine/reader-machine";
-import { processChapterHtml } from "../reader-engine/content-pipeline";
+import { processChapterHtml, resolveChapterResources } from "../reader-engine/resource-resolver";
 import { useUIStore } from "../stores/ui";
 import { NavigationStack } from "./useNavigationStack";
 import {
@@ -17,14 +17,13 @@ import {
   pluginStateVersion,
 } from "../plugins/manager/registry";
 import { pluginEvents } from "../plugins/context";
-import { resolveChapterResources } from "../reader-engine/resource-resolver";
 import { injectResources } from "../reader-engine/iframe-resources";
 import { getParserForFormat } from "../parsers";
 import {
   registerReaderSession,
   unregisterReaderSession,
   type ReaderSession,
-} from "../core/session";
+} from "../reader-engine/session";
 import { TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../utils/constants";
 import { parseCfi, resolveCfiToElement } from "../utils/epub-cfi";
 import * as booksStore from "../storage/books";

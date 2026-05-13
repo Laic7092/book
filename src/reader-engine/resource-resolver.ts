@@ -1,4 +1,5 @@
 import type { BookParser } from "../core/types";
+import { applyContentTransformers } from "../plugins/manager/registry";
 
 const CSS_URL_PATTERN = /url\(['"]?([^'")\s]+)['"]?\)/gi;
 
@@ -186,6 +187,37 @@ export interface ResolvedChapter {
  * Resolve format-specific resources in chapter HTML.
  * Collects resource paths → resolves to blob URLs → rewrites HTML → extracts head elements.
  */
+/**
+ * Process a single chapter's HTML through the full pipeline:
+ *   1. Rewrite resource paths (EPUB internal → blob URLs)
+ *   2. Apply plugin content transformers (theme, typography, etc.)
+ */
+export async function processChapterHtml(
+  rawHtml: string,
+  bookId: string,
+  chapterId: string,
+  resourceUrls: Map<string, string> | undefined,
+): Promise<string> {
+  let html: string;
+
+  if (resourceUrls && resourceUrls.size > 0) {
+    const doc = rewriteResourcePaths(rawHtml, resourceUrls);
+    html = doc.body.innerHTML;
+  } else {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(rawHtml, "text/html");
+    html = doc.body.innerHTML;
+  }
+
+  try {
+    html = await applyContentTransformers(html, { bookId, chapterId });
+  } catch {
+    // Return un-transformed content on error
+  }
+
+  return html;
+}
+
 export async function resolveChapterResources(
   rawHtml: string,
   bookId: string,

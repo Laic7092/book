@@ -1,7 +1,7 @@
 // EPUB file parser implementation using @zip.js/zip.js for streaming extraction
 
 import type { Entry, FileEntry, ZipReader } from "@zip.js/zip.js";
-import { BaseBookParser, generateId, parseXML, cleanHtml } from "../../core/base";
+import { BaseBookParser, generateId, parseXML, cleanHtml } from "../base";
 
 let _zipModule: typeof import("@zip.js/zip.js") | null = null;
 async function getZipModule() {

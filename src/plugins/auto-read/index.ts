@@ -1,7 +1,7 @@
 import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
 import AutoReadControls from "./AutoReadControls.vue";
-import type { ReaderSession } from "../../core/session";
+import type { ReaderSession } from "../../reader-engine/session";
 
 export const loadOn = "reader" as const;
 

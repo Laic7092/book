@@ -1,7 +1,7 @@
 import type { FileEntry } from "@zip.js/zip.js";
 import type { BookParser, ParsedBook, Chapter, Resource } from "../../core/types";
 import { ErrorCode, createReaderError } from "../../core/errors";
-import { BaseBookParser, generateId } from "../../core/base";
+import { BaseBookParser, generateId } from "../base";
 import { STORES, dbPut, dbGet } from "../../storage/db";
 
 const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp", "bmp"]);

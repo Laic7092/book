@@ -1,6 +1,6 @@
 import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
-import type { ReaderSession } from "../../core/session";
+import type { ReaderSession } from "../../reader-engine/session";
 import TTSControls from "./TTSControls.vue";
 
 let _session: (() => ReaderSession | null) | null = null;

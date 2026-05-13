@@ -1,4 +1,4 @@
-import type { ReaderAction, ReaderState } from "../reader-engine/reader-machine";
+import type { ReaderAction, ReaderState } from "./reader-machine";
 
 // ── ReaderSession (plugin bridge) ──
 

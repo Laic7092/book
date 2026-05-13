@@ -1,7 +1,7 @@
 import { ref } from "vue";
 import { searchInBook } from "./engine";
 import type { SearchResult } from "../../core/types";
-import type { ReaderSession } from "../../core/session";
+import type { ReaderSession } from "../../reader-engine/session";
 import { generateCfiFromCharOffset, resolveCfi } from "../../utils/epub-cfi";
 import { useDocumentMarker } from "../../composables/useDocumentMarker";
 import * as booksStore from "../../storage/books";

@@ -1,6 +1,6 @@
 // TXT file parser - robust chapter detection with fallback strategies
 
-import { BaseBookParser, generateId } from "../../core/base";
+import { BaseBookParser, generateId } from "../base";
 import type { BookParser, ParsedBook, Chapter } from "../../core/types";
 import {
   PARAGRAPHS_PER_CHUNK,

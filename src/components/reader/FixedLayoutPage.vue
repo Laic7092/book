@@ -3,7 +3,7 @@ import { ref, watch, onMounted, onUnmounted, nextTick } from "vue";
 import { getZip } from "../../parsers/epub/zips";
 import { STORES, dbPut, dbGet } from "../../storage/db";
 import type { Resource } from "../../core/types";
-import { openPdf } from "../../reader-engine/pdf-renderer";
+import { openPdf } from "../../parsers/pdf-parser/pdf-renderer";
 
 const props = defineProps<{
   bookId: string;

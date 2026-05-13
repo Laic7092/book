@@ -2,7 +2,7 @@
 
 import type { Folder } from "../core/types";
 import { STORES, dbPut, dbGet, dbGetAllFromIndex, dbDelete } from "./db";
-import { generateId } from "../core/base";
+import { generateId } from "../parsers/base";
 
 export async function createFolder(name: string, order?: number): Promise<Folder> {
   const all = await getAllFolders();
