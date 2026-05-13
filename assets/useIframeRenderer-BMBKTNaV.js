@@ -1,4 +1,4 @@
-import{t as e}from"./theme-registry-ChkwLADe.js";function t(e,t){let n=null,i=e=>{!t||!e.data||e.data.type!==`link-click`||t(e.data.href)};function a(a){let o=e.value;if(!o||(n=o.contentDocument||o.contentWindow?.document||null,!n))return;let s=r(),c=t?`<script>
+import{t as e}from"./theme-registry-BxZmJp4N.js";function t(e,t){let n=null,i=e=>{!t||!e.data||e.data.type!==`link-click`||t(e.data.href)};function a(a){let o=e.value;if(!o||(n=o.contentDocument||o.contentWindow?.document||null,!n))return;let s=r(),c=t?`<script>
       (function() {
         document.addEventListener('click', function(e) {
           var link = e.target.closest('a[href]');
