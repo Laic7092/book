@@ -50,7 +50,7 @@ export function createPreviewIframe(
       <style id="base-style">${baseCSS}</style>
       <style id="typography-style">${typographyCSS}</style>
     </head>
-    <body class="reader-content">
+    <body class="reader-content" style="padding-bottom: 0;">
       <p style="margin-top: 0;">Preview</p>
       <p style="margin-bottom: 0;">This is a preview. Adjust the settings to see how your reading experience changes.</p>
     </body>
