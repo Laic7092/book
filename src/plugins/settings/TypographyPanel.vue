@@ -68,7 +68,11 @@ function resetSettings() {
 
 <template>
   <div class="modal-content-inner">
-    <ModalHeader title="自定义排版" @close="emit('close')" />
+    <ModalHeader title="自定义排版" @close="emit('close')">
+      <template #extra>
+        <div ref="previewContainerRef" class="preview-card"></div>
+      </template>
+    </ModalHeader>
 
     <div class="modal-body">
       <!-- 自定义排版开关 -->
@@ -89,34 +93,10 @@ function resetSettings() {
         </div>
       </div>
 
-      <!-- 重置 -->
-      <div class="setting-section">
-        <button class="reset-btn" @click="resetSettings">
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8" />
-            <path d="M3 3v5h5" />
-          </svg>
-          <span>重置为默认</span>
-        </button>
-      </div>
-
-      <!-- 预览 -->
-      <div class="setting-section">
-        <label class="setting-label">预览</label>
-        <div ref="previewContainerRef" class="preview-card"></div>
-      </div>
-
       <!-- 排版设置（受开关控制） -->
-      <div class="typography-group">
+      <div class="typography-group" v-if="settings.customTypography">
         <!-- 字体 -->
-        <div v-if="settings.customTypography" class="setting-row">
+        <div class="setting-row">
           <label class="setting-label">字体</label>
           <div class="font-options">
             <button
@@ -132,7 +112,7 @@ function resetSettings() {
         </div>
 
         <!-- 行距 -->
-        <div v-if="settings.customTypography" class="setting-row">
+        <div class="setting-row">
           <label class="setting-label">
             <span>行距</span>
             <span class="setting-value">{{ settings.lineHeight.toFixed(1) }}</span>
@@ -150,7 +130,7 @@ function resetSettings() {
         </div>
 
         <!-- 边距 -->
-        <div v-if="settings.customTypography" class="setting-row">
+        <div class="setting-row">
           <label class="setting-label">
             <span>页边距</span>
             <span class="setting-value">{{ settings.margin }}px</span>
@@ -168,7 +148,7 @@ function resetSettings() {
         </div>
 
         <!-- 对齐 -->
-        <div v-if="settings.customTypography" class="setting-row">
+        <div class="setting-row">
           <label class="setting-label">对齐</label>
           <div class="align-options">
             <button
@@ -214,7 +194,7 @@ function resetSettings() {
         </div>
 
         <!-- 字间距 -->
-        <div v-if="settings.customTypography" class="setting-row">
+        <div class="setting-row">
           <label class="setting-label">
             <span>字间距</span>
             <span class="setting-value">{{ settings.letterSpacing || 0 }}em</span>
@@ -233,7 +213,7 @@ function resetSettings() {
         </div>
 
         <!-- 段落间距 -->
-        <div v-if="settings.customTypography" class="setting-row">
+        <div class="setting-row">
           <label class="setting-label">
             <span>段落间距</span>
             <span class="setting-value">{{ settings.paragraphSpacing || 1.2 }}em</span>
@@ -250,6 +230,24 @@ function resetSettings() {
             class="range-input"
           />
         </div>
+      </div>
+
+      <!-- 重置 -->
+      <div class="setting-section">
+        <button class="reset-btn" @click="resetSettings">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8" />
+            <path d="M3 3v5h5" />
+          </svg>
+          <span>重置为默认</span>
+        </button>
       </div>
     </div>
   </div>
@@ -400,6 +398,7 @@ function resetSettings() {
   background: var(--bg-elevated, var(--modal-bg));
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
+  margin-bottom: 20px;
   transition:
     opacity 200ms ease,
     transform 200ms ease;

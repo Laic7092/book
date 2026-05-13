@@ -42,7 +42,7 @@ export function createPreviewIframe(
   doc.open();
   doc.write(`
     <!DOCTYPE html>
-    <html data-mode="scroll">
+    <html data-mode="scroll" style="overflow: hidden;">
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -51,9 +51,8 @@ export function createPreviewIframe(
       <style id="typography-style">${typographyCSS}</style>
     </head>
     <body class="reader-content">
-      <h2 class="chapter-heading">Preview</h2>
+      <p style="margin-top: 0;">Preview</p>
       <p>This is a preview. Adjust the settings to see how your reading experience changes.</p>
-      <p>The reading experience includes paragraph spacing, line height, font selection, and other typographic parameters displayed in real time.</p>
     </body>
     </html>
   `);
