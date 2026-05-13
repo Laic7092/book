@@ -89,17 +89,17 @@ export async function addBookmarkFromHost(): Promise<void> {
   let preview: string;
 
   if (s.mode === "pagination") {
-    const fullHtml = s.contentCache.get(chapter.id);
-    if (!fullHtml) return;
+    const doc = session.getDocument();
+    const body = doc?.body;
+    if (!body) return;
 
     const totalPages = s.page.total;
     const currentPage = s.page.current;
+    const fullHtml = body.innerHTML;
     const fullText = fullHtml.replace(/<[^>]*>/g, "");
     const charOffset = Math.floor(((currentPage + 0.5) / totalPages) * fullText.length);
 
-    const tempContainer = document.createElement("div");
-    tempContainer.innerHTML = fullHtml;
-    cfi = generateCfiFromCharOffset(chapter.order ?? 0, tempContainer, charOffset);
+    cfi = generateCfiFromCharOffset(chapter.order ?? 0, body, charOffset);
 
     const plainText = stripHtml(fullHtml).replace(/\s+/g, " ").trim();
     preview = plainText.slice(Math.max(charOffset - 1, 0), charOffset + 50);

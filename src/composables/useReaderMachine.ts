@@ -48,6 +48,8 @@ export function useReaderMachine(
   readerContentRef: Ref<ReaderContentAPI | null>,
   options: { chapters: Chapter[]; initialChapterId?: string | null },
 ) {
+  void pluginEvents.emit("reader:init", { bookId: bookId.value });
+
   const uiStore = useUIStore();
   const navStack = new NavigationStack();
 
@@ -429,18 +431,22 @@ export function useReaderMachine(
     const initialIdx = options.initialChapterId
       ? options.chapters.findIndex((c) => c.id === options.initialChapterId)
       : 0;
-    dispatch({
-      type: "INIT",
+    const config = {
       bookId: bookId.value,
-      chapters: options.chapters,
       chapterIndex: Math.max(0, initialIdx),
-      mode: readingMode.value === "vertical" ? "scroll" : "pagination",
+      mode: readingMode.value === "vertical" ? ("scroll" as const) : ("pagination" as const),
+    };
+    void pluginEvents.emit("reader:before-init", config).then(() => {
+      dispatch({
+        type: "INIT",
+        ...config,
+        chapters: options.chapters,
+      });
     });
   }
 
   onMounted(() => {
     registerReaderSession(session);
-    uiStore.showControls = true;
     isRestoring.value = true;
     initMachine();
 

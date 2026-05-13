@@ -2,10 +2,11 @@ import { ref } from "vue";
 import { searchInBook } from "./engine";
 import type { SearchResult } from "../../core/types";
 import type { ReaderSession } from "../../reader-engine/session";
-import { generateCfiFromCharOffset, resolveCfi } from "../../utils/epub-cfi";
 import { useDocumentMarker } from "../../composables/useDocumentMarker";
 import * as booksStore from "../../storage/books";
+import { useUIStore } from "../../stores/ui";
 
+const uiStore = useUIStore();
 const SEARCH_MARKER_ID = "search-temp";
 
 export function useReaderSearch(getSession: () => ReaderSession | null) {
@@ -22,23 +23,63 @@ export function useReaderSearch(getSession: () => ReaderSession | null) {
     return marker;
   }
 
+  function ensureSearchStyle(doc: Document) {
+    if (doc.getElementById("plugin-search")) return;
+    const style = doc.createElement("style");
+    style.id = "plugin-search";
+    style.textContent = `.search-match{background:rgba(251,191,36,0.45);border-radius:2px}`;
+    doc.head.appendChild(style);
+  }
+
+  function findTextNodeAtOffset(
+    container: Element,
+    charOffset: number,
+  ): { node: Text; offset: number } | null {
+    const walker = (container.ownerDocument ?? document).createTreeWalker(
+      container,
+      NodeFilter.SHOW_TEXT,
+      null,
+    );
+    let currentOffset = 0;
+    let node: Node | null;
+    while ((node = walker.nextNode())) {
+      const text = node.textContent || "";
+      const textLen = text.length;
+      if (currentOffset + textLen >= charOffset) {
+        return { node: node as Text, offset: charOffset - currentOffset };
+      }
+      currentOffset += textLen;
+    }
+    return null;
+  }
+
   function applyTempHighlight(
-    _doc: Document,
+    doc: Document,
     container: Element,
     position: number,
-    _textLength: number,
-    spineIndex: number,
+    textLength: number,
+    expectedText: string,
   ) {
-    const tempContainer = document.createElement("div");
-    tempContainer.innerHTML = container.innerHTML;
-    const cfi = generateCfiFromCharOffset(spineIndex, tempContainer, position);
-    const target = resolveCfi(cfi, container as HTMLElement);
-    if (target) {
-      const range = _doc.createRange();
-      range.setStart(target.node, target.offset);
-      range.collapse(true);
-      getMarker().add({ id: SEARCH_MARKER_ID, range, className: "search-match" });
+    const start = findTextNodeAtOffset(container, position);
+    const end = findTextNodeAtOffset(container, position + textLength);
+    if (!start || !end) return;
+
+    const range = doc.createRange();
+    range.setStart(start.node, start.offset);
+    range.setEnd(end.node, end.offset);
+
+    if (range.toString() !== expectedText) {
+      const offset =
+        start.node.nodeValue?.indexOf(expectedText, Math.max(0, start.offset - 5)) ?? -1;
+      if (offset !== -1) {
+        range.setStart(start.node, offset);
+        range.setEnd(start.node, offset + expectedText.length);
+      } else {
+        return;
+      }
     }
+
+    getMarker().add({ id: SEARCH_MARKER_ID, range, className: "search-match" });
   }
 
   const doSearch = async () => {
@@ -93,8 +134,7 @@ export function useReaderSearch(getSession: () => ReaderSession | null) {
     const offset = markRect.left - bodyRect.left;
     const state = session.getState();
     const total = state.page.total;
-    const bodyContentWidth = doc.body.scrollWidth;
-    const step = total > 0 ? bodyContentWidth / total : 0;
+    const step = state.page.iframeWidth;
     return step > 0 ? Math.max(0, Math.min(total - 1, Math.floor(offset / step))) : 0;
   }
 
@@ -108,30 +148,37 @@ export function useReaderSearch(getSession: () => ReaderSession | null) {
 
     const state = session.getState();
     const targetChapter = state.chapters.find((c) => c.id === result.chapterId);
-    if (!targetChapter) return;
+    const targetIdx = state.chapters.findIndex((c) => c.id === result.chapterId);
+    if (!targetChapter || targetIdx < 0) return;
 
     const currentChapter = state.chapters[state.currentChapterIndex];
     const sameChapter = targetChapter.id === currentChapter?.id;
 
     if (!sameChapter) {
       session.dispatch({ type: "GO_TO_CHAPTER", chapterId: targetChapter.id, targetPage: 0 });
-    }
 
-    // Wait for content to be ready
-    await new Promise<void>((resolve) => {
-      const check = () => {
-        const doc = session.getDocument();
-        if (doc?.body) {
-          resolve();
-        } else {
-          requestAnimationFrame(check);
-        }
-      };
-      check();
-    });
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => resolve(), 5000);
+        const check = () => {
+          const s = session.getState();
+          if (s.currentChapterIndex === targetIdx && s.status === "ready") {
+            clearTimeout(timeout);
+            resolve();
+          } else if (s.error) {
+            clearTimeout(timeout);
+            reject(new Error(s.error || "Chapter load failed"));
+          } else {
+            requestAnimationFrame(check);
+          }
+        };
+        check();
+      }).catch(() => {});
+    }
 
     const doc = session.getDocument();
     if (!doc?.body) return;
+
+    ensureSearchStyle(doc);
 
     const isPagination = session.getState().mode === "pagination";
     const container = isPagination
@@ -139,7 +186,7 @@ export function useReaderSearch(getSession: () => ReaderSession | null) {
       : (doc.querySelector(`[data-chapter-id="${targetChapter.id}"]`) as HTMLElement | null) ||
         doc.body;
 
-    applyTempHighlight(doc, container, result.position, result.text.length, targetChapter.order);
+    applyTempHighlight(doc, container, result.position, result.text.length, result.text);
 
     await new Promise((r) => setTimeout(r, 50));
     const mark = getMarker().getElement(SEARCH_MARKER_ID);
@@ -153,6 +200,9 @@ export function useReaderSearch(getSession: () => ReaderSession | null) {
     }
 
     hasHighlights.value = true;
+    currentResultIndex.value = searchResults.value.findIndex((r) => r === result);
+
+    uiStore.closeModal();
   }
 
   const reset = () => {

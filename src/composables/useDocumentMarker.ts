@@ -21,6 +21,8 @@ export function useDocumentMarker(getDocument: () => Document | null | undefined
     const doc = getDocument();
     if (!doc) return;
 
+    remove(options.id);
+
     const wrapper = doc.createElement("span");
     wrapper.setAttribute("data-marker-id", options.id);
     if (options.className) wrapper.className = options.className;

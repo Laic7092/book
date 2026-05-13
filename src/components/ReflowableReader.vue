@@ -114,10 +114,15 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  uiStore.showControls = false;
   cleanup();
   resizeObserver?.disconnect();
   mutationObserver?.disconnect();
   if (columnMeasureTimer) clearTimeout(columnMeasureTimer);
+});
+
+const overlayVisible = computed(() => {
+  return engine.state.value.status === "ready";
 });
 
 defineExpose({ getDocument, getArticle });
@@ -130,7 +135,12 @@ defineExpose({ getDocument, getArticle });
       <iframe ref="iframeRef" class="reader-iframe" title="Reader Content" @load="handleLoad" />
     </div>
 
-    <component v-for="(comp, name) in engine.overlayComponents.value" :key="name" :is="comp" />
+    <component
+      v-if="overlayVisible"
+      v-for="(comp, name) in engine.overlayComponents.value"
+      :key="name"
+      :is="comp"
+    />
 
     <ReaderChrome
       :book-title="book.title"

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onUnmounted } from "vue";
 import type { SearchResult } from "../../core/types";
 import ModalHeader from "../../components/modals/ModalHeader.vue";
 import { getSearchApis } from "../manager/registry";
@@ -7,9 +8,18 @@ const emit = defineEmits<{ (e: "close"): void }>();
 
 const api = getSearchApis()[0]!;
 
-function handleResultClick(result: SearchResult) {
+let _closeByNavigation = false;
+
+async function handleResultClick(result: SearchResult) {
+  _closeByNavigation = true;
   api.navigateToResult(result);
 }
+
+onUnmounted(() => {
+  if (!_closeByNavigation) {
+    api.reset();
+  }
+});
 
 let searchDebounceTimer: number | null = null;
 

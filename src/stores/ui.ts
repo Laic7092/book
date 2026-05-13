@@ -56,8 +56,8 @@ export const useUIStore = defineStore("ui", {
      * Open a modal
      */
     openModal(type: ModalType) {
+      this.showControls = false;
       this.activeModal = type;
-      this.showControls = true;
     },
 
     /**
@@ -65,7 +65,6 @@ export const useUIStore = defineStore("ui", {
      */
     closeModal() {
       this.activeModal = null;
-      this.showControls = true;
     },
 
     /**

@@ -42,10 +42,6 @@ export interface ReaderState {
   mode: "pagination" | "scroll";
   status: "idle" | "loading-chapter" | "rendered" | "ready";
 
-  /** chapterId → processed HTML (pipeline output). Machine needs the HTML
-   *  itself because RENDER_HTML effects are built inside reducers. */
-  contentCache: Map<string, string>;
-
   page: PageState;
   scroll: ScrollState;
 
@@ -63,6 +59,8 @@ export type ReaderAction =
       chapters: Chapter[];
       chapterIndex: number;
       mode: "pagination" | "scroll";
+      initialPage?: Partial<PageState>;
+      initialScroll?: Partial<ScrollState>;
     }
   | {
       type: "CHAPTER_LOADED";
@@ -116,7 +114,6 @@ export function createInitialState(): ReaderState {
     currentChapterIndex: -1,
     mode: "pagination",
     status: "idle",
-    contentCache: new Map(),
     page: { current: 0, total: 1, iframeWidth: 0, pendingTarget: null },
     scroll: { windowStart: 0, windowEnd: 0, progress: 0 },
     error: null,
@@ -195,9 +192,13 @@ function initReducer(
     currentChapterIndex: action.chapterIndex,
     mode: action.mode,
     status: "loading-chapter",
-    contentCache: new Map(),
-    page: { current: 0, total: 1, iframeWidth: 0, pendingTarget: null },
-    scroll: { windowStart: action.chapterIndex, windowEnd: action.chapterIndex, progress: 0 },
+    page: { current: 0, total: 1, iframeWidth: 0, pendingTarget: null, ...action.initialPage },
+    scroll: {
+      windowStart: action.chapterIndex,
+      windowEnd: action.chapterIndex,
+      progress: 0,
+      ...action.initialScroll,
+    },
     error: null,
   };
 
@@ -220,15 +221,10 @@ function chapterLoadedReducer(
 
   const previousChapterId = getChapterId(state);
 
-  // Update content cache (immutable copy)
-  const newCache = new Map(state.contentCache);
-  newCache.set(action.chapterId, action.html);
-
   const next: ReaderState = {
     ...state,
     status: "rendered",
     currentChapterIndex: chapterIdx,
-    contentCache: newCache,
     page: {
       ...state.page,
       current: clampPage(state.page.pendingTarget, state.page.total),
@@ -250,18 +246,6 @@ function chapterLoadedReducer(
       event: "content:loaded",
       payload: { bookId: state.bookId, chapterId: action.chapterId },
     });
-  }
-
-  // Preload adjacent chapters
-  const adjacentIds: string[] = [];
-  [chapterIdx - 1, chapterIdx + 1].forEach((i) => {
-    const ch = state.chapters[i];
-    if (ch && !state.contentCache.has(ch.id)) {
-      adjacentIds.push(ch.id);
-    }
-  });
-  if (adjacentIds.length > 0) {
-    effects.push({ type: "FETCH_CHAPTERS", bookId: state.bookId, chapterIds: adjacentIds });
   }
 
   return { state: next, effects };
@@ -347,31 +331,6 @@ function nextPageReducer(state: ReaderState): { state: ReaderState; effects: Rea
   if (nextIdx >= state.chapters.length) return { state, effects: [] };
 
   const nextChapter = state.chapters[nextIdx];
-  const cached = state.contentCache.get(nextChapter.id);
-
-  if (cached) {
-    const next: ReaderState = {
-      ...state,
-      status: "rendered",
-      currentChapterIndex: nextIdx,
-      page: {
-        current: 0,
-        total: 1,
-        iframeWidth: state.page.iframeWidth,
-        pendingTarget: null,
-      },
-    };
-
-    const previousChapterId = getChapterId(state);
-    const effects: ReaderEffect[] = [
-      { type: "RENDER_HTML", html: cached },
-      { type: "MEASURE_LAYOUT", chapterId: nextChapter.id },
-      ...chapterChangeEffects(next, nextChapter.id, previousChapterId ?? undefined),
-    ];
-    return { state: next, effects };
-  }
-
-  // Need to fetch next chapter
   const next: ReaderState = {
     ...state,
     status: "loading-chapter",
@@ -412,29 +371,6 @@ function prevPageReducer(state: ReaderState): { state: ReaderState; effects: Rea
   if (prevIdx < 0) return { state, effects: [] };
 
   const prevChapter = state.chapters[prevIdx];
-  const cached = state.contentCache.get(prevChapter.id);
-
-  if (cached) {
-    const next: ReaderState = {
-      ...state,
-      status: "rendered",
-      currentChapterIndex: prevIdx,
-      page: {
-        current: 0,
-        total: 1,
-        iframeWidth: state.page.iframeWidth,
-        pendingTarget: -1,
-      },
-    };
-    const previousChapterId = getChapterId(state);
-    const effects: ReaderEffect[] = [
-      { type: "RENDER_HTML", html: cached },
-      { type: "MEASURE_LAYOUT", chapterId: prevChapter.id },
-      ...chapterChangeEffects(next, prevChapter.id, previousChapterId ?? undefined),
-    ];
-    return { state: next, effects };
-  }
-
   const next: ReaderState = {
     ...state,
     status: "loading-chapter",
@@ -453,33 +389,6 @@ function goToChapterReducer(
 ): { state: ReaderState; effects: ReaderEffect[] } {
   const idx = findChapterIndex(state.chapters, action.chapterId);
   if (idx < 0) return { state, effects: [] };
-
-  const cached = state.contentCache.get(action.chapterId);
-  const previousChapterId = getChapterId(state);
-
-  if (cached) {
-    const next: ReaderState = {
-      ...state,
-      status: "rendered",
-      currentChapterIndex: idx,
-      page: {
-        current: 0,
-        total: 1,
-        iframeWidth: state.page.iframeWidth,
-        pendingTarget: action.targetPage ?? null,
-      },
-    };
-
-    const effects: ReaderEffect[] = [
-      { type: "RENDER_HTML", html: cached },
-      { type: "MEASURE_LAYOUT", chapterId: action.chapterId },
-    ];
-    if (previousChapterId !== action.chapterId) {
-      effects.push(...chapterChangeEffects(next, action.chapterId, previousChapterId ?? undefined));
-    }
-
-    return { state: next, effects };
-  }
 
   const next: ReaderState = {
     ...state,

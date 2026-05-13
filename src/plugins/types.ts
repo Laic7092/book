@@ -32,6 +32,14 @@ export interface PluginEventMap {
   "page:changed": { bookId: string; chapterId: string; page: number; totalPages: number };
   "settings:changed": { changes: Partial<ReaderSettings> };
   "content:loaded": { bookId: string; chapterId: string };
+  "reader:init": { bookId: string };
+  "reader:before-init": {
+    bookId: string;
+    chapterIndex: number;
+    mode: "pagination" | "scroll";
+    initialPage?: Partial<import("../reader-engine/reader-machine").PageState>;
+    initialScroll?: Partial<import("../reader-engine/reader-machine").ScrollState>;
+  };
   "reader:mounted": { bookId: string };
   "reader:unmounted": { bookId: string };
   [key: string]: unknown;
