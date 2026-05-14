@@ -6,88 +6,122 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Monorepo (`vp` managed) — Vue 3 + TypeScript PWA ebook reader with a Node.js proxy server.
 
-| Package             | Path                    | Description                                              |
-| ------------------- | ----------------------- | -------------------------------------------------------- |
-| `book` (root)       | `src/`                  | PWA ebook reader app                                     |
-| `@book/reader-core` | `packages/reader-core/` | Pure-TS state machine (zero deps)                        |
-| `@book/parser-core` | `packages/parser-core/` | Pure-TS parser lib (browser APIs only, zero storage I/O) |
-| `book-reader-proxy` | `packages/server/`      | Hono backend proxy server                                |
+| Package             | Path                    | Description                                                                              |
+| ------------------- | ----------------------- | ---------------------------------------------------------------------------------------- |
+| `book` (root)       | `src/`                  | PWA ebook reader app                                                                     |
+| `@book/reader-host` | `packages/reader-host/` | Bridge: creates iframe, runs effects from the state machine, manages resource resolution |
+| `@book/reader-core` | `packages/reader-core/` | Pure-TS state machine (`reducer(state, action) → {state, effects}`). Zero deps, no DOM.  |
+| `@book/parser-core` | `packages/parser-core/` | Pure-TS parser lib (browser APIs only, zero storage I/O)                                 |
+| `@book/server`      | `packages/server/`      | Hono backend proxy server                                                                |
 
 Deployed at `/book/`.
 
 ## Commands
 
-- **Dev server:** `vp dev` (frontend) + `pnpm -C packages/server dev` (backend)
-- **Build:** `vp build`
+- **Dev server:** `vp dev` (frontend only) or `pnpm dev:all` (frontend + backend)
+- **Build:** `pnpm build` (runs `tsc -b && vp build`)
 - **Lint + typecheck:** `vp check`
 - **Format:** `vp fmt`
 - **Tests:** `vp test` (Vitest via Vite+)
 - **Install deps:** `vp install` (installs ALL workspace packages)
+- **Import test utilities from:** `vite-plus/test`, not `vitest`: `import { expect, test, vi } from 'vite-plus/test'`
 
 ## Architecture
 
-Two main views: `Bookshelf` (library) and `ReaderView` (reading). `App.vue` switches between them via `<Transition>` based on `readerStore.currentBook`.
+Two main views: `Bookshelf` (library) and `ReflowableReader`/`FixedLayoutReader` (reading). `App.vue` switches between them via `<Transition>` based on `currentRoute.name` (custom router, not Vue Router — see `src/utils/router.ts`).
 
 ### Layers (top to bottom)
 
-| Layer            | Directory                 | Role                                                                                                                                                                                                                                                                                                                                                                                                       |
-| ---------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Core types       | `src/core/`               | `Book`, `ParsedBook`, `Bookmark`, `Annotation`, `ReaderSettings`, `ReadingSession`, `BookReadingStats`. `errors.ts` provides structured `ReaderError` with `ErrorCode` enum. `Chapter` provided by `@book/reader-core`.                                                                                                                                                                                    |
-| Plugins          | `src/plugins/`            | Feature plugins (search, stats, settings, annotations, bookmarks, TTS, auto-read, OPDS, etc). `types.ts` defines `Plugin`, `PluginContext`, `UISlots`, `ContentTransformer`, `SearchApi` interfaces. `registry.ts` manages registration, dependency resolution (Kahn's algorithm), enable/disable lifecycle. `context.ts` provides `EventBus`, `TrackedContext` with auto-cleanup, `PluginStorageAdapter`. |
-| Reader engine    | `packages/reader-core/`   | **`machine.ts`** — pure-TypeScript state machine (`reducer(state, action) → {state, effects}`). **`session.ts`** — `ReaderSession` interface. Zero dependencies, no Vue. Published as `@book/reader-core`.                                                                                                                                                                                                 |
-| Storage          | `src/storage/`            | IndexedDB wrapper (`db.ts`) with 6 object stores: books, chapters, resources, zips, plugin_store, folders. All DB operations via `dbOperation`/`dbTransaction` promise helpers. `books.ts` provides content access with lazy extraction + in-flight dedup.                                                                                                                                                 |
-| Stores           | `src/stores/`             | Hand-written `defineStore` (reactive + computed). `reader` (current book), `bookshelf` (library + folders + search), `ui` (modals/toasts/confirmations/controls).                                                                                                                                                                                                                                          |
-| Composables      | `src/composables/`        | `useReaderMachine` — thin Vue bridge: creates machine, subscribes to state via `shallowRef`, runs effects against DOM/storage/events. `useIframeRenderer` — minimal iframe init utility (base HTML skeleton). `useNavigationStack` — in-session history. `useDocumentMarker` — generic Range-based text marking.                                                                                           |
-| Components       | `src/components/`         | `Bookshelf.vue`, `ReflowableReader.vue`, `FixedLayoutReader.vue`, plus `modals/` and `reader/` subdirectories.                                                                                                                                                                                                                                                                                             |
-| Utilities        | `src/utils/`              | CFI-based position tracking (`epub-cfi.ts`), LRU cache, debounce, validation, color themes.                                                                                                                                                                                                                                                                                                                |
-| Content pipeline | `src/content-pipeline.ts` | EPUB resource resolution (`rewriteResourcePaths`, `processChapterHtml`, `resolveChapterResources`) — depends on plugin system and `@book/parser-core`.                                                                                                                                                                                                                                                     |
-| Iframe utils     | `src/iframe-resources.ts` | Incremental `<style>`/`<link>` injection in reader iframe head.                                                                                                                                                                                                                                                                                                                                            |
+| Layer            | Directory                 | Role                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ---------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Core types       | `src/core/`               | `Book`, `Bookmark`, `Annotation`, `ReaderSettings`, `ReadingSession`, `BookReadingStats`. `errors.ts` has structured `ReaderError` with `ErrorCode`. `theme-registry.ts` is `ThemeRegistry` — register/set/clear themes (light, dark, sepia built-in). Re-exports `Chapter`, `BookParser`, `ParserResult` from `@book/reader-core` and `@book/parser-core`.                                                                                                                                                                                                                                           |
+| Plugins          | `src/plugins/`            | Feature plugins (search, stats, settings, annotations, bookmarks, TTS, auto-read, OPDS, book-sources, progress-bar, reading-progress, last-book, manager). `types.ts` defines `Plugin`, `PluginContext`, `UISlots`, `ContentTransformer`, `SearchApi`, `PluginEventMap`. `registry.ts` handles registration, dependency resolution via Kahn's algorithm, enable/disable lifecycle, `canActivate` capability check. `context.ts` provides `EventBus`, `TrackedContext` with auto-cleanup. `loader.ts` reads `plugin-metadata.json` (build-time scan of plugin `meta.ts`) for scene-based lazy loading. |
+| Reader host      | `packages/reader-host/`   | `ReaderHost` class: creates iframe, subscribes to state machine, runs effects (render HTML, set page CSS, measure layout), resolves EPUB resources (images/css/fonts → blob: URLs), handles internal links.                                                                                                                                                                                                                                                                                                                                                                                           |
+| Reader engine    | `packages/reader-core/`   | **`machine.ts`** — pure-TS state machine with `reducer()`. `session.ts` — `ReaderSession` interface. `getReaderSession()`/`registerReaderSession()` global accessors.                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Storage          | `src/storage/`            | IndexedDB wrapper (`db.ts`) with 4 object stores: books, chapters, zips, plugin_store. Promise-based `dbOperation`/`dbTransaction` helpers. `books.ts` provides book/chapter CRUD. `raw-data.ts` for zip raw data access.                                                                                                                                                                                                                                                                                                                                                                             |
+| Stores           | `src/stores/`             | Custom `defineStore` (`store.ts`) — reactive singleton factory, not Pinia. `reader` (current book state, book load/open/close), `bookshelf` (library + folders + search), `ui` (modals/toasts/confirmations/controls).                                                                                                                                                                                                                                                                                                                                                                                |
+| Composables      | `src/composables/`        | `useReaderMachine` — Vue bridge for ReaderHost: creates host on mount, subscribes to state via `shallowRef`, wires page turns/tap zones/history. `useNavigationStack` — in-session back/forward. `useDocumentMarker` — generic Range-based text marking for annotations.                                                                                                                                                                                                                                                                                                                              |
+| Components       | `src/components/`         | `Bookshelf.vue`, `ReflowableReader.vue`, `FixedLayoutReader.vue`, `ReaderChrome.vue`, `FixedLayoutPage.vue`, plus `modals/` subdirectory.                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Content pipeline | `src/content-pipeline.ts` | `processChapterHtml(html, bookId, chapterId, resourceUrls?)` — parses HTML body via DOMParser, runs `applyContentTransformers` (plugin pipeline).                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Utilities        | `src/utils/`              | Custom router (`router.ts`), CFI position tracking (`epub-cfi.ts`), color conversion (`colors.ts`), API server client (`api.ts`), PDF renderer, reader CSS themes, validation, time formatting, constants.                                                                                                                                                                                                                                                                                                                                                                                            |
 
-### Reader state machine (`reader-engine/reader-machine.ts`)
+### Reader state machine (`packages/reader-core/src/machine.ts`)
 
-The core rendering logic is a pure-TS state machine with zero Vue dependencies. Pattern: `dispatch(action) → reducer(state, action) → { state, effects[] }`.
+Pure-TS state machine, zero Vue dependencies. Pattern: `dispatch(action) → reducer(state, action) → { state, effects[] }`.
 
-Vue does exactly two things: subscribes to state changes for rendering, and dispatches actions for user input. Side effects (storage I/O, DOM, events) are described as data objects executed by `runEffect()` in the bridge composable (`useReaderMachine`).
+Vue does exactly two things: subscribes to state changes for rendering, and dispatches actions for user input. Side effects (storage I/O, DOM, events) are data objects executed by `ReaderHost.runEffect()`.
 
-**State** (`ReaderState`): `bookId`, `chapters`, `currentChapterIndex`, `mode`, `status` (`idle|loading-chapter|ready`), `contentCache` (chapterId→processed HTML), `resourceUrls`, `page` (current/total/iframeWidth/pendingTarget), `scroll` (windowStart/windowEnd/progress), `chapterProgress`, `bookProgress`, `history`, `error`.
+**State** (`ReaderState`): `bookId`, `chapters`, `currentChapterIndex`, `mode` (`pagination`|`scroll`), `status` (`idle`|`loading-chapter`|`rendered`|`ready`), `page` (current/total/iframeWidth/pendingTarget), `scroll` (windowStart/windowEnd/progress), `error`.
 
-**Actions** (`ReaderAction`): `INIT`, `CHAPTER_LOADED`, `CHAPTER_FAILED`, `LAYOUT_MEASURED`, `NEXT_PAGE`, `PREV_PAGE`, `GO_TO_CHAPTER`, `GO_TO_PAGE`, `SET_MODE`, `HISTORY_BACK`, `HISTORY_FORWARD`, `SCROLL_PROGRESS`, `SCROLL_WINDOW_EXPANDED`, `CLEANUP`.
+**Actions** (`ReaderAction`): `INIT`, `CHAPTER_LOADED`, `CHAPTER_FAILED`, `LAYOUT_MEASURED`, `NEXT_PAGE`, `PREV_PAGE`, `GO_TO_CHAPTER`, `GO_TO_PAGE`, `SET_MODE`, `SCROLL_PROGRESS`, `SCROLL_WINDOW_EXPANDED`, `CLEANUP`.
 
-**Effects** (`ReaderEffect`): `FETCH_CHAPTER`, `FETCH_CHAPTERS`, `RENDER_HTML`, `SET_PAGE_CSS`, `SET_MODE_CSS`, `SET_PAGE_MARGIN_CSS`, `EMIT`, `PUSH_HISTORY`, `SCROLL_INTO_VIEW`, `NOOP`.
+**Effects** (`ReaderEffect`): `FETCH_CHAPTER`, `FETCH_CHAPTERS`, `RENDER_HTML`, `SET_PAGE_CSS`, `SET_MODE_CSS`, `SET_PAGE_MARGIN_CSS`, `EMIT`, `SCROLL_INTO_VIEW`, `MEASURE_LAYOUT`, `NOOP`.
 
-Each action has a dedicated sub-reducer (e.g. `nextPageReducer`, `goToChapterReducer`) that computes new state + effects deterministically. The machine can be tested with plain Node.js — no DOM, no Vue.
+Each action has a dedicated sub-reducer. Navigation history is managed by `useNavigationStack` composable (Vue-side), not the machine.
+
+### ReaderHost (`packages/reader-host/src/host.ts`)
+
+The bridge between the pure state machine and the DOM. Creates an iframe with base CSS, subscribes to the machine, and runs effects:
+
+- `FETCH_CHAPTER` → calls `fetchChapter` callback, runs content pipeline (resource resolution + transforms), dispatches `CHAPTER_LOADED`
+- `RENDER_HTML` → sets `iframeDoc.body.innerHTML`
+- `SET_PAGE_CSS` → sets `--current-page` CSS variable on iframe `<html>` for `transform: translateX(-N * 100dvw)` pagination
+- `MEASURE_LAYOUT` → `requestAnimationFrame` → measures `body.scrollWidth / iframeWidth` → dispatches `LAYOUT_MEASURED`
+- EPUB resource resolution → `resolveChapterResources` extracts images/css/fonts via parser, creates blob: URLs, injects `<link>`/`<style>` in iframe head
 
 ### ReaderSession (plugin bridge)
 
-Replaces the old 20-method `ReaderHost`. Four methods:
+Five methods accessed via `ctx.readerSession()` (late-bound getter on `PluginContext`):
 
-- `session.dispatch(action)` — send an action to the state machine
+- `session.dispatch(action)` — send action to state machine
 - `session.getState()` — read current `ReaderState`
-- `session.getDocument()` — access the iframe document (for annotation/search/TTS DOM plugins)
-- `session.setPageMargin(margin)` — set page margin (settings plugin)
+- `session.getDocument()` — access iframe document (annotations/search/TTS)
+- `session.setPageMargin(margin)` — set page margin CSS var
+- `session.navigateToCfi(cfi, chapterId)` — navigate to CFI position
 
-Plugins access the session via `ctx.readerSession()` (a late-bound getter on `PluginContext`). Each plugin stores a local reference to avoid repeated lookups. The session is registered when `ReaderView` mounts and cleared on unmount.
+Session registered when `ReflowableReader` mounts, cleared on unmount. Accessed globally via `getReaderSession()`/`registerReaderSession()` from `@book/reader-core`.
 
-### Key patterns
+### Plugin system
 
-- **Plugin system:** Features (search, stats, settings, annotations, bookmarks, TTS, auto-read, OPDS, etc) are plugins under `src/plugins/`. Each plugin has `meta.ts` (declares `loadOn` scene), implementation, and `index.ts`. Scenes: `"app" | "book-import" | "bookshelf" | "reader"`. Plugins register UI components, content transformers, and search APIs. `TrackedContext` auto-cleans all registrations on teardown.
-- **Parser registry:** `parsers/index.ts` provides `registerParserLoader(format, loader)`, `getParserForFormat(format)`, `getParserForFile(file)`. File matching: first MIME type via `supportsFormat()`, then extension fallback via `EXTENSION_MIME_MAP`. Built-in parsers (epub, txt, pdf, cbz) are registered eagerly at import time via `packages/parser-core/src/index.ts`.
-- **Pagination:** CSS `column-width: 100dvw` + `column-fill: auto` + `height: 100dvh` in the iframe. Each column is one screen; `transform: translateX(-N * 100dvw)` switches visible column. `LAYOUT_MEASURED` action computes total pages from `body.scrollWidth / iframeWidth`.
-- **EPUB resources:** Images/CSS/fonts stored as `ArrayBuffer` in IndexedDB (`resources` store), served via `blob:` URLs. Resolution orchestrated by `src/content-pipeline.ts` — loads rawData via `storage/raw-data.ts`, extracts via `parser.extractResource(rawData, path)`, creates blob URL. Raw zip stored in `zips` store for lazy chapter extraction.
-- **Lazy extraction:** EPUB chapters not eagerly extracted. `storage/books.ts:getChapterContent()` loads rawData via `storage/raw-data.ts`, calls `parser.extractChapterContent(rawData, chapter)`, caches result to IndexedDB.
-- **Reading sessions:** `plugins/stats/engine.ts` tracks sessions (start/end time, chapters read, words read) and computes aggregate stats per book.
-- **Annotations:** Highlights and underlines stored via CFI-based position references. `SelectionToolbar` triggers creation, `useAnnotationRenderer` renders them in the iframe, `AnnotationsPanel` lists them per book.
-- **Content pipeline:** `src/content-pipeline.ts` provides `processChapterHtml(html, bookId, chapterId, resourceUrls)`. Pipeline: `rewriteResourcePaths` (blob: URL substitution) → `applyContentTransformers` (plugin transforms, ordered by priority).
-- **Deployment base:** `vite.config.ts` sets `base: "/book/"` for the PWA.
+All features (search, stats, settings, annotations, bookmarks, TTS, auto-read, OPDS, book-sources, etc) are plugins under `src/plugins/`.
 
-## Data flow
+**Lifecycle:**
+
+1. `plugin-metadata.json` (build-time generated by scanning `meta.ts` files) declares `loadOn` scene + `pluginId` + `defaultEnabled`
+2. `loader.ts` reads metadata, registers stubs, maps scenes to lazy module loaders
+3. On scene load (e.g. `loadPluginsFor("reader")`), loader imports plugin module, registers full Plugin, calls `initializePlugins()`
+4. `registry.ts` resolves dependencies (Kahn's algorithm), calls `setup(ctx)` on each plugin
+5. `TrackedContext` auto-cleans all registrations on `teardown()` / `runCleanup()`
+
+**Scenes:** `"app" | "book-import" | "bookshelf" | "reader"`
+
+**Plugin capabilities:**
+
+- `ui.registerModal(name, component)` — panels rendered by `ModalWrapper`
+- `ui.registerOverlay(name, component)` — UI inside `ReaderView`
+- `ui.registerFooterAction(action)` / `ui.registerHeaderAction(action)` — toolbar/menu buttons
+- `ui.registerToolbarItem(item)` — right-edge reader toolbar buttons
+- `ui.registerBookshelfWidget(component)` / `ui.registerBookshelfMenuAction(action)` — bookshelf contributions
+- `ui.registerPage(name, component)` — full-page components navigable via `/page/<name>`
+- `ctx.registerContentTransformer(transformer)` — modify chapter HTML before rendering
+- `ctx.capabilities.register("searchApis", api)` — register search providers
+- `ctx.events.on("book:opened", ...)` / `"chapter:changed"` / `"page:changed"` / `"settings:changed"` etc.
+- `ctx.storage.get/put/delete/clear` — scoped `plugin_store` IndexedDB access
+- `Plugin.canActivate(ctx)` — optional capability check, returns false to hide plugin
+- Enable/disable toggle (persisted to `plugin_store`, UI in `PluginsPanel`)
+
+### Pagination
+
+CSS `column-width: 100dvw` + `column-fill: auto` + `height: 100dvh` in the iframe. Each column is one screen; `--current-page` CSS variable drives `transform: translateX(calc(-1 * var(--current-page) * 100dvw))`. `MEASURE_LAYOUT` effect computes total pages from `body.scrollWidth / iframeWidth`.
+
+### Data flow
 
 ```
-User gesture
+User gesture (tap zone / button)
   → dispatch(action)
     → reducer(state, action) → { newState, effects[] }   (synchronous, pure)
-      → subscribers notified → shallowRef updated → Vue re-renders
-      → effects executed by bridge (RENDER_HTML → iframe.body.innerHTML, etc.)
+      → machine subscribers notified → ReaderHost.onStateChange → Vue shallowRef updated → re-render
+      → effects executed by ReaderHost.runEffect()         (DOM, storage, events)
 ```
 
 Plugins interact via:
@@ -96,12 +130,16 @@ Plugins interact via:
 Plugin
   → ctx.readerSession()?.dispatch(action)     // navigation, mode changes
   → ctx.readerSession()?.getState()           // read current state
-  → ctx.readerSession()?.getDocument()        // DOM access (annotations, search)
+  → ctx.readerSession()?.getDocument()        // iframe DOM access
   → ctx.events.on("chapter:changed", ...)     // event-based notification
 ```
 
-## Vite+ Rules
+### Key patterns
 
-- Import test utilities from `vite-plus/test`, not `vitest`: `import { expect, test, vi } from 'vite-plus/test'`
-- Use `vp` for all tooling (`vp test`, `vp lint`, `vp add`, etc.), never the underlying package manager directly
-- Run `vp install` after pulling remote changes — this installs ALL workspace packages (root app, `@book/reader-core`, `book-reader-proxy`)
+- **Custom router:** `src/utils/router.ts` — `currentRoute` reactive object, `navigate(url, replace?)` function, `popstate` listener. Routes: `/` (bookshelf), `/reader/:bookId` (reader), `/page/:name` (plugin pages). No Vue Router dependency.
+- **Custom store:** `src/stores/store.ts` — `defineStore(id, { state, getters, actions })` returns singleton reactive store. Simple reactive factory, not Pinia. Three stores: `reader`, `bookshelf`, `ui`.
+- **Parser registry:** `packages/parser-core/src/registry.ts` provides `registerParserLoader(format, loader)`, `getParserForFormat(format)`, `getParserForFile(file)`. File matching via MIME type + extension fallback. Built-in parsers (epub, txt, pdf, cbz) registered eagerly at import.
+- **EPUB resources:** Images/CSS/fonts stored as `ArrayBuffer` in IndexedDB (`zips` store → lazy extraction via parser), served via `blob:` URLs. Resolution in `ReaderHost.fetchAndLoadChapter()`.
+- **Lazy extraction:** EPUB chapters not eagerly extracted. `storage/books.ts:getChapterContent()` loads raw zip, calls `parser.extractChapterContent()`, caches to IndexedDB.
+- **Content pipeline:** `src/content-pipeline.ts` — `processChapterHtml(html, bookId, chapterId)` → parse body via DOMParser → `applyContentTransformers()` (plugin pipeline, ordered by priority).
+- **Theme registry:** `src/core/theme-registry.ts` — `ThemeRegistry` with 3 builtin themes (light, dark, sepia). Plugins register via `ctx.themes.register()`. `setTheme(id)` applies chrome CSS vars on `:root`. `generateThemeCSS()` produces content CSS for the iframe.

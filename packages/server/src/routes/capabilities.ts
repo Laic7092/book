@@ -9,7 +9,7 @@ import type { Hono } from "hono";
 export function registerCapabilitiesRoutes(app: Hono): void {
   app.get("/api/capabilities", (c) => {
     return c.json({
-      version: "0.1.0",
+      version: "0.0.0",
       net: true,
       fs: true,
     });
