@@ -1,8 +1,6 @@
 import type { FileEntry } from "@zip.js/zip.js";
-import type { BookParser, ParsedBook, Chapter } from "../../core/types";
-import { ErrorCode, createReaderError } from "../../core/errors";
 import { BaseBookParser, generateId } from "../base";
-import { revokeResourceUrls as revokeUrls } from "../../storage/books";
+import type { BookParser, ParserResult, ChapterData } from "../types";
 
 const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp", "bmp"]);
 
@@ -40,27 +38,14 @@ export class CbzParser extends BaseBookParser implements BookParser {
     return CbzParser.SUPPORTED_MIME_TYPES.includes(mimeType);
   }
 
-  // ── Format-specific lifecycle ──
-
-  // Resources are now extracted lazily from the stored zip — no pre-extraction.
-
-  async saveRawData(bookId: string, rawData: ArrayBuffer, fileSize: number): Promise<void> {
-    const { saveZip } = await import("../epub/zips");
-    await saveZip(bookId, rawData, fileSize);
-  }
-
-  async loadChapterContent(
-    bookId: string,
+  async extractChapterContent(
+    rawData: ArrayBuffer,
     chapter: { id: string; href?: string },
   ): Promise<string | undefined> {
     if (!chapter.href) return undefined;
 
-    const { getZip } = await import("../epub/zips");
-    const zipData = await getZip(bookId);
-    if (!zipData) return undefined;
-
     try {
-      const data = await CbzParser.extractImage(zipData, chapter.href);
+      const data = await CbzParser.extractImage(rawData, chapter.href);
       if (!data) return undefined;
 
       const ext = chapter.href.split(".").pop() || "jpg";
@@ -68,34 +53,20 @@ export class CbzParser extends BaseBookParser implements BookParser {
       const url = URL.createObjectURL(new Blob([data], { type: mimeType }));
 
       return CbzParser.pageToHtml(url);
-    } catch (err) {
-      console.error("[CBZ Parser] Failed to extract image:", err);
+    } catch {
       return undefined;
     }
   }
 
-  async resolveResourceUrl(bookId: string, path: string): Promise<string | null> {
-    const { getZip } = await import("../epub/zips");
-    const zipData = await getZip(bookId);
-    if (!zipData) return null;
-
+  async extractResource(rawData: ArrayBuffer, path: string): Promise<ArrayBuffer | undefined> {
     try {
-      const data = await CbzParser.extractImage(zipData, path);
-      if (!data) return null;
-      const ext = path.split(".").pop() || "jpg";
-      return URL.createObjectURL(new Blob([data], { type: getMimeType(ext) }));
+      return await CbzParser.extractImage(rawData, path);
     } catch {
-      return null;
+      return undefined;
     }
   }
 
-  revokeResourceUrls(urls: Map<string, string>): void {
-    revokeUrls(urls);
-  }
-
-  // ── Phase 1: Parse ──
-
-  async parse(file: File): Promise<ParsedBook> {
+  async parse(file: File): Promise<ParserResult> {
     const arrayBuffer = await this.readAsArrayBuffer(file);
     const { ZipReader, Uint8ArrayReader, BlobWriter } = await getZipModule();
     const zipReader = new ZipReader(new Uint8ArrayReader(new Uint8Array(arrayBuffer)));
@@ -111,18 +82,14 @@ export class CbzParser extends BaseBookParser implements BookParser {
         .sort((a, b) => a.filename.localeCompare(b.filename, undefined, { numeric: true }));
 
       if (imageEntries.length === 0) {
-        throw createReaderError(
-          "CBZ has an unsupported format: no image files found",
-          ErrorCode.PARSE_FAILED,
-        );
+        throw new Error("CBZ has an unsupported format: no image files found");
       }
 
       const bookId = generateId("book");
       const title = file.name.replace(/\.cbz$/i, "") || "Untitled";
 
-      const chapters: Chapter[] = imageEntries.map((entry, i) => ({
+      const chapters: ChapterData[] = imageEntries.map((entry, i) => ({
         id: generateId("ch"),
-        bookId,
         title:
           entry.filename
             .split("/")
@@ -132,7 +99,6 @@ export class CbzParser extends BaseBookParser implements BookParser {
         order: i,
       }));
 
-      // Extract first image as cover
       let coverUrl: string | undefined;
       const resources = new Map<string, ArrayBuffer>();
       const firstEntry = imageEntries[0];
@@ -142,18 +108,11 @@ export class CbzParser extends BaseBookParser implements BookParser {
         resources.set(firstEntry.filename, await (coverData as Blob).arrayBuffer());
       }
 
-      const book = {
+      return {
         id: bookId,
         title,
         author: "Unknown Author",
         coverUrl,
-        format: "cbz" as const,
-        fileSize: file.size,
-        addedAt: Date.now(),
-      };
-
-      return {
-        book,
         chapters,
         content: new Map(),
         resources,
@@ -164,9 +123,6 @@ export class CbzParser extends BaseBookParser implements BookParser {
     }
   }
 
-  /**
-   * Extract a single image from raw CBZ data.
-   */
   private static async extractImage(
     rawData: ArrayBuffer,
     path: string,

@@ -1,6 +1,4 @@
-import type { ReaderAction, ReaderState } from "./reader-machine";
-
-// ── ReaderSession (plugin bridge) ──
+import type { ReaderAction, ReaderState } from "./machine";
 
 export interface ReaderSession {
   dispatch(action: ReaderAction): void;

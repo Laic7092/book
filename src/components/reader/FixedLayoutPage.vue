@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, nextTick } from "vue";
-import { getZip } from "../../parsers/epub/zips";
-import { openPdf } from "../../parsers/pdf-parser/pdf-renderer";
+import { getZip } from "../../storage/raw-data";
+import { openPdf } from "../../utils/pdf-renderer";
 
 const props = defineProps<{
   bookId: string;

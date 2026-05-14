@@ -1,4 +1,4 @@
-import type { BookParser } from "../core/types";
+import type { BookParser } from "./types";
 
 const cache = new Map<string, BookParser>();
 const loaders = new Map<string, () => Promise<BookParser>>();
@@ -48,10 +48,3 @@ export function getParserForFile(file: File): BookParser | null {
 
   return null;
 }
-
-// ── Built-in parsers ──
-
-registerParserLoader("epub", () => import("./epub/epub-parser").then((m) => new m.EpubParser()));
-registerParserLoader("txt", () => import("./txt-parser/txt-parser").then((m) => new m.TxtParser()));
-registerParserLoader("pdf", () => import("./pdf-parser/pdf-parser").then((m) => new m.PdfParser()));
-registerParserLoader("cbz", () => import("./cbz-parser/cbz-parser").then((m) => new m.CbzParser()));

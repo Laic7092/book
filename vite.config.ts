@@ -35,7 +35,7 @@ export default defineConfig({
       typeAware: true,
       typeCheck: true,
     },
-    ignorePatterns: ["server/**"],
+    ignorePatterns: ["packages/server/**"],
   },
   build: {
     rolldownOptions: {

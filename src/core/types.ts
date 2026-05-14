@@ -1,5 +1,13 @@
 // Core type definitions for the Reader application
 
+// Chapter is now provided by @book/reader-core
+import type { Chapter } from "@book/reader-core";
+export type { Chapter };
+
+// BookParser types now provided by @book/parser-core
+import type { BookParser, ParserResult, ChapterData } from "@book/parser-core";
+export type { BookParser, ParserResult, ChapterData };
+
 export interface Book {
   id: string;
   title: string;
@@ -17,15 +25,6 @@ export interface Folder {
   name: string;
   createdAt: number;
   order: number;
-}
-
-export interface Chapter {
-  id: string;
-  bookId: string;
-  title: string;
-  href?: string;
-  order: number;
-  inToc?: boolean; // Whether this chapter appears in NCX/Nav table of contents
 }
 
 export interface BookContent {
@@ -87,29 +86,34 @@ export interface Resource {
   type: "image" | "css" | "font" | "other";
 }
 
-export interface BookParser {
-  parse(file: File): Promise<ParsedBook>;
-  supportsFormat(mimeType: string): boolean;
-
-  /**
-   * Format identifier (matches Book.format).
-   * Used to find the right parser for a stored book.
-   */
-  format: string;
-
-  /** Store format-specific resources. Called during book import. */
-  saveResources?(bookId: string, resources: Map<string, ArrayBuffer>): Promise<void>;
-  /** Store raw file data for lazy content extraction. */
-  saveRawData?(bookId: string, rawData: ArrayBuffer, fileSize: number): Promise<void>;
-  /** Load chapter content lazily from raw data. */
-  loadChapterContent?(
-    bookId: string,
-    chapter: { id: string; href?: string },
-  ): Promise<string | undefined>;
-  /** Resolve a resource path to a blob URL. */
-  resolveResourceUrl?(bookId: string, path: string): Promise<string | null>;
-  /** Revoke all blob URLs in the given map. */
-  revokeResourceUrls?(urls: Map<string, string>): void;
+export function mapParserResult(
+  result: ParserResult,
+  format: string,
+  fileSize: number,
+): ParsedBook {
+  const book: Book = {
+    id: result.id,
+    title: result.title,
+    author: result.author,
+    coverUrl: result.coverUrl,
+    format,
+    fileSize,
+    addedAt: Date.now(),
+  };
+  const chapters: Chapter[] = result.chapters.map((ch: ChapterData) => ({
+    id: ch.id,
+    bookId: result.id,
+    title: ch.title,
+    href: ch.href,
+    order: ch.order,
+  }));
+  return {
+    book,
+    chapters,
+    content: result.content,
+    resources: result.resources,
+    rawData: result.rawData,
+  };
 }
 
 /**

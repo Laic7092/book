@@ -1,9 +1,8 @@
-import type { BookParser } from "../core/types";
-import { applyContentTransformers } from "../plugins/manager/registry";
+import type { BookParser } from "@book/parser-core";
+import { applyContentTransformers } from "./plugins/manager/registry";
+import { getMimeTypeFromExtension } from "./storage/books";
 
 const CSS_URL_PATTERN = /url\(['"]?([^'")\s]+)['"]?\)/gi;
-
-// ── Path collection ──
 
 function collectResourcePaths(doc: Document): string[] {
   const paths = new Set<string>();
@@ -44,30 +43,30 @@ function collectResourcePaths(doc: Document): string[] {
   return Array.from(paths);
 }
 
-// ── Blob URL resolution ──
-
 async function resolveMissingResources(
-  bookId: string,
+  rawData: ArrayBuffer | undefined,
   paths: string[],
   resourceUrls: Map<string, string>,
   parser: BookParser,
 ): Promise<void> {
+  if (!rawData || !parser.extractResource) return;
   const missingPaths = paths.filter((p) => !resourceUrls.has(p));
   if (missingPaths.length === 0) return;
 
   const results = await Promise.all(
     missingPaths.map(async (path) => ({
       path,
-      url: await parser.resolveResourceUrl?.(bookId, path),
+      data: await parser.extractResource!(rawData, path),
     })),
   );
 
-  for (const { path, url } of results) {
-    if (url) resourceUrls.set(path, url);
+  for (const { path, data } of results) {
+    if (data) {
+      const mimeType = getMimeTypeFromExtension(path);
+      resourceUrls.set(path, URL.createObjectURL(new Blob([data], { type: mimeType })));
+    }
   }
 }
-
-// ── Path rewriting ──
 
 function findResourceUrl(path: string, resourceUrls: Map<string, string>): string | null {
   const normalizedPath = path.replace(/^\//, "").split("#")[0].split("?")[0];
@@ -102,7 +101,6 @@ function findResourceUrl(path: string, resourceUrls: Map<string, string>): strin
     if (tryPath && resourceUrls.has(tryPath)) return resourceUrls.get(tryPath)!;
   }
 
-  // Last resort: basename match against all resource keys
   const finalBasename = normalizedPath.split("/").pop() || "";
   for (const [resourcePath, blobUrl] of resourceUrls.entries()) {
     if (finalBasename && finalBasename === resourcePath.split("/").pop()) {
@@ -120,13 +118,7 @@ function rewriteCssUrls(cssContent: string, resourceUrls: Map<string, string>): 
   });
 }
 
-/**
- * Rewrite resource paths in HTML content to use blob URLs.
- */
-export function rewriteResourcePaths(
-  htmlContent: string,
-  resourceUrls: Map<string, string>,
-): Document {
+function rewriteResourcePaths(htmlContent: string, resourceUrls: Map<string, string>): Document {
   const parser = new DOMParser();
   if (!resourceUrls || resourceUrls.size === 0) {
     return parser.parseFromString("<html></html>", "text/html");
@@ -176,22 +168,11 @@ export function rewriteResourcePaths(
   return doc;
 }
 
-// ── Public API ──
-
 export interface ResolvedChapter {
   html: string;
   resources: HTMLElement[];
 }
 
-/**
- * Resolve format-specific resources in chapter HTML.
- * Collects resource paths → resolves to blob URLs → rewrites HTML → extracts head elements.
- */
-/**
- * Process a single chapter's HTML through the full pipeline:
- *   1. Rewrite resource paths (EPUB internal → blob URLs)
- *   2. Apply plugin content transformers (theme, typography, etc.)
- */
 export async function processChapterHtml(
   rawHtml: string,
   bookId: string,
@@ -220,15 +201,15 @@ export async function processChapterHtml(
 
 export async function resolveChapterResources(
   rawHtml: string,
-  bookId: string,
+  rawData: ArrayBuffer | undefined,
   parser: BookParser,
   resourceUrls: Map<string, string>,
 ): Promise<ResolvedChapter> {
   const doc = new DOMParser().parseFromString(rawHtml, "text/html");
 
   const resourcePaths = collectResourcePaths(doc);
-  if (resourcePaths.length > 0 && parser.resolveResourceUrl) {
-    await resolveMissingResources(bookId, resourcePaths, resourceUrls, parser);
+  if (resourcePaths.length > 0) {
+    await resolveMissingResources(rawData, resourcePaths, resourceUrls, parser);
   }
 
   if (resourceUrls.size > 0) {

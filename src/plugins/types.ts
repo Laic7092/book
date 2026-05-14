@@ -2,7 +2,7 @@ import type { Component, App } from "vue";
 import type { SearchResult } from "../core/types";
 import type { ThemeRegistry } from "../core/theme-registry";
 import type { ReaderSettings } from "./settings/types";
-import type { ReaderSession } from "../reader-engine/session";
+import type { ReaderSession } from "@book/reader-core";
 import type { ServerClient } from "../utils/api";
 
 /** Scene a plugin loads during. */
@@ -37,8 +37,8 @@ export interface PluginEventMap {
     bookId: string;
     chapterIndex: number;
     mode: "pagination" | "scroll";
-    initialPage?: Partial<import("../reader-engine/reader-machine").PageState>;
-    initialScroll?: Partial<import("../reader-engine/reader-machine").ScrollState>;
+    initialPage?: Partial<import("@book/reader-core").PageState>;
+    initialScroll?: Partial<import("@book/reader-core").ScrollState>;
   };
   "reader:mounted": { bookId: string };
   "reader:unmounted": { bookId: string };

@@ -2,13 +2,14 @@
 
 import { defineStore } from "./store";
 import type { Book, Folder } from "../core/types";
+import { mapParserResult } from "../core/types";
 import { dbGetAll, STORES } from "../storage/db";
 import { getCoverBlob, deleteCoverBlob } from "../storage/books";
 import { pluginEvents } from "../plugins/context";
 import * as booksStore from "../storage/books";
 import { useUIStore } from "./ui";
 import { assertValidBookFile } from "../utils/validation";
-import { getParserForFile, loadParserForFormat } from "../parsers";
+import { getParserForFile, loadParserForFormat } from "@book/parser-core";
 
 export interface BookshelfState {
   books: Book[];
@@ -76,7 +77,8 @@ export const useBookshelfStore = defineStore("bookshelf", {
         if (!parser) {
           throw new Error(`Unsupported file format: ${file.type || file.name}`);
         }
-        const parsedBook = await parser.parse(file);
+        const result = await parser.parse(file);
+        const parsedBook = mapParserResult(result, parser.format, file.size);
         await booksStore.saveBook(parsedBook, parser);
         await this.loadBooks();
         return { book: parsedBook.book, chapters: parsedBook.chapters };

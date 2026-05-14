@@ -18,7 +18,7 @@ import type {
   ToolbarItem,
 } from "./types";
 import { themeRegistry } from "../core/theme-registry";
-import { getReaderSession } from "../reader-engine/session";
+import { getReaderSession } from "@book/reader-core";
 import { navigate as routerNavigate } from "../utils/router";
 import { createServerClient } from "../utils/api";
 import { useUIStore } from "../stores/ui";

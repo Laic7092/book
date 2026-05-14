@@ -1,7 +1,8 @@
 // Reader Store - Manages book reading state and operations
 
 import { defineStore } from "./store";
-import type { Book, Chapter, ParsedBook } from "../core/types";
+import type { Book, Chapter } from "../core/types";
+import { mapParserResult } from "../core/types";
 import { ErrorCode, createReaderError } from "../core/errors";
 import { loadPluginsFor } from "../plugins/loader";
 import {
@@ -9,7 +10,7 @@ import {
   loadParserForFormat,
   getParserForFile,
   EXTENSION_MIME_MAP,
-} from "../parsers";
+} from "@book/parser-core";
 import * as booksStore from "../storage/books";
 import { pluginEvents } from "../plugins/context";
 import { assertValidBookFile, validateBookId } from "../utils/validation";
@@ -42,7 +43,8 @@ export const useReaderStore = defineStore("reader", {
         );
       }
 
-      const parsedBook: ParsedBook = await parser.parse(file);
+      const result = await parser.parse(file);
+      const parsedBook = mapParserResult(result, parser.format, file.size);
       await booksStore.saveBook(parsedBook, parser);
 
       return { book: parsedBook.book, chapters: parsedBook.chapters };

@@ -2,9 +2,9 @@
 
 import type { Book, Folder, ParsedBook } from "../core/types";
 import { STORES, dbPut, dbGet, dbGetAll, dbTransaction, dbDelete } from "./db";
-import type { BookParser } from "../core/types";
-import { getParserForFormat } from "../parsers";
-import { generateId } from "../parsers/base";
+import type { BookParser } from "@book/parser-core";
+import { getParserForFormat, generateId } from "@book/parser-core";
+import { saveZip, getZip } from "./raw-data";
 
 const PLUGIN_ID = "_covers";
 
@@ -69,18 +69,17 @@ export async function saveBook(parsedBook: ParsedBook, parser: BookParser): Prom
 
   // Format-specific raw data storage (for lazy extraction)
   if (parsedBook.rawData) {
-    await parser.saveRawData?.(parsedBook.book.id, parsedBook.rawData, parsedBook.book.fileSize);
+    await saveZip(parsedBook.book.id, parsedBook.rawData, parsedBook.book.fileSize);
   }
 
   // Cache cover image so bookshelf can display it without the parser
-  if (parsedBook.book.coverUrl && parser.resolveResourceUrl) {
+  if (parsedBook.book.coverUrl && parsedBook.rawData && parser.extractResource) {
     try {
-      const url = await parser.resolveResourceUrl(parsedBook.book.id, parsedBook.book.coverUrl);
-      if (url) {
-        const res = await fetch(url);
-        const blob = await res.blob();
+      const data = await parser.extractResource(parsedBook.rawData, parsedBook.book.coverUrl);
+      if (data) {
+        const mimeType = getMimeTypeFromExtension(parsedBook.book.coverUrl);
+        const blob = new Blob([data], { type: mimeType });
         await saveCoverBlob(parsedBook.book.id, blob);
-        URL.revokeObjectURL(url);
       }
     } catch {
       // Non-critical: bookshelf will fall back to gradient cover
@@ -204,7 +203,7 @@ export async function getChapterContent(
   if (chapter.href) {
     const book = await getBook(bookId);
     const parser = book ? getParserForFormat(book.format) : null;
-    if (parser?.loadChapterContent) {
+    if (parser?.extractChapterContent) {
       return lazyExtractChapterContent(bookId, chapterId, chapter.href, parser);
     }
   }
@@ -242,7 +241,13 @@ async function lazyExtractChapterContent(
   if (inflight) return inflight;
 
   const promise = (async () => {
-    const content = await parser.loadChapterContent!(bookId, {
+    const rawData = await getZip(bookId);
+    if (!rawData) {
+      throw new Error(
+        "Chapter content not available. The book data has been cleared from local storage. Please re-import the book.",
+      );
+    }
+    const content = await parser.extractChapterContent!(rawData, {
       id: chapterId,
       href,
     });

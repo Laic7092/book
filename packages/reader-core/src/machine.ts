@@ -1,31 +1,9 @@
-// Pure TypeScript state machine for the reader engine.
-// Zero Vue dependencies — all state transitions are synchronous and deterministic.
-//
-// Architecture:
-//   dispatch(action) → reducer(state, action) → { state, effects[] }
-//
-// Vue only does two things:
-//   1. Render: subscribe to state changes → update DOM
-//   2. Input:  user gestures → dispatch actions
-//
-// Side effects (storage I/O, DOM manipulation, event emission) are described
-// as plain data objects ("effects") and executed by the Vue bridge layer.
-//
-// State is minimised to only what's needed for rendering decisions.
-// Navigation history, progress percentages, and resource metadata are
-// managed by the bridge layer, not by this state machine.
-
-import type { Chapter } from "../core/types";
-
-// ═══════════════════════════════════════════════════════════════════════════
-// State
-// ═══════════════════════════════════════════════════════════════════════════
+import type { Chapter } from "./types";
 
 export interface PageState {
   current: number;
   total: number;
   iframeWidth: number;
-  /** Page to navigate to once column layout is measured. null = no pending. */
   pendingTarget: number | null;
 }
 
@@ -48,10 +26,6 @@ export interface ReaderState {
   error: string | null;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Actions
-// ═══════════════════════════════════════════════════════════════════════════
-
 export type ReaderAction =
   | {
       type: "INIT";
@@ -65,7 +39,6 @@ export type ReaderAction =
   | {
       type: "CHAPTER_LOADED";
       chapterId: string;
-      /** Fully processed HTML (resource paths rewritten + transformers applied) */
       html: string;
     }
   | { type: "CHAPTER_FAILED"; chapterId: string; error: string }
@@ -83,10 +56,6 @@ export type ReaderAction =
   | { type: "SCROLL_WINDOW_EXPANDED"; direction: "up" | "down"; newStart: number; newEnd: number }
   | { type: "CLEANUP" };
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Effects (descriptions of side effects for the Vue bridge to execute)
-// ═══════════════════════════════════════════════════════════════════════════
-
 export type ReaderEffect =
   | { type: "FETCH_CHAPTER"; bookId: string; chapterId: string }
   | { type: "FETCH_CHAPTERS"; bookId: string; chapterIds: string[] }
@@ -98,14 +67,9 @@ export type ReaderEffect =
   | { type: "SCROLL_INTO_VIEW"; chapterId: string }
   | {
       type: "MEASURE_LAYOUT";
-      /** The chapter whose content is in the DOM and needs measurement. */
       chapterId: string;
     }
   | { type: "NOOP" };
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Initial state
-// ═══════════════════════════════════════════════════════════════════════════
 
 export function createInitialState(): ReaderState {
   return {
@@ -119,10 +83,6 @@ export function createInitialState(): ReaderState {
     error: null,
   };
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Pure helpers
-// ═══════════════════════════════════════════════════════════════════════════
 
 function clampPage(target: number | null, total: number): number {
   if (target === null) return 0;
@@ -139,7 +99,6 @@ function findChapterIndex(chapters: Chapter[], chapterId: string): number {
   return chapters.findIndex((c) => c.id === chapterId);
 }
 
-/** Build the effects emitted on a chapter change. */
 function chapterChangeEffects(
   state: ReaderState,
   chapterId: string,
@@ -168,10 +127,6 @@ function chapterChangeEffects(
   });
   return effects;
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Sub-reducers — each handles one action type, returns new state + effects
-// ═══════════════════════════════════════════════════════════════════════════
 
 function initReducer(
   state: ReaderState,
@@ -326,7 +281,6 @@ function nextPageReducer(state: ReaderState): { state: ReaderState; effects: Rea
     return { state: next, effects };
   }
 
-  // Last page — transition to next chapter
   const nextIdx = state.currentChapterIndex + 1;
   if (nextIdx >= state.chapters.length) return { state, effects: [] };
 
@@ -366,7 +320,6 @@ function prevPageReducer(state: ReaderState): { state: ReaderState; effects: Rea
     return { state: next, effects };
   }
 
-  // First page — go to last page of previous chapter
   const prevIdx = state.currentChapterIndex - 1;
   if (prevIdx < 0) return { state, effects: [] };
 
@@ -517,10 +470,6 @@ function cleanupReducer(state: ReaderState): { state: ReaderState; effects: Read
   return { state: createInitialState(), effects };
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Main reducer
-// ═══════════════════════════════════════════════════════════════════════════
-
 export type ReducerResult = { state: ReaderState; effects: ReaderEffect[] };
 
 export function reducer(state: ReaderState, action: ReaderAction): ReducerResult {
@@ -551,10 +500,6 @@ export function reducer(state: ReaderState, action: ReaderAction): ReducerResult
       return cleanupReducer(state);
   }
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Machine factory
-// ═══════════════════════════════════════════════════════════════════════════
 
 export interface ReaderMachine {
   getState(): ReaderState;

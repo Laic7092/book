@@ -7,8 +7,8 @@ import {
   type ReaderState,
   type ReaderAction,
   type ReaderEffect,
-} from "../reader-engine/reader-machine";
-import { processChapterHtml, resolveChapterResources } from "../reader-engine/resource-resolver";
+} from "@book/reader-core";
+import { processChapterHtml, resolveChapterResources } from "../content-pipeline";
 import { useUIStore } from "../stores/ui";
 import { NavigationStack } from "./useNavigationStack";
 import {
@@ -17,13 +17,13 @@ import {
   pluginStateVersion,
 } from "../plugins/manager/registry";
 import { pluginEvents } from "../plugins/context";
-import { injectResources } from "../reader-engine/iframe-resources";
-import { getParserForFormat } from "../parsers";
+import { injectResources } from "../iframe-resources";
+import { getParserForFormat } from "@book/parser-core";
 import {
   registerReaderSession,
   unregisterReaderSession,
   type ReaderSession,
-} from "../reader-engine/session";
+} from "@book/reader-core";
 import { TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../utils/constants";
 import { parseCfi, resolveCfiToElement } from "../utils/epub-cfi";
 import * as booksStore from "../storage/books";
@@ -147,10 +147,16 @@ export function useReaderMachine(
         let html = rawHtml;
         let resources: HTMLElement[] = [];
 
+        let rawData: ArrayBuffer | undefined;
+        if (parser && parser.extractResource) {
+          const { getZip } = await import("../storage/raw-data");
+          rawData = await getZip(effect.bookId);
+        }
+
         if (parser) {
           const resolved = await resolveChapterResources(
             rawHtml,
-            effect.bookId,
+            rawData,
             parser,
             resourceUrls.value,
           );
