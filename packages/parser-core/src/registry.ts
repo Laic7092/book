@@ -20,7 +20,7 @@ export async function loadParserForFormat(format: string): Promise<void> {
   const loader = loaders.get(format);
   if (!loader) return;
   const parser = await loader();
-  cache.set(parser.format, parser);
+  cache.set(format, parser);
 }
 
 export const EXTENSION_MIME_MAP: Record<string, string> = {
@@ -28,6 +28,14 @@ export const EXTENSION_MIME_MAP: Record<string, string> = {
   epub: "application/epub+zip",
   pdf: "application/pdf",
   cbz: "application/vnd.comicbook+zip",
+  fb2: "application/x-fictionbook+xml",
+  html: "text/html",
+  htm: "text/html",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  cbr: "application/vnd.comicbook+rar",
+  mobi: "application/x-mobipocket-ebook",
+  azw3: "application/x-kindle",
+  azw: "application/x-mobipocket-ebook",
 };
 
 export function getParserForFile(file: File): BookParser | null {

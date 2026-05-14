@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted, defineAsyncComponent } from "vue";
 import { useUIStore } from "../stores/ui";
 import { useReaderMachine } from "../composables/useReaderMachine";
 import ReaderChrome from "./reader/ReaderChrome.vue";
-import ModalWrapper from "./modals/ModalWrapper.vue";
+
+const ModalWrapper = defineAsyncComponent(() => import("./modals/ModalWrapper.vue"));
 import type { Book } from "../core/types";
 import { navigate } from "../utils/router";
 
@@ -165,6 +166,7 @@ defineExpose({ getDocument: () => engine.getDocument?.() ?? null });
     </button>
 
     <ModalWrapper
+      v-if="uiStore.activeModal"
       :modal-type="uiStore.activeModal"
       :chapters="engine.chapters.value"
       :current-chapter-id="engine.currentChapterId.value"

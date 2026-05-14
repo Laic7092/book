@@ -15,10 +15,6 @@ export {
   extractTextFromHtml,
   cleanHtml,
 } from "./base";
-export { EpubParser } from "./epub/epub-parser";
-export { TxtParser } from "./txt/txt-parser";
-export { PdfParser } from "./pdf/pdf-parser";
-export { CbzParser } from "./cbz/cbz-parser";
 
 // ── Built-in parsers (registered eagerly at import time) ──
 
@@ -28,3 +24,10 @@ registerParserLoader("epub", () => import("./epub/epub-parser").then((m) => new 
 registerParserLoader("txt", () => import("./txt/txt-parser").then((m) => new m.TxtParser()));
 registerParserLoader("pdf", () => import("./pdf/pdf-parser").then((m) => new m.PdfParser()));
 registerParserLoader("cbz", () => import("./cbz/cbz-parser").then((m) => new m.CbzParser()));
+registerParserLoader("fb2", () => import("./fb2/fb2-parser").then((m) => new m.Fb2Parser()));
+registerParserLoader("html", () => import("./html/html-parser").then((m) => new m.HtmlParser()));
+registerParserLoader("docx", () => import("./docx/docx-parser").then((m) => new m.DocxParser()));
+registerParserLoader("cbr", () => import("./cbr/cbr-parser").then((m) => new m.CbrParser()));
+registerParserLoader("mobi", () => import("./mobi/mobi-parser").then((m) => new m.MobiParser()));
+registerParserLoader("azw3", () => import("./mobi/mobi-parser").then((m) => new m.MobiParser()));
+registerParserLoader("azw", () => import("./mobi/mobi-parser").then((m) => new m.MobiParser()));

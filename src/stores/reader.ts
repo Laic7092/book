@@ -15,7 +15,7 @@ import * as booksStore from "../storage/books";
 import { pluginEvents } from "../plugins/context";
 import { assertValidBookFile, validateBookId } from "../utils/validation";
 
-const REFLOWABLE_FORMATS = new Set(["epub", "txt"]);
+const REFLOWABLE_FORMATS = new Set(["epub", "txt", "fb2", "html", "docx", "mobi", "azw3", "azw"]);
 
 export interface ReaderState {
   currentBook: Book | null;

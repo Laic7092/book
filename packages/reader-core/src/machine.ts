@@ -54,7 +54,12 @@ export type ReaderAction =
       visibleChapterId?: string;
     }
   | { type: "SCROLL_WINDOW_EXPANDED"; direction: "up" | "down"; newStart: number; newEnd: number }
-  | { type: "CLEANUP" };
+  | { type: "CLEANUP" }
+  | { type: "ZOOM_IN" }
+  | { type: "ZOOM_OUT" }
+  | { type: "ZOOM_FIT" }
+  | { type: "ZOOM_WIDTH" }
+  | { type: "ROTATE"; degrees: number };
 
 export type ReaderEffect =
   | { type: "FETCH_CHAPTER"; bookId: string; chapterId: string }
@@ -69,6 +74,8 @@ export type ReaderEffect =
       type: "MEASURE_LAYOUT";
       chapterId: string;
     }
+  | { type: "RENDER_PAGE"; chapterId: string; pageNum: number }
+  | { type: "ZOOM_CHANGED"; scale: number }
   | { type: "NOOP" };
 
 export function createInitialState(): ReaderState {
@@ -470,6 +477,29 @@ function cleanupReducer(state: ReaderState): { state: ReaderState; effects: Read
   return { state: createInitialState(), effects };
 }
 
+function zoomInReducer(state: ReaderState): { state: ReaderState; effects: ReaderEffect[] } {
+  return { state, effects: [] };
+}
+
+function zoomOutReducer(state: ReaderState): { state: ReaderState; effects: ReaderEffect[] } {
+  return { state, effects: [] };
+}
+
+function zoomFitReducer(state: ReaderState): { state: ReaderState; effects: ReaderEffect[] } {
+  return { state, effects: [] };
+}
+
+function zoomWidthReducer(state: ReaderState): { state: ReaderState; effects: ReaderEffect[] } {
+  return { state, effects: [] };
+}
+
+function rotateReducer(
+  state: ReaderState,
+  _action: Extract<ReaderAction, { type: "ROTATE" }>,
+): { state: ReaderState; effects: ReaderEffect[] } {
+  return { state, effects: [] };
+}
+
 export type ReducerResult = { state: ReaderState; effects: ReaderEffect[] };
 
 export function reducer(state: ReaderState, action: ReaderAction): ReducerResult {
@@ -498,6 +528,16 @@ export function reducer(state: ReaderState, action: ReaderAction): ReducerResult
       return scrollWindowExpandedReducer(state, action);
     case "CLEANUP":
       return cleanupReducer(state);
+    case "ZOOM_IN":
+      return zoomInReducer(state);
+    case "ZOOM_OUT":
+      return zoomOutReducer(state);
+    case "ZOOM_FIT":
+      return zoomFitReducer(state);
+    case "ZOOM_WIDTH":
+      return zoomWidthReducer(state);
+    case "ROTATE":
+      return rotateReducer(state, action);
   }
 }
 

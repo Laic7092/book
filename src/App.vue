@@ -14,7 +14,7 @@ const uiStore = useUIStore();
 
 const isFixedLayout = computed(() => {
   const fmt = readerStore.currentBook?.format;
-  return fmt === "pdf" || fmt === "cbz";
+  return fmt === "pdf" || fmt === "cbz" || fmt === "cbr";
 });
 
 const pageComponent = computed(() => {

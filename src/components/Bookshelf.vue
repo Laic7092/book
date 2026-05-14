@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, defineAsyncComponent } from "vue";
 import { useBookshelfStore } from "../stores/bookshelf";
 import { useUIStore } from "../stores/ui";
 import { getBookGradient, getInitial } from "../utils/colors";
 import { formatBookToast } from "../utils/constants";
 import { validateBookFile } from "../utils/validation";
 import type { Book } from "../core/types";
-import ModalWrapper from "./modals/ModalWrapper.vue";
-import ToastNotification from "./ToastNotification.vue";
-import ConfirmDialog from "./ConfirmDialog.vue";
+
+const ModalWrapper = defineAsyncComponent(() => import("./modals/ModalWrapper.vue"));
+const ToastNotification = defineAsyncComponent(() => import("./ToastNotification.vue"));
+const ConfirmDialog = defineAsyncComponent(() => import("./ConfirmDialog.vue"));
 import {
   getBookshelfWidgets,
   getBookshelfMenuActions,
@@ -929,11 +930,15 @@ onMounted(() => {
       </div>
     </div>
 
-    <ToastNotification />
-    <ConfirmDialog />
+    <ToastNotification v-if="uiStore.showToast" />
+    <ConfirmDialog v-if="uiStore.showConfirm" />
 
     <!-- Modal container (plugin modals: OPDS, stats, etc.) -->
-    <ModalWrapper :modal-type="uiStore.activeModal" @close="closeModal" />
+    <ModalWrapper
+      v-if="uiStore.activeModal"
+      :modal-type="uiStore.activeModal"
+      @close="closeModal"
+    />
 
     <!-- Folder assignment dropdown -->
     <div

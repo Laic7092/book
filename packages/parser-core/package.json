@@ -12,6 +12,7 @@
   "dependencies": {
     "@zip.js/zip.js": "^2.8.26",
     "chardet": "^2.1.1",
-    "pdfjs-dist": "^5.7.284"
+    "pdfjs-dist": "^5.7.284",
+    "unrar-js": "^0.2.3"
   }
 }

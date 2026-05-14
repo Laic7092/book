@@ -1,25 +1,46 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted, shallowRef } from "vue";
 import FixedLayoutPage from "./reader/FixedLayoutPage.vue";
 import { useNavigationStack } from "../composables/useNavigationStack";
-import type { Book, Chapter } from "../core/types";
+import { FixedHost } from "@book/reader-host";
+import type { FixedLayoutSurface } from "@book/reader-host";
+import {
+  registerReaderSession,
+  unregisterReaderSession,
+  createInitialState,
+} from "@book/reader-core";
+import type { Chapter, ReaderState } from "@book/reader-core";
+import type { Book } from "../core/types";
 import * as booksStore from "../storage/books";
 import { navigate } from "../utils/router";
+import { openPdf } from "../utils/pdf-renderer";
 import { TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../utils/constants";
+import { pluginEvents } from "../plugins/context";
 
 const props = defineProps<{ book: Book }>();
 
 const navStack = useNavigationStack();
 
+// ── Host & state ──
+
 const fixedLayoutRef = ref<InstanceType<typeof FixedLayoutPage> | null>(null);
-const isTransitioning = ref(false);
+const host = ref<FixedHost | null>(null);
+const state = shallowRef<ReaderState>(createInitialState());
+const isRestoring = ref(true);
 const showControls = ref(true);
-const pdfPageCount = ref(0);
 const showOutline = ref(false);
 
-const chapters = ref<Chapter[]>([]);
-const currentChapter = ref<Chapter | null>(null);
+// Cache raw data across chapter fetches (same file for all chapters)
+let cachedRawData: ArrayBuffer | null = null;
+
+// Original outline chapters for TOC display (PDF outline)
+const outlineChapters = ref<Array<{ id: string; title: string; pageNumber: number }>>([]);
+
+// ── Derived display state ──
+
 const isPdf = computed(() => props.book.format === "pdf");
+
+const currentChapter = computed(() => state.value.chapters[state.value.currentChapterIndex]);
 
 const currentPageNum = computed(() => {
   if (isPdf.value) {
@@ -29,23 +50,26 @@ const currentPageNum = computed(() => {
       if (!isNaN(n)) return n;
     }
   }
-  const idx = chapters.value.findIndex((c) => c.id === currentChapter.value?.id);
-  return idx >= 0 ? idx + 1 : 1;
+  return (state.value.currentChapterIndex ?? 0) + 1;
+});
+
+const totalPages = computed(() => {
+  if (isPdf.value) {
+    return host.value?.getSurface().getPageCount() ?? state.value.chapters.length;
+  }
+  return state.value.chapters.length;
 });
 
 const displayPage = computed(() => currentPageNum.value);
-const totalPages = computed(() => {
-  if (isPdf.value) return pdfPageCount.value || chapters.value.length;
-  return chapters.value.length;
-});
+
 const canPrev = computed(() => currentPageNum.value > 1);
 const canNext = computed(() => currentPageNum.value < totalPages.value);
+const isTransitioning = computed(() => state.value.status === "loading-chapter");
 
-const outline = computed(() => fixedLayoutRef.value?.getOutline?.() ?? []);
-
-function toggleOutline() {
-  showOutline.value = !showOutline.value;
-}
+const outline = computed(() => {
+  if (isPdf.value) return outlineChapters.value;
+  return [];
+});
 
 // ── Navigation ──
 
@@ -57,37 +81,28 @@ function goToPage(pageNum: number) {
   if (pageNum < 1 || pageNum > totalPages.value) return;
   if (pageNum === currentPageNum.value) return;
 
-  const chapter = isPdf.value
-    ? chapters.value.find((c) => c.href === String(pageNum))
-    : chapters.value[pageNum - 1];
-  const prevChapter = currentChapter.value;
-  if (prevChapter) navStack.push({ chapterId: prevChapter.id, page: currentPageNum.value });
+  const targetChapter = state.value.chapters.find((c) => c.href === String(pageNum));
+  if (!targetChapter) return;
 
-  isTransitioning.value = true;
-
-  if (chapter) {
-    currentChapter.value = chapter;
-  } else {
-    currentChapter.value = {
-      id: `page-${pageNum}`,
-      bookId: props.book.id,
-      title: `Page ${pageNum}`,
-      href: String(pageNum),
-      order: pageNum - 1,
-    };
+  // Push current position to history
+  const prevId = state.value.chapters[state.value.currentChapterIndex]?.id;
+  if (prevId) {
+    navStack.push({ chapterId: prevId, page: currentPageNum.value });
   }
 
-  requestAnimationFrame(() => {
-    isTransitioning.value = false;
-  });
+  host.value?.goToChapter(targetChapter.id);
 }
 
 function nextPage() {
-  if (canNext.value) goToPage(currentPageNum.value + 1);
+  if (canNext.value && host.value) host.value.nextPage();
 }
 
 function prevPage() {
-  if (canPrev.value) goToPage(currentPageNum.value - 1);
+  if (canPrev.value && host.value) host.value.prevPage();
+}
+
+function toggleOutline() {
+  showOutline.value = !showOutline.value;
 }
 
 function handleHistoryBack() {
@@ -104,13 +119,12 @@ function handleHistoryForward() {
 
 function shouldIgnoreTarget(target: EventTarget | null): boolean {
   if (!target || !(target instanceof Element)) return false;
-  const el = target as Element;
   return !!(
-    el.closest("button") ||
-    el.closest("input") ||
-    el.closest("textarea") ||
-    el.closest("select") ||
-    el.closest("a[href]")
+    target.closest("button") ||
+    target.closest("input") ||
+    target.closest("textarea") ||
+    target.closest("select") ||
+    target.closest("a[href]")
   );
 }
 
@@ -167,25 +181,143 @@ function handleLinkClick(href: string) {
   const pageNum = parseInt(href, 10);
   if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= totalPages.value) {
     goToPage(pageNum);
-    return;
   }
 }
 
-function handleReady() {
-  pdfPageCount.value = fixedLayoutRef.value?.getPageCount?.() ?? 0;
+// ── PDF chapter expansion (one chapter per PDF page) ──
+
+function expandPdfChapters(
+  fetched: Array<{
+    id: string;
+    title: string;
+    order: number;
+    href?: string;
+    inToc?: boolean;
+  }>,
+  totalPdfPages: number,
+  bookId: string,
+): Chapter[] {
+  const result: Chapter[] = [];
+  for (let i = 1; i <= totalPdfPages; i++) {
+    const outline = fetched.find((ch) => ch.href === String(i));
+    result.push({
+      id: outline?.id ?? `page-${i}`,
+      bookId,
+      title: outline?.title ?? `Page ${i}`,
+      href: String(i),
+      order: result.length,
+      inToc: outline?.inToc ?? false,
+    });
+  }
+  return result;
 }
 
 // ── Lifecycle ──
 
 onMounted(async () => {
-  chapters.value = await booksStore.getChapters(props.book.id);
-  currentChapter.value = chapters.value[0] ?? null;
+  const fetched = await booksStore.getChapters(props.book.id);
+  const surface = fixedLayoutRef.value!;
+
+  let hostChapters: Chapter[];
+
+  if (props.book.format === "pdf") {
+    // Expand to one chapter per PDF page for seamless page-by-page navigation
+    try {
+      const { getZip } = await import("../storage/raw-data");
+      const rawData = await getZip(props.book.id);
+      if (rawData) {
+        cachedRawData = rawData;
+        const pdfDoc = await openPdf(rawData);
+        const pdfPageCount = pdfDoc.numPages;
+        await pdfDoc.destroy();
+
+        // Store outline entries for TOC display
+        outlineChapters.value = fetched
+          .filter((ch) => ch.href)
+          .map((ch) => ({
+            id: ch.id,
+            title: ch.title,
+            pageNumber: parseInt(ch.href!, 10) || 0,
+          }));
+
+        hostChapters = expandPdfChapters(fetched, pdfPageCount, props.book.id);
+      } else {
+        hostChapters = fetched.map((ch) => ({
+          id: ch.id,
+          bookId: props.book.id,
+          title: ch.title,
+          order: ch.order,
+          href: ch.href,
+          inToc: ch.inToc,
+        }));
+      }
+    } catch {
+      // Fallback: use store chapters as-is
+      hostChapters = fetched.map((ch) => ({
+        id: ch.id,
+        bookId: props.book.id,
+        title: ch.title,
+        order: ch.order,
+        href: ch.href,
+        inToc: ch.inToc,
+      }));
+    }
+  } else {
+    hostChapters = fetched.map((ch) => ({
+      id: ch.id,
+      bookId: props.book.id,
+      title: ch.title,
+      order: ch.order,
+      href: ch.href,
+      inToc: ch.inToc,
+    }));
+  }
+
+  const h = new FixedHost({
+    surface: surface as unknown as FixedLayoutSurface,
+    fetchChapter: async (bookId, _chapterId) => {
+      if (!cachedRawData) {
+        const { getZip } = await import("../storage/raw-data");
+        cachedRawData = (await getZip(bookId)) ?? null;
+      }
+      return { html: undefined, rawData: cachedRawData ?? undefined };
+    },
+    onStateChange: (s) => {
+      state.value = s;
+    },
+    onReady: () => {
+      queueMicrotask(() => {
+        isRestoring.value = false;
+      });
+    },
+    onEffect: async (effect) => {
+      if (effect.type === "EMIT") {
+        void pluginEvents.emit(effect.event as any, effect.payload as any);
+      }
+    },
+  });
+
+  host.value = h;
+  registerReaderSession(h.getSession());
+
+  void pluginEvents
+    .emit("reader:before-init", {
+      bookId: props.book.id,
+      chapterIndex: 0,
+      mode: "pagination",
+    })
+    .then(() => {
+      h.init(props.book.id, hostChapters, 0);
+    });
+
   window.addEventListener("keydown", handleKeydown);
 });
 
 onUnmounted(() => {
-  window.removeEventListener("keydown", handleKeydown);
+  host.value?.destroy();
+  unregisterReaderSession();
   navStack.reset();
+  window.removeEventListener("keydown", handleKeydown);
 });
 </script>
 
@@ -247,15 +379,15 @@ onUnmounted(() => {
     </header>
 
     <main class="fl-content">
-      <FixedLayoutPage
-        ref="fixedLayoutRef"
-        :book-id="book.id"
-        :format="book.format as 'pdf' | 'cbz'"
-        :chapter-href="currentChapter?.href"
-        :chapter-loading="isTransitioning"
-        @ready="handleReady"
-        @link-click="handleLinkClick"
-      />
+      <div class="fl-surface-wrapper">
+        <div v-if="isTransitioning" class="fl-loading-overlay" />
+        <FixedLayoutPage
+          ref="fixedLayoutRef"
+          :book-id="book.id"
+          :format="book.format as 'pdf' | 'cbz'"
+          @link-click="handleLinkClick"
+        />
+      </div>
     </main>
 
     <footer v-show="showControls" class="fl-footer">
@@ -410,6 +542,19 @@ onUnmounted(() => {
   flex: 1;
   overflow: hidden;
   display: flex;
+}
+
+.fl-surface-wrapper {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+}
+
+.fl-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  cursor: wait;
 }
 
 .fl-footer {
