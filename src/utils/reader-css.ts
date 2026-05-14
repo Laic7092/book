@@ -1,102 +1,11 @@
-import { type Ref } from "vue";
 import type { ReaderSettings } from "../plugins/settings/types";
 import { themeRegistry } from "../core/theme-registry";
 
-/**
- * Initialize the iframe with the base HTML skeleton and link-click handler.
- *
- * iframe internal style structure:
- * - <style id="base-style">       — reset + mode CSS
- * - <style id="resource-style">   — format resource styles (CSS, fonts) — managed by bridge
- * - <style id="plugin-*">         — plugin-injected styles (theme, typography)
- */
-export function useIframeRenderer(
-  iframeRef: Ref<HTMLIFrameElement | null>,
-  onLinkClick?: (href: string) => void,
-) {
-  let iframeDoc: Document | null = null;
-
-  const messageHandler = (event: MessageEvent) => {
-    if (!onLinkClick || !event.data || event.data.type !== "link-click") return;
-    onLinkClick(event.data.href);
-  };
-
-  function initIframe(initialMode: "scroll" | "paginated") {
-    const iframe = iframeRef.value;
-    if (!iframe) return;
-
-    iframeDoc = iframe.contentDocument || iframe.contentWindow?.document || null;
-    if (!iframeDoc) return;
-
-    const baseCSS = generateBaseCSS();
-
-    const linkHandlerScript = onLinkClick
-      ? `<script>
-      (function() {
-        document.addEventListener('click', function(e) {
-          var link = e.target.closest('a[href]');
-          if (!link) return;
-          var href = link.getAttribute('href');
-          if (!href || href.startsWith('http://') || href.startsWith('https://') || href.startsWith('mailto:')) return;
-          e.preventDefault();
-          e.stopPropagation();
-          window.parent.postMessage({ type: 'link-click', href: href }, window.location.origin);
-        }, true);
-      })();
-    </script>`
-      : "";
-
-    iframeDoc.open();
-    iframeDoc.write(`
-      <!DOCTYPE html>
-      <html data-mode="${initialMode}">
-      <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-        <style id="base-style">${baseCSS}</style>
-        <style id="resource-style"></style>
-        ${linkHandlerScript}
-      </head>
-      <body class="reader-content"></body>
-      </html>
-    `);
-    iframeDoc.close();
-
-    if (onLinkClick) {
-      window.addEventListener("message", messageHandler);
-    }
-  }
-
-  function getDocument(): Document | null {
-    return iframeDoc;
-  }
-
-  function getArticle(): HTMLElement | null {
-    return iframeDoc?.body || null;
-  }
-
-  function cleanup() {
-    window.removeEventListener("message", messageHandler);
-    iframeDoc = null;
-  }
-
-  return {
-    initIframe,
-    getDocument,
-    getArticle,
-    cleanup,
-  };
-}
-
-/**
- * 生成主题 CSS 变量（仅颜色相关）— 从 ThemeRegistry 读取色值
- */
 export function generateThemeCSS(theme: string, contrast?: string): string {
   const def = themeRegistry.get(theme);
   let bg = def.content.background;
   let text = def.content.text;
 
-  // Contrast overrides (dark-mode-specific)
   if (theme === "dark" && contrast) {
     if (contrast === "soft") {
       bg = "#2a2a2a";
@@ -126,9 +35,6 @@ export function generateThemeCSS(theme: string, contrast?: string): string {
   `;
 }
 
-/**
- * 生成基础重置样式（始终注入）
- */
 export function generateBaseCSS(): string {
   return `
     html, body {
@@ -191,8 +97,6 @@ export function generateBaseCSS(): string {
       text-align: center;
     }
 
-    /* ── Mode-specific layout ── */
-
     html[data-mode="paginated"] {
       overflow: hidden;
     }
@@ -217,16 +121,10 @@ export function generateBaseCSS(): string {
   `;
 }
 
-/**
- * 生成排版 CSS（字号、字体、行距、间距等）
- * 当 customTypography=false 时，只注入字号（核心设置）
- * 当 customTypography=true 时，注入全部排版设置
- */
 export function generateTypographyCSS(settings: ReaderSettings): string {
   const useCustom = settings.customTypography ?? false;
 
   if (!useCustom) {
-    // 只注入字号
     return `
       body.reader-content {
         font-size: ${settings.fontSize}px;
@@ -234,7 +132,6 @@ export function generateTypographyCSS(settings: ReaderSettings): string {
     `;
   }
 
-  // 全部排版设置
   return `
     body.reader-content {
       font-size: ${settings.fontSize}px;

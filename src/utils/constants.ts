@@ -122,3 +122,22 @@ export function formatBookToast(title: string, action: string): { title: string;
     message: action,
   };
 }
+
+export function getMimeTypeFromExtension(path: string): string {
+  const ext = path.split(".").pop()?.toLowerCase();
+  const mimeTypes: Record<string, string> = {
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    svg: "image/svg+xml",
+    webp: "image/webp",
+    bmp: "image/bmp",
+    css: "text/css",
+    woff: "font/woff",
+    woff2: "font/woff2",
+    ttf: "font/ttf",
+    otf: "font/otf",
+  };
+  return mimeTypes[ext || ""] || "application/octet-stream";
+}

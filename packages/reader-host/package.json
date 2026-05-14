@@ -1,0 +1,17 @@
+{
+  "name": "@book/reader-host",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@book/parser-core": "workspace:*",
+    "@book/reader-core": "workspace:*"
+  }
+}

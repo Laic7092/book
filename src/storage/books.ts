@@ -5,6 +5,7 @@ import { STORES, dbPut, dbGet, dbGetAll, dbTransaction, dbDelete } from "./db";
 import type { BookParser } from "@book/parser-core";
 import { getParserForFormat, generateId } from "@book/parser-core";
 import { saveZip, getZip } from "./raw-data";
+import { getMimeTypeFromExtension } from "../utils/constants";
 
 const PLUGIN_ID = "_covers";
 
@@ -352,35 +353,6 @@ export async function updateFolder(
 export async function deleteFolder(id: string): Promise<void> {
   const all = await readFolders();
   await writeFolders(all.filter((f) => f.id !== id));
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// Resource helpers (used by lazy extraction path)
-// ══════════════════════════════════════════════════════════════════════════════
-
-export function getMimeTypeFromExtension(path: string): string {
-  const ext = path.split(".").pop()?.toLowerCase();
-  const mimeTypes: Record<string, string> = {
-    jpg: "image/jpeg",
-    jpeg: "image/jpeg",
-    png: "image/png",
-    gif: "image/gif",
-    svg: "image/svg+xml",
-    webp: "image/webp",
-    bmp: "image/bmp",
-    css: "text/css",
-    woff: "font/woff",
-    woff2: "font/woff2",
-    ttf: "font/ttf",
-    otf: "font/otf",
-  };
-  return mimeTypes[ext || ""] || "application/octet-stream";
-}
-
-export function revokeResourceUrls(urlMap: Map<string, string>): void {
-  for (const [, blobUrl] of urlMap) {
-    URL.revokeObjectURL(blobUrl);
-  }
 }
 
 /**

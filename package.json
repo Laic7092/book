@@ -12,6 +12,7 @@
   "dependencies": {
     "@book/parser-core": "workspace:*",
     "@book/reader-core": "workspace:*",
+    "@book/reader-host": "workspace:*",
     "@vitejs/plugin-vue": "^6.0.6",
     "@zip.js/zip.js": "^2.8.26",
     "chardet": "^2.1.1",

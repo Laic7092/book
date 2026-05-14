@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useUIStore } from "../stores/ui";
-import { useReaderMachine, type ReaderContentAPI } from "../composables/useReaderMachine";
-import { useIframeRenderer } from "../composables/useIframeRenderer";
+import { useReaderMachine } from "../composables/useReaderMachine";
 import ReaderChrome from "./reader/ReaderChrome.vue";
 import ModalWrapper from "./modals/ModalWrapper.vue";
 import type { Book } from "../core/types";
@@ -14,23 +13,13 @@ const props = defineProps<{
 
 const uiStore = useUIStore();
 
-const iframeRef = ref<HTMLIFrameElement | null>(null);
-const onLinkClickRef = ref<(href: string) => void>();
-
-const { initIframe, getDocument, getArticle, cleanup } = useIframeRenderer(
-  iframeRef,
-  (href: string) => onLinkClickRef.value?.(href),
-);
-
-const readerContentRef = ref<ReaderContentAPI | null>({ getDocument, getArticle });
+const containerRef = ref<HTMLElement | null>(null);
 
 const engine = useReaderMachine(
   computed(() => props.book.id),
   computed(() => props.book.format),
-  readerContentRef,
+  containerRef,
 );
-
-onLinkClickRef.value = engine.handleInternalLinkClick;
 
 const currentChapterTitle = computed(() => {
   const chapter = engine.chapters.value[engine.currentChapterIndex.value];
@@ -58,13 +47,11 @@ function measureColumns() {
   if (!engine.isPaginationMode.value) return;
   if (columnMeasureTimer) clearTimeout(columnMeasureTimer);
   columnMeasureTimer = setTimeout(() => {
-    const doc = getDocument();
+    const doc = engine.getDocument?.();
     if (!doc?.body) return;
     requestAnimationFrame(() => {
-      const iframe = iframeRef.value;
-      if (!iframe) return;
       const contentWidth = doc.body.scrollWidth || 0;
-      const iframeWidth = iframe.clientWidth || 0;
+      const iframeWidth = doc.documentElement.clientWidth || 0;
       if (iframeWidth > 0) {
         engine.handleColumnLayout({ contentWidth, iframeWidth });
       }
@@ -73,8 +60,7 @@ function measureColumns() {
 }
 
 function setupObservers() {
-  if (!iframeRef.value) return;
-  const doc = getDocument();
+  const doc = engine.getDocument?.();
   if (!doc?.body) return;
 
   resizeObserver = new ResizeObserver(() => {
@@ -88,28 +74,12 @@ function setupObservers() {
   mutationObserver.observe(doc.body, { childList: true });
 }
 
-function handleLoad() {
-  if (!getDocument()) return;
-  measureColumns();
-  engine.handleIframeReady();
-}
-
 onMounted(() => {
-  initIframe(engine.isPaginationMode.value ? "paginated" : "scroll");
-
-  const doc = getDocument();
-  if (doc) {
-    handleLoad();
-  } else {
-    iframeRef.value?.addEventListener("load", handleLoad, { once: true });
-  }
-
   setupObservers();
 });
 
 onUnmounted(() => {
   uiStore.setControls(false);
-  cleanup();
   resizeObserver?.disconnect();
   mutationObserver?.disconnect();
   if (columnMeasureTimer) clearTimeout(columnMeasureTimer);
@@ -117,14 +87,13 @@ onUnmounted(() => {
 
 const overlayVisible = computed(() => engine.isReady.value);
 
-defineExpose({ getDocument, getArticle });
+defineExpose({ getDocument: () => engine.getDocument?.() ?? null });
 </script>
 
 <template>
   <div class="reader-view-container">
-    <div class="reader-content-wrapper">
+    <div ref="containerRef" class="reader-content-wrapper">
       <div v-if="engine.chapterLoading.value" class="chapter-loading-overlay" />
-      <iframe ref="iframeRef" class="reader-iframe" title="Reader Content" @load="handleLoad" />
     </div>
 
     <component
@@ -227,13 +196,6 @@ defineExpose({ getDocument, getArticle });
   flex: 1;
   overflow: hidden;
   contain: strict;
-}
-
-.reader-iframe {
-  display: block;
-  width: 100%;
-  height: 100%;
-  border: none;
 }
 
 .chapter-loading-overlay {

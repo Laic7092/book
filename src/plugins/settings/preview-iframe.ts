@@ -1,9 +1,5 @@
 import type { ReaderSettings } from "./types";
-import {
-  generateThemeCSS,
-  generateBaseCSS,
-  generateTypographyCSS,
-} from "../../composables/useIframeRenderer";
+import { generateThemeCSS, generateBaseCSS, generateTypographyCSS } from "../../utils/reader-css";
 
 export interface PreviewIframe {
   updateStyles(settings: ReaderSettings): void;

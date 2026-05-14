@@ -4,11 +4,7 @@ import { PLUGIN_BRAND } from "../types";
 import { createEntityStore, type EntityStore } from "../store-factory";
 import type { ReaderSettings } from "./types";
 import { DEFAULT_SETTINGS } from "./defaults";
-import {
-  generateThemeCSS,
-  generateBaseCSS,
-  generateTypographyCSS,
-} from "../../composables/useIframeRenderer";
+import { generateThemeCSS, generateBaseCSS, generateTypographyCSS } from "../../utils/reader-css";
 
 // ── State ──
 
@@ -113,9 +109,6 @@ export const settingsPlugin: Plugin = {
         host.setPageMargin(getEffectiveMargin());
       }
     }
-
-    // Register listener BEFORE sync — reader may mount during the await
-    ctx.events.on("reader:mounted", syncToHost);
 
     // Content transformer for chapter typography
     ctx.registerContentTransformer({

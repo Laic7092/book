@@ -24,6 +24,10 @@
     "noUncheckedSideEffectImports": true
   },
   "include": ["src"],
-  "references": [{ "path": "./packages/reader-core" }, { "path": "./packages/parser-core" }],
+  "references": [
+    { "path": "./packages/reader-core" },
+    { "path": "./packages/parser-core" },
+    { "path": "./packages/reader-host" }
+  ],
   "exclude": ["node_modules", "dist", "packages"]
 }
