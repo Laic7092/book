@@ -1,5 +1,4 @@
 import type { Component, App } from "vue";
-import type { Pinia } from "pinia";
 import type { SearchResult } from "../core/types";
 import type { ThemeRegistry } from "../core/theme-registry";
 import type { ReaderSettings } from "./settings/types";
@@ -159,7 +158,6 @@ export interface ContentTransformer {
 
 export interface PluginContext {
   storage: PluginStorageAdapter;
-  pinia: Pinia;
   ui: UISlots;
   events: IEventBus<PluginEventMap>;
   /** Register/unregister runtime capabilities. */
@@ -183,7 +181,6 @@ export interface PluginContext {
 
 export interface PluginBootstrap {
   app: App<Element>;
-  pinia: Pinia;
 }
 
 // ── Capability map ──

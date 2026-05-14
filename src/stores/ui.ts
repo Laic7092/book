@@ -1,6 +1,6 @@
 // UI Store - Manages UI state
 
-import { defineStore } from "pinia";
+import { defineStore } from "./store";
 import { TOAST_DURATION } from "../utils/constants";
 
 export type ModalType = string | null;

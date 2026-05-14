@@ -311,16 +311,15 @@ export function createCssAPI(): CssAPI {
   };
 }
 
-export function createPluginContext(id: string, bootstrap: PluginBootstrap): PluginContext {
+export function createPluginContext(id: string, _bootstrap: PluginBootstrap): PluginContext {
   const slots = createUISlots();
   const css = createCssAPI();
   return {
     storage: createPluginStorageAdapter(id),
-    pinia: bootstrap.pinia,
     ui: {
       ...slots,
       openModal: (name) => {
-        const uiStore = useUIStore(bootstrap.pinia);
+        const uiStore = useUIStore();
         uiStore.openModal(name);
       },
       setTheme: (t) => css.setTheme(t),
@@ -375,7 +374,7 @@ export interface TrackedContext extends PluginContext {
   runCleanup(): Promise<void>;
 }
 
-export function createTrackedContext(id: string, bootstrap: PluginBootstrap): TrackedContext {
+export function createTrackedContext(id: string, _bootstrap: PluginBootstrap): TrackedContext {
   const rawUi = createUISlots();
   const cleanupFns: (() => void | Promise<void>)[] = [];
   const eventUnsubs: (() => void)[] = [];
@@ -451,7 +450,7 @@ export function createTrackedContext(id: string, bootstrap: PluginBootstrap): Tr
       });
     },
     openModal: (name) => {
-      const uiStore = useUIStore(bootstrap.pinia);
+      const uiStore = useUIStore();
       uiStore.openModal(name);
     },
     setTheme: (t) => trackedCss.setTheme(t),
@@ -487,7 +486,6 @@ export function createTrackedContext(id: string, bootstrap: PluginBootstrap): Tr
 
   return {
     storage: createPluginStorageAdapter(id),
-    pinia: bootstrap.pinia,
     ui,
     events,
     capabilities,

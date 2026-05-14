@@ -1,6 +1,6 @@
 // Bookshelf Store - Manages library state
 
-import { defineStore } from "pinia";
+import { defineStore } from "./store";
 import type { Book, Folder } from "../core/types";
 import { dbGetAll, STORES } from "../storage/db";
 import { getCoverBlob, deleteCoverBlob } from "../storage/books";

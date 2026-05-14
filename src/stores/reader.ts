@@ -1,6 +1,6 @@
 // Reader Store - Manages book reading state and operations
 
-import { defineStore } from "pinia";
+import { defineStore } from "./store";
 import type { Book, Chapter, ParsedBook, BookParser } from "../core/types";
 import { ErrorCode, createReaderError } from "../core/errors";
 import { loadPluginsFor } from "../plugins/loader";
