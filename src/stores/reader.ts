@@ -1,53 +1,28 @@
 // Reader Store - Manages book reading state and operations
 
 import { defineStore } from "./store";
-import type { Book, Chapter, ParsedBook, BookParser } from "../core/types";
+import type { Book, Chapter, ParsedBook } from "../core/types";
 import { ErrorCode, createReaderError } from "../core/errors";
 import { loadPluginsFor } from "../plugins/loader";
-import { getParsers, getParserForFormat, loadParserForFormat } from "../parsers";
+import {
+  getParserForFormat,
+  loadParserForFormat,
+  getParserForFile,
+  EXTENSION_MIME_MAP,
+} from "../parsers";
 import * as booksStore from "../storage/books";
 import { pluginEvents } from "../plugins/context";
 import { assertValidBookFile, validateBookId } from "../utils/validation";
 
 const REFLOWABLE_FORMATS = new Set(["epub", "txt"]);
 
-const EXTENSION_MIME_MAP: Record<string, string> = {
-  txt: "text/plain",
-  epub: "application/epub+zip",
-  pdf: "application/pdf",
-  cbz: "application/vnd.comicbook+zip",
-};
-
-function getParserForFile(file: File): BookParser | null {
-  const parsers = getParsers();
-
-  for (const parser of parsers) {
-    if (parser.supportsFormat(file.type)) return parser;
-  }
-
-  const ext = file.name.split(".").pop()?.toLowerCase();
-  if (ext && EXTENSION_MIME_MAP[ext]) {
-    for (const parser of parsers) {
-      if (parser.supportsFormat(EXTENSION_MIME_MAP[ext])) {
-        return parser;
-      }
-    }
-  }
-
-  return null;
-}
-
 export interface ReaderState {
   currentBook: Book | null;
-  currentChapter: Chapter | null;
-  chapters: Chapter[];
 }
 
 export const useReaderStore = defineStore("reader", {
   state: (): ReaderState => ({
     currentBook: null,
-    currentChapter: null,
-    chapters: [],
   }),
 
   actions: {
@@ -93,6 +68,7 @@ export const useReaderStore = defineStore("reader", {
           ErrorCode.UNSUPPORTED_FORMAT,
         );
       }
+
       const chaptersData = await booksStore.getChapters(bookId);
 
       const chapters: Chapter[] = chaptersData.map((ch) => ({
@@ -104,13 +80,9 @@ export const useReaderStore = defineStore("reader", {
         inToc: ch.inToc,
       }));
 
-      this.chapters = chapters;
-
-      await booksStore.updateLastRead(bookId);
-      this.currentChapter = chapters.length > 0 ? chapters[0] : null;
-
       this.currentBook = book;
 
+      await booksStore.updateLastRead(bookId);
       void pluginEvents.emit("book:opened", { bookId });
 
       return { book, chapters };
@@ -118,19 +90,12 @@ export const useReaderStore = defineStore("reader", {
 
     async closeBook(): Promise<void> {
       const bookId = this.currentBook?.id;
-      const chapterId = this.currentChapter?.id;
 
       this.currentBook = null;
-      this.currentChapter = null;
-      this.chapters = [];
 
       if (bookId) {
-        void pluginEvents.emit("book:closed", { bookId, chapterId });
+        void pluginEvents.emit("book:closed", { bookId });
       }
-    },
-
-    reset() {
-      this.$reset();
     },
   },
 });

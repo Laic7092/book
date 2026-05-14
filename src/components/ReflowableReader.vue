@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from "vue";
-import { useReaderStore } from "../stores/reader";
 import { useUIStore } from "../stores/ui";
 import { useReaderMachine, type ReaderContentAPI } from "../composables/useReaderMachine";
 import { useIframeRenderer } from "../composables/useIframeRenderer";
@@ -13,7 +12,6 @@ const props = defineProps<{
   book: Book;
 }>();
 
-const readerStore = useReaderStore();
 const uiStore = useUIStore();
 
 const iframeRef = ref<HTMLIFrameElement | null>(null);
@@ -30,17 +28,13 @@ const engine = useReaderMachine(
   computed(() => props.book.id),
   computed(() => props.book.format),
   readerContentRef,
-  {
-    chapters: readerStore.chapters,
-    initialChapterId: readerStore.currentChapter?.id,
-  },
 );
 
 onLinkClickRef.value = engine.handleInternalLinkClick;
 
 const currentChapterTitle = computed(() => {
-  const s = engine.state.value;
-  return s.chapters[s.currentChapterIndex]?.title;
+  const chapter = engine.chapters.value[engine.currentChapterIndex.value];
+  return chapter?.title;
 });
 
 function handleClose() {
@@ -114,16 +108,14 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  uiStore.showControls = false;
+  uiStore.setControls(false);
   cleanup();
   resizeObserver?.disconnect();
   mutationObserver?.disconnect();
   if (columnMeasureTimer) clearTimeout(columnMeasureTimer);
 });
 
-const overlayVisible = computed(() => {
-  return engine.state.value.status === "ready";
-});
+const overlayVisible = computed(() => engine.isReady.value);
 
 defineExpose({ getDocument, getArticle });
 </script>
@@ -151,21 +143,15 @@ defineExpose({ getDocument, getArticle });
       :book-progress="engine.totalBookProgress.value"
       :current-chapter-title="currentChapterTitle || ''"
       :can-go-to-prev-chapter="engine.currentChapterIndex.value > 0"
-      :can-go-to-next-chapter="
-        engine.currentChapterIndex.value < engine.state.value.chapters.length - 1
-      "
+      :can-go-to-next-chapter="engine.currentChapterIndex.value < engine.chapters.value.length - 1"
       @close="handleClose"
       @prev-page="engine.prevPage"
       @next-page="engine.nextPage"
       @prev-chapter="
-        engine.handleSelectChapter(
-          engine.state.value.chapters[engine.currentChapterIndex.value - 1]?.id,
-        )
+        engine.handleSelectChapter(engine.chapters.value[engine.currentChapterIndex.value - 1]?.id)
       "
       @next-chapter="
-        engine.handleSelectChapter(
-          engine.state.value.chapters[engine.currentChapterIndex.value + 1]?.id,
-        )
+        engine.handleSelectChapter(engine.chapters.value[engine.currentChapterIndex.value + 1]?.id)
       "
       @open-modal="openModal"
     />
@@ -211,7 +197,7 @@ defineExpose({ getDocument, getArticle });
 
     <ModalWrapper
       :modal-type="uiStore.activeModal"
-      :chapters="engine.state.value.chapters"
+      :chapters="engine.chapters.value"
       :current-chapter-id="engine.currentChapterId.value"
       @close="closeModal"
       @select-chapter="engine.handleSelectChapter"

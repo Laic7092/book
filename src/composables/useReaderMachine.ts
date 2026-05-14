@@ -46,7 +46,6 @@ export function useReaderMachine(
   bookId: Ref<string>,
   bookFormat: Ref<string>,
   readerContentRef: Ref<ReaderContentAPI | null>,
-  options: { chapters: Chapter[]; initialChapterId?: string | null },
 ) {
   void pluginEvents.emit("reader:init", { bookId: bookId.value });
 
@@ -121,6 +120,9 @@ export function useReaderMachine(
 
   const canGoBack = computed(() => navSnapshot.value.canGoBack);
   const canGoForward = computed(() => navSnapshot.value.canGoForward);
+
+  const chapters = computed(() => state.value.chapters);
+  const isReady = computed(() => state.value.status === "ready");
 
   // ── Effect runner ──
   function getIframeDoc(): Document | null {
@@ -427,20 +429,27 @@ export function useReaderMachine(
   }
 
   // ── Lifecycle ──
-  function initMachine() {
-    const initialIdx = options.initialChapterId
-      ? options.chapters.findIndex((c) => c.id === options.initialChapterId)
-      : 0;
+  async function initMachine() {
+    const fetched = await booksStore.getChapters(bookId.value);
+    const chapters = fetched.map((ch) => ({
+      id: ch.id,
+      bookId: bookId.value,
+      title: ch.title,
+      order: ch.order,
+      href: ch.href,
+      inToc: ch.inToc,
+    }));
+
     const config = {
       bookId: bookId.value,
-      chapterIndex: Math.max(0, initialIdx),
+      chapterIndex: 0,
       mode: readingMode.value === "vertical" ? ("scroll" as const) : ("pagination" as const),
     };
     void pluginEvents.emit("reader:before-init", config).then(() => {
       dispatch({
         type: "INIT",
         ...config,
-        chapters: options.chapters,
+        chapters,
       });
     });
   }
@@ -448,7 +457,7 @@ export function useReaderMachine(
   onMounted(() => {
     registerReaderSession(session);
     isRestoring.value = true;
-    initMachine();
+    void initMachine();
 
     // Wait for initial chapter to load before emitting reader:mounted.
     // Plugins (reading-progress, stats, etc.) depend on content being ready.
@@ -542,12 +551,6 @@ export function useReaderMachine(
   };
 
   return {
-    // Machine access (for plugins transitioning to direct dispatch)
-    machine,
-    dispatch,
-    state,
-
-    // Template bindings
     readingMode,
     pageMargin,
     isTransitioning,
@@ -559,6 +562,8 @@ export function useReaderMachine(
     readingProgress,
     totalBookProgress,
     chapterLoading,
+    chapters,
+    isReady,
     overlayComponents,
     headerActions,
     canGoBack,
@@ -574,7 +579,6 @@ export function useReaderMachine(
     currentPage,
     totalPages,
     navigateToCfiLocation,
-    // For backward compat
     reloadForPagination: () => {
       const chId = currentChapterId.value;
       if (chId) dispatch({ type: "GO_TO_CHAPTER", chapterId: chId });

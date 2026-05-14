@@ -1,15 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from "vue";
-import { useReaderStore } from "../stores/reader";
 import FixedLayoutPage from "./reader/FixedLayoutPage.vue";
 import { useNavigationStack } from "../composables/useNavigationStack";
-import type { Book } from "../core/types";
+import type { Book, Chapter } from "../core/types";
+import * as booksStore from "../storage/books";
 import { navigate } from "../utils/router";
 import { TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../utils/constants";
 
 const props = defineProps<{ book: Book }>();
 
-const readerStore = useReaderStore();
 const navStack = useNavigationStack();
 
 const fixedLayoutRef = ref<InstanceType<typeof FixedLayoutPage> | null>(null);
@@ -18,20 +17,19 @@ const showControls = ref(true);
 const pdfPageCount = ref(0);
 const showOutline = ref(false);
 
-const chapters = computed(() => readerStore.chapters);
+const chapters = ref<Chapter[]>([]);
+const currentChapter = ref<Chapter | null>(null);
 const isPdf = computed(() => props.book.format === "pdf");
 
-// Source of truth: PDF uses href (page number), CBZ uses chapter index
 const currentPageNum = computed(() => {
   if (isPdf.value) {
-    const href = readerStore.currentChapter?.href;
+    const href = currentChapter.value?.href;
     if (href) {
       const n = parseInt(href, 10);
       if (!isNaN(n)) return n;
     }
   }
-  // CBZ or fallback: use chapter position in array
-  const idx = chapters.value.findIndex((c) => c.id === readerStore.currentChapter?.id);
+  const idx = chapters.value.findIndex((c) => c.id === currentChapter.value?.id);
   return idx >= 0 ? idx + 1 : 1;
 });
 
@@ -62,16 +60,15 @@ function goToPage(pageNum: number) {
   const chapter = isPdf.value
     ? chapters.value.find((c) => c.href === String(pageNum))
     : chapters.value[pageNum - 1];
-  const prevChapter = readerStore.currentChapter;
+  const prevChapter = currentChapter.value;
   if (prevChapter) navStack.push({ chapterId: prevChapter.id, page: currentPageNum.value });
 
   isTransitioning.value = true;
 
   if (chapter) {
-    readerStore.currentChapter = chapter;
+    currentChapter.value = chapter;
   } else {
-    // Page without a dedicated chapter (outline-based PDF): create a synthetic one
-    readerStore.currentChapter = {
+    currentChapter.value = {
       id: `page-${pageNum}`,
       bookId: props.book.id,
       title: `Page ${pageNum}`,
@@ -180,7 +177,9 @@ function handleReady() {
 
 // ── Lifecycle ──
 
-onMounted(() => {
+onMounted(async () => {
+  chapters.value = await booksStore.getChapters(props.book.id);
+  currentChapter.value = chapters.value[0] ?? null;
   window.addEventListener("keydown", handleKeydown);
 });
 
@@ -252,7 +251,7 @@ onUnmounted(() => {
         ref="fixedLayoutRef"
         :book-id="book.id"
         :format="book.format as 'pdf' | 'cbz'"
-        :chapter-href="readerStore.currentChapter?.href"
+        :chapter-href="currentChapter?.href"
         :chapter-loading="isTransitioning"
         @ready="handleReady"
         @link-click="handleLinkClick"

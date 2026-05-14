@@ -6,7 +6,9 @@ import { dbGetAll, STORES } from "../storage/db";
 import { getCoverBlob, deleteCoverBlob } from "../storage/books";
 import { pluginEvents } from "../plugins/context";
 import * as booksStore from "../storage/books";
+import { useUIStore } from "./ui";
 import { assertValidBookFile } from "../utils/validation";
+import { getParserForFile, loadParserForFormat } from "../parsers";
 
 export interface BookshelfState {
   books: Book[];
@@ -68,22 +70,22 @@ export const useBookshelfStore = defineStore("bookshelf", {
       assertValidBookFile(file);
       this.isUploading = true;
       try {
-        const { useReaderStore } = await import("./reader");
-        const readerStore = useReaderStore();
-        const result = await readerStore.loadBook(file);
+        const ext = file.name.split(".").pop()?.toLowerCase();
+        if (ext) await loadParserForFormat(ext);
+        const parser = getParserForFile(file);
+        if (!parser) {
+          throw new Error(`Unsupported file format: ${file.type || file.name}`);
+        }
+        const parsedBook = await parser.parse(file);
+        await booksStore.saveBook(parsedBook, parser);
         await this.loadBooks();
-        return result;
+        return { book: parsedBook.book, chapters: parsedBook.chapters };
       } finally {
         this.isUploading = false;
       }
     },
 
     async deleteBook(bookId: string) {
-      const { useReaderStore } = await import("./reader");
-      const readerStore = useReaderStore();
-      if (readerStore.currentBook?.id === bookId) {
-        await readerStore.closeBook();
-      }
       await booksStore.deleteBook(bookId);
       void pluginEvents.emit("book:deleted", { bookId });
 
@@ -120,7 +122,6 @@ export const useBookshelfStore = defineStore("bookshelf", {
     },
 
     async deleteFolder(id: string) {
-      const { useUIStore } = await import("./ui");
       const ui = useUIStore();
 
       const count = this.books.filter((b) => b.folderId === id).length;
