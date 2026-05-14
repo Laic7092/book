@@ -51,6 +51,13 @@ export abstract class BaseHost {
     chapters: Chapter[],
     chapterIndex = 0,
     mode: "pagination" | "scroll" = "pagination",
+    initialPage?: Partial<{
+      current: number;
+      total: number;
+      iframeWidth: number;
+      pendingTarget: number | null;
+    }>,
+    initialScroll?: Partial<{ windowStart: number; windowEnd: number; progress: number }>,
   ): void {
     this.dispatch({
       type: "INIT",
@@ -58,6 +65,8 @@ export abstract class BaseHost {
       chapters,
       chapterIndex,
       mode,
+      ...(initialPage ? { initialPage } : {}),
+      ...(initialScroll ? { initialScroll } : {}),
     });
   }
 

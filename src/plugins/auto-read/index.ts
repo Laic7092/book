@@ -3,8 +3,6 @@ import { PLUGIN_BRAND } from "../types";
 import AutoReadControls from "./AutoReadControls.vue";
 import type { ReaderSession } from "@book/reader-core";
 
-export const loadOn = "reader" as const;
-
 let _session: (() => ReaderSession | null) | null = null;
 
 export const getAutoReadSession = () => _session?.() ?? null;

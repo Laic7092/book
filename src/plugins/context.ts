@@ -16,6 +16,9 @@ import type {
   EventHandler,
   ContentTransformer,
   ToolbarItem,
+  HookRegistry,
+  HookMap,
+  FilterHandler,
 } from "./types";
 import { themeRegistry } from "../core/theme-registry";
 import { getReaderSession } from "@book/reader-core";
@@ -232,6 +235,51 @@ export class EventBus<T extends Record<string, unknown>> implements IEventBus<T>
 /** Global event bus. Core emits; plugins listen. */
 export const pluginEvents = new EventBus<PluginEventMap>();
 
+// ── Filter hooks ──
+
+interface RegisteredFilter {
+  priority: number;
+  handler: FilterHandler<any>;
+}
+
+class HookBus implements HookRegistry {
+  private filters = new Map<keyof HookMap, RegisteredFilter[]>();
+
+  filter<K extends keyof HookMap>(
+    name: K,
+    handler: FilterHandler<HookMap[K]>,
+    priority = 100,
+  ): () => void {
+    if (!this.filters.has(name)) this.filters.set(name, []);
+    const entry: RegisteredFilter = { priority, handler };
+    const list = this.filters.get(name)!;
+    list.push(entry);
+    // Keep sorted: lower priority first
+    list.sort((a, b) => a.priority - b.priority);
+    return () => {
+      const idx = list.indexOf(entry);
+      if (idx >= 0) list.splice(idx, 1);
+    };
+  }
+
+  async run<K extends keyof HookMap>(name: K, payload: HookMap[K]): Promise<HookMap[K]> {
+    const list = this.filters.get(name);
+    if (!list || list.length === 0) return payload;
+    let result = payload;
+    for (const { handler } of list) {
+      try {
+        result = await handler(result);
+      } catch (err) {
+        console.error(`[HookBus] Filter error for "${String(name)}":`, err);
+      }
+    }
+    return result;
+  }
+}
+
+/** Global hook bus. Plugins register filters; reader runs them before init. */
+export const pluginHooks = new HookBus();
+
 // ── PluginContext factory ──
 
 // ── CssAPI implementation ──
@@ -328,6 +376,7 @@ export function createPluginContext(id: string, _bootstrap: PluginBootstrap): Pl
       removeIframeStyle: (id) => css.removeIframeStyle(id),
     },
     events: pluginEvents,
+    hooks: pluginHooks,
     capabilities: createCapabilitySlots(),
     onCleanup(_fn: () => void | Promise<void>) {},
     readerSession: () => getReaderSession(),
@@ -468,6 +517,21 @@ export function createTrackedContext(id: string, _bootstrap: PluginBootstrap): T
     emit: pluginEvents.emit.bind(pluginEvents),
   };
 
+  const hookUnsubs: (() => void)[] = [];
+
+  const hooks: HookRegistry = {
+    filter<K extends keyof HookMap>(
+      name: K,
+      handler: FilterHandler<HookMap[K]>,
+      priority?: number,
+    ) {
+      const unsub = pluginHooks.filter(name, handler, priority);
+      hookUnsubs.push(unsub);
+      return unsub;
+    },
+    run: pluginHooks.run.bind(pluginHooks),
+  };
+
   const rawCaps = createCapabilitySlots();
 
   const capabilities = {
@@ -488,6 +552,7 @@ export function createTrackedContext(id: string, _bootstrap: PluginBootstrap): T
     storage: createPluginStorageAdapter(id),
     ui,
     events,
+    hooks,
     capabilities,
     onCleanup(fn: () => void | Promise<void>) {
       cleanupFns.push(fn);
@@ -515,6 +580,14 @@ export function createTrackedContext(id: string, _bootstrap: PluginBootstrap): T
         if (r.status === "rejected") console.error("[TrackedContext] Event unsub error:", r.reason);
       }
       eventUnsubs.length = 0;
+      for (const fn of hookUnsubs) {
+        try {
+          fn();
+        } catch (e) {
+          console.error("[TrackedContext] Hook unsub error:", e);
+        }
+      }
+      hookUnsubs.length = 0;
       const results = await Promise.allSettled(
         cleanupFns.map((fn) => {
           try {

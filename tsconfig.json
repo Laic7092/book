@@ -1,33 +1,9 @@
 {
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2023",
-    "useDefineForClassFields": true,
-    "module": "ESNext",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "types": ["vite/client"],
-    "skipLibCheck": true,
-
-    /* Bundler mode */
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "verbatimModuleSyntax": true,
-    "moduleDetection": "force",
-    "resolveJsonModule": true,
-    "noEmit": true,
-
-    /* Linting */
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "erasableSyntaxOnly": true,
-    "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true
+    "noEmit": true
   },
-  "include": ["src"],
-  "references": [
-    { "path": "./packages/reader-core" },
-    { "path": "./packages/parser-core" },
-    { "path": "./packages/reader-host" }
-  ],
-  "exclude": ["node_modules", "dist", "packages"]
+  "include": ["src"]
 }

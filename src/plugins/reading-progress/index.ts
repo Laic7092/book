@@ -1,8 +1,6 @@
 import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
 
-export const loadOn = "reader" as const;
-
 interface ProgressData {
   chapterId: string;
   chapterIndex: number;
@@ -21,7 +19,13 @@ export const readingProgressPlugin: Plugin = {
   name: "Reading Progress",
   version: "1.0.0",
   setup(ctx) {
-    const unsubs: Set<() => void> = new Set();
+    const subs: (() => void)[] = [
+      ctx.events.on("page:changed", ({ bookId }) => void save(bookId)),
+      ctx.events.on("chapter:changed", ({ bookId }) => void save(bookId)),
+      ctx.events.on("reader:unmounted", ({ bookId }) => {
+        void save(bookId);
+      }),
+    ];
 
     async function save(bookId: string) {
       const h = ctx.readerSession();
@@ -36,25 +40,18 @@ export const readingProgressPlugin: Plugin = {
       });
     }
 
-    const subs = [
-      ctx.events.on("page:changed", ({ bookId }) => void save(bookId)),
-      ctx.events.on("chapter:changed", ({ bookId }) => void save(bookId)),
-      ctx.events.on("reader:unmounted", ({ bookId }) => {
-        void save(bookId);
-      }),
-    ];
-
-    ctx.events.on("reader:before-init", async (config) => {
+    ctx.hooks.filter("reader:init-config", async (config) => {
       const data = await ctx.storage.get<ProgressData>(progressKey(config.bookId));
-      if (!data) return;
-      config.chapterIndex = data.chapterIndex;
-      config.initialPage = { ...config.initialPage, pendingTarget: data.pageIndex };
-      subs.forEach((sub) => unsubs.add(sub));
+      if (!data) return config;
+      return {
+        ...config,
+        chapterIndex: data.chapterIndex,
+        initialPage: { ...config.initialPage, pendingTarget: data.pageIndex },
+      };
     });
 
     ctx.onCleanup(() => {
-      unsubs.forEach((fn) => fn());
-      unsubs.clear();
+      subs.forEach((fn) => fn());
     });
   },
 };

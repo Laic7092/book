@@ -28,9 +28,16 @@ export class FixedHost extends BaseHost {
     chapters: Chapter[],
     chapterIndex = 0,
     _mode?: "pagination" | "scroll",
+    initialPage?: Partial<{
+      current: number;
+      total: number;
+      iframeWidth: number;
+      pendingTarget: number | null;
+    }>,
+    initialScroll?: Partial<{ windowStart: number; windowEnd: number; progress: number }>,
   ): void {
     // Fixed-layout always uses pagination — scroll mode is not applicable.
-    super.init(bookId, chapters, chapterIndex, "pagination");
+    super.init(bookId, chapters, chapterIndex, "pagination", initialPage, initialScroll);
   }
 
   nextPage(): void {

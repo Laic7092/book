@@ -33,13 +33,6 @@ export interface PluginEventMap {
   "settings:changed": { changes: Partial<ReaderSettings> };
   "content:loaded": { bookId: string; chapterId: string };
   "reader:init": { bookId: string };
-  "reader:before-init": {
-    bookId: string;
-    chapterIndex: number;
-    mode: "pagination" | "scroll";
-    initialPage?: Partial<import("@book/reader-core").PageState>;
-    initialScroll?: Partial<import("@book/reader-core").ScrollState>;
-  };
   "reader:mounted": { bookId: string };
   "reader:unmounted": { bookId: string };
   [key: string]: unknown;
@@ -54,6 +47,37 @@ export type EventHandler<T> = (payload: T) => unknown;
 export interface IEventBus<T extends Record<string, unknown>> {
   on<K extends keyof T>(event: K, handler: EventHandler<T[K]>): () => void;
   emit<K extends keyof T>(event: K, payload: T[K]): Promise<void>;
+}
+
+// ── Filter hooks ──
+
+/** Config passed through the "reader:init-config" hook before reader init. */
+export interface InitConfig {
+  bookId: string;
+  chapterIndex: number;
+  mode: "pagination" | "scroll";
+  initialPage?: Partial<import("@book/reader-core").PageState>;
+  initialScroll?: Partial<import("@book/reader-core").ScrollState>;
+}
+
+/** Maps hook names to their payload types. */
+export interface HookMap {
+  "reader:init-config": InitConfig;
+}
+
+/** A filter hook handler — receives payload and returns (possibly modified) payload. */
+export type FilterHandler<T> = (payload: T) => T | Promise<T>;
+
+/** Typed hook registry. Filters run sequentially in priority order (lower first). */
+export interface HookRegistry {
+  /** Register a filter. Lower priority runs first. Returns unsubscribe function. */
+  filter<K extends keyof HookMap>(
+    name: K,
+    handler: FilterHandler<HookMap[K]>,
+    priority?: number,
+  ): () => void;
+  /** Run all filters for the given hook name in priority order, chaining results. */
+  run<K extends keyof HookMap>(name: K, payload: HookMap[K]): Promise<HookMap[K]>;
 }
 
 /**
@@ -160,6 +184,8 @@ export interface PluginContext {
   storage: PluginStorageAdapter;
   ui: UISlots;
   events: IEventBus<PluginEventMap>;
+  /** Filter hooks — plugins modify config before reader init. */
+  hooks: HookRegistry;
   /** Register/unregister runtime capabilities. */
   capabilities: {
     register<K extends keyof CapabilityMap>(key: K, value: CapabilityMap[K][number]): void;

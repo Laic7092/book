@@ -39,7 +39,7 @@ function fsError(err: Error & { code?: string }, defaultStatus = 404): Response 
               : err.code === "ENOSPC"
                 ? "No space left on device"
                 : `Operation failed: ${err.code || "unknown"}`;
-  return c.json({ error: message }, status);
+  return Response.json({ error: message }, { status });
 }
 
 export function registerFsRoutes(app: Hono): void {

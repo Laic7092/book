@@ -6,8 +6,6 @@ import { createEntityStore, type EntityStore } from "../store-factory";
 import type { Annotation } from "../../core/types";
 import type { ReaderSession } from "@book/reader-core";
 
-export const loadOn = "reader" as const;
-
 // ── Module-level state ──
 
 let _store: EntityStore<Annotation> | null = null;

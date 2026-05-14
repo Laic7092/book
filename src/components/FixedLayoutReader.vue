@@ -15,7 +15,8 @@ import * as booksStore from "../storage/books";
 import { navigate } from "../utils/router";
 import { openPdf } from "../utils/pdf-renderer";
 import { TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../utils/constants";
-import { pluginEvents } from "../plugins/context";
+import { pluginEvents, pluginHooks } from "../plugins/context";
+import type { InitConfig } from "../plugins/types";
 
 const props = defineProps<{ book: Book }>();
 
@@ -300,15 +301,21 @@ onMounted(async () => {
   host.value = h;
   registerReaderSession(h.getSession());
 
-  void pluginEvents
-    .emit("reader:before-init", {
-      bookId: props.book.id,
-      chapterIndex: 0,
-      mode: "pagination",
-    })
-    .then(() => {
-      h.init(props.book.id, hostChapters, 0);
-    });
+  const baseConfig: InitConfig = {
+    bookId: props.book.id,
+    chapterIndex: 0,
+    mode: "pagination",
+  };
+  void pluginHooks.run("reader:init-config", baseConfig).then((config) => {
+    h.init(
+      props.book.id,
+      hostChapters,
+      config.chapterIndex,
+      config.mode,
+      config.initialPage,
+      config.initialScroll,
+    );
+  });
 
   window.addEventListener("keydown", handleKeydown);
 });

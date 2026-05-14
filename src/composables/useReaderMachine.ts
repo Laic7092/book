@@ -14,7 +14,8 @@ import {
   getHeaderActions,
   pluginStateVersion,
 } from "../plugins/manager/registry";
-import { pluginEvents } from "../plugins/context";
+import { pluginEvents, pluginHooks } from "../plugins/context";
+import type { InitConfig } from "../plugins/types";
 import { TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../utils/constants";
 import { parseCfi, resolveCfiToElement } from "../utils/epub-cfi";
 import * as booksStore from "../storage/books";
@@ -171,12 +172,22 @@ export function useReaderMachine(
       inToc: ch.inToc,
     }));
 
-    const mode = readingMode.value === "vertical" ? ("scroll" as const) : ("pagination" as const);
-    void pluginEvents
-      .emit("reader:before-init", { bookId: bookId.value, chapterIndex: 0, mode })
-      .then(() => {
-        host!.init(bookId.value, chapters, 0, mode, bookFormat.value);
-      });
+    const baseConfig: InitConfig = {
+      bookId: bookId.value,
+      chapterIndex: 0,
+      mode: readingMode.value === "vertical" ? "scroll" : "pagination",
+    };
+    void pluginHooks.run("reader:init-config", baseConfig).then((config) => {
+      host!.init(
+        bookId.value,
+        chapters,
+        config.chapterIndex,
+        config.mode,
+        config.initialPage,
+        config.initialScroll,
+        bookFormat.value,
+      );
+    });
   }
 
   onMounted(() => {

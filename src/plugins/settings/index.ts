@@ -30,8 +30,6 @@ export function getSettingsState() {
 const GEAR_ICON =
   '<path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>';
 
-export const loadOn = "reader" as const;
-
 function buildFullCSS(s: ReaderSettings): string {
   const themeCSS = s.theme ? generateThemeCSS(s.theme, s.contrast) : "";
   return generateBaseCSS() + themeCSS + generateTypographyCSS(s);
@@ -97,19 +95,6 @@ export const settingsPlugin: Plugin = {
       }
     }
 
-    function syncToHost() {
-      applyTheme(s.value.theme);
-      ctx.ui.injectIframeStyle("typography", buildFullCSS(s.value));
-      const host = ctx.readerSession();
-      if (host) {
-        host.dispatch({
-          type: "SET_MODE",
-          mode: (s.value.readingMode ?? "pagination") === "vertical" ? "scroll" : "pagination",
-        });
-        host.setPageMargin(getEffectiveMargin());
-      }
-    }
-
     // Content transformer for chapter typography
     ctx.registerContentTransformer({
       id: "settings-typography",
@@ -132,8 +117,21 @@ export const settingsPlugin: Plugin = {
       onClick: () => ctx.ui.openModal("settings"),
     });
 
-    // Catch-up: if host already registered (reader mounted during init), sync now
-    syncToHost();
+    const loadSetting = (config: any) => {
+      applyTheme(s.value.theme);
+      ctx.ui.injectIframeStyle("typography", buildFullCSS(s.value));
+      const host = ctx.readerSession();
+      if (host) host.setPageMargin(getEffectiveMargin());
+      if (s.value.readingMode === "vertical") {
+        return { ...config, mode: "scroll" };
+      }
+      return config;
+    };
+
+    loadSetting({});
+
+    // Apply saved settings before reader initializes (host + iframe exist, init() not called yet)
+    ctx.hooks.filter("reader:init-config", loadSetting);
 
     // Watch settings changes → drive core
     watch(

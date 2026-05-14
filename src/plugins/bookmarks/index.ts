@@ -10,8 +10,6 @@ import {
 } from "../../utils/epub-cfi";
 import { stripHtml } from "../../utils/validation";
 
-export const loadOn = "reader" as const;
-
 // ── Module-level state (DI via closure, no global setter) ──
 
 let _store: EntityStore<Bookmark> | null = null;

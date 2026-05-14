@@ -45,10 +45,17 @@ export class ReaderHost extends BaseHost {
     chapters: Chapter[],
     chapterIndex = 0,
     mode: "pagination" | "scroll" = "pagination",
+    initialPage?: Partial<{
+      current: number;
+      total: number;
+      iframeWidth: number;
+      pendingTarget: number | null;
+    }>,
+    initialScroll?: Partial<{ windowStart: number; windowEnd: number; progress: number }>,
     format = "",
   ): void {
     this.bookFormat = format;
-    super.init(bookId, chapters, chapterIndex, mode);
+    super.init(bookId, chapters, chapterIndex, mode, initialPage, initialScroll);
   }
 
   loadChapter(chapterId: string, html: string): void {
