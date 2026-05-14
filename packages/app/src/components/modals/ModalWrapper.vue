@@ -163,7 +163,7 @@ function onAnimationEnd() {
 }
 
 .modal-panel {
-  height: 95%;
+  height: 85%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
