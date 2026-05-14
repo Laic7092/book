@@ -3,13 +3,10 @@ import type { Chapter } from "./types";
 export interface PageState {
   current: number;
   total: number;
-  iframeWidth: number;
   pendingTarget: number | null;
 }
 
 export interface ScrollState {
-  windowStart: number;
-  windowEnd: number;
   progress: number;
 }
 
@@ -18,7 +15,7 @@ export interface ReaderState {
   chapters: Chapter[];
   currentChapterIndex: number;
   mode: "pagination" | "scroll";
-  status: "idle" | "loading-chapter" | "rendered" | "ready";
+  status: "idle" | "loading" | "ready";
 
   page: PageState;
   scroll: ScrollState;
@@ -42,7 +39,7 @@ export type ReaderAction =
       html: string;
     }
   | { type: "CHAPTER_FAILED"; chapterId: string; error: string }
-  | { type: "LAYOUT_MEASURED"; contentWidth: number; iframeWidth: number }
+  | { type: "PAGE_COUNT_UPDATED"; total: number }
   | { type: "NEXT_PAGE" }
   | { type: "PREV_PAGE" }
   | { type: "GO_TO_CHAPTER"; chapterId: string; targetPage?: number }
@@ -53,30 +50,16 @@ export type ReaderAction =
       bookProgress: number;
       visibleChapterId?: string;
     }
-  | { type: "SCROLL_WINDOW_EXPANDED"; direction: "up" | "down"; newStart: number; newEnd: number }
-  | { type: "CLEANUP" }
-  | { type: "ZOOM_IN" }
-  | { type: "ZOOM_OUT" }
-  | { type: "ZOOM_FIT" }
-  | { type: "ZOOM_WIDTH" }
-  | { type: "ROTATE"; degrees: number };
+  | { type: "TEARDOWN" };
 
 export type ReaderEffect =
   | { type: "FETCH_CHAPTER"; bookId: string; chapterId: string }
-  | { type: "FETCH_CHAPTERS"; bookId: string; chapterIds: string[] }
-  | { type: "RENDER_HTML"; html: string }
-  | { type: "SET_PAGE_CSS"; page: number }
-  | { type: "SET_MODE_CSS"; mode: "paginated" | "scroll" }
-  | { type: "SET_PAGE_MARGIN_CSS"; margin: number }
-  | { type: "EMIT"; event: string; payload: Record<string, unknown> }
-  | { type: "SCROLL_INTO_VIEW"; chapterId: string }
-  | {
-      type: "MEASURE_LAYOUT";
-      chapterId: string;
-    }
-  | { type: "RENDER_PAGE"; chapterId: string; pageNum: number }
-  | { type: "ZOOM_CHANGED"; scale: number }
-  | { type: "NOOP" };
+  | { type: "PAGE_POSITION_CHANGED"; page: number }
+  | { type: "MODE_CHANGED"; mode: "paginated" | "scroll" }
+  | { type: "CHAPTER_DID_CHANGE"; chapterId: string; previousChapterId: string | null }
+  | { type: "PAGE_DID_CHANGE"; page: number; totalPages: number; chapterId: string }
+  | { type: "CONTENT_DID_LOAD"; chapterId: string }
+  | { type: "READER_UNMOUNTED"; bookId: string; chapterId: string | null };
 
 export function createInitialState(): ReaderState {
   return {
@@ -85,8 +68,8 @@ export function createInitialState(): ReaderState {
     currentChapterIndex: -1,
     mode: "pagination",
     status: "idle",
-    page: { current: 0, total: 1, iframeWidth: 0, pendingTarget: null },
-    scroll: { windowStart: 0, windowEnd: 0, progress: 0 },
+    page: { current: 0, total: 0, pendingTarget: null },
+    scroll: { progress: 0 },
     error: null,
   };
 }
@@ -109,29 +92,25 @@ function findChapterIndex(chapters: Chapter[], chapterId: string): number {
 function chapterChangeEffects(
   state: ReaderState,
   chapterId: string,
-  previousChapterId: string | undefined,
+  previousChapterId: string | null,
 ): ReaderEffect[] {
-  const effects: ReaderEffect[] = [];
-  effects.push({
-    type: "EMIT",
-    event: "chapter:changed",
-    payload: { bookId: state.bookId, chapterId, previousChapterId },
-  });
-  effects.push({
-    type: "EMIT",
-    event: "page:changed",
-    payload: {
-      bookId: state.bookId,
+  const effects: ReaderEffect[] = [
+    {
+      type: "CHAPTER_DID_CHANGE",
+      chapterId,
+      previousChapterId,
+    },
+    {
+      type: "PAGE_DID_CHANGE",
       chapterId,
       page: state.page.current,
       totalPages: state.page.total,
     },
-  });
-  effects.push({
-    type: "EMIT",
-    event: "content:loaded",
-    payload: { bookId: state.bookId, chapterId },
-  });
+    {
+      type: "CONTENT_DID_LOAD",
+      chapterId,
+    },
+  ];
   return effects;
 }
 
@@ -153,20 +132,15 @@ function initReducer(
     chapters: action.chapters,
     currentChapterIndex: action.chapterIndex,
     mode: action.mode,
-    status: "loading-chapter",
-    page: { current: 0, total: 1, iframeWidth: 0, pendingTarget: null, ...action.initialPage },
-    scroll: {
-      windowStart: action.chapterIndex,
-      windowEnd: action.chapterIndex,
-      progress: 0,
-      ...action.initialScroll,
-    },
+    status: "loading",
+    page: { current: 0, total: 0, pendingTarget: null, ...action.initialPage },
+    scroll: { progress: 0, ...action.initialScroll },
     error: null,
   };
 
   const effects: ReaderEffect[] = [
     { type: "FETCH_CHAPTER", bookId: action.bookId, chapterId },
-    { type: "SET_MODE_CSS", mode: action.mode === "pagination" ? "paginated" : "scroll" },
+    { type: "MODE_CHANGED", mode: action.mode === "pagination" ? "paginated" : "scroll" },
   ];
 
   return { state: next, effects };
@@ -185,29 +159,21 @@ function chapterLoadedReducer(
 
   const next: ReaderState = {
     ...state,
-    status: "rendered",
     currentChapterIndex: chapterIdx,
     page: {
       ...state.page,
-      current: clampPage(state.page.pendingTarget, state.page.total),
-      total: 1,
+      current: clampPage(state.page.pendingTarget, state.page.total || 1),
+      total: state.page.total,
     },
     error: null,
   };
 
-  const effects: ReaderEffect[] = [
-    { type: "RENDER_HTML", html: action.html },
-    { type: "MEASURE_LAYOUT", chapterId: action.chapterId },
-  ];
+  const effects: ReaderEffect[] = [];
 
-  if (previousChapterId !== action.chapterId) {
-    effects.push(...chapterChangeEffects(next, action.chapterId, previousChapterId ?? undefined));
+  if (previousChapterId !== action.chapterId && previousChapterId) {
+    effects.push(...chapterChangeEffects(next, action.chapterId, previousChapterId));
   } else {
-    effects.push({
-      type: "EMIT",
-      event: "content:loaded",
-      payload: { bookId: state.bookId, chapterId: action.chapterId },
-    });
+    effects.push({ type: "CONTENT_DID_LOAD", chapterId: action.chapterId });
   }
 
   return { state: next, effects };
@@ -223,12 +189,11 @@ function chapterFailedReducer(
   };
 }
 
-function layoutMeasuredReducer(
+function pageCountUpdatedReducer(
   state: ReaderState,
-  action: Extract<ReaderAction, { type: "LAYOUT_MEASURED" }>,
+  action: Extract<ReaderAction, { type: "PAGE_COUNT_UPDATED" }>,
 ): { state: ReaderState; effects: ReaderEffect[] } {
-  const step = action.iframeWidth || 0;
-  const newTotal = step > 0 ? Math.max(1, Math.ceil(action.contentWidth / step)) : 1;
+  const newTotal = Math.max(1, action.total);
 
   const pendingTarget = state.page.pendingTarget;
   const resolvedPage =
@@ -240,23 +205,23 @@ function layoutMeasuredReducer(
 
   const next: ReaderState = {
     ...state,
-    status: state.status === "rendered" ? "ready" : state.status,
+    status: "ready",
     page: {
       current: resolvedPage,
       total: newTotal,
-      iframeWidth: step,
       pendingTarget: null,
     },
   };
 
-  const effects: ReaderEffect[] = [{ type: "SET_PAGE_CSS", page: resolvedPage }];
+  const effects: ReaderEffect[] = [{ type: "PAGE_POSITION_CHANGED", page: resolvedPage }];
 
   const chapterId = getChapterId(next);
   if (chapterId) {
     effects.push({
-      type: "EMIT",
-      event: "page:changed",
-      payload: { bookId: next.bookId, chapterId, page: resolvedPage, totalPages: newTotal },
+      type: "PAGE_DID_CHANGE",
+      chapterId,
+      page: resolvedPage,
+      totalPages: newTotal,
     });
   }
 
@@ -265,7 +230,7 @@ function layoutMeasuredReducer(
 
 function nextPageReducer(state: ReaderState): { state: ReaderState; effects: ReaderEffect[] } {
   if (state.mode !== "pagination") return { state, effects: [] };
-  if (state.status === "loading-chapter") return { state, effects: [] };
+  if (state.status === "loading") return { state, effects: [] };
 
   const { current, total } = state.page;
 
@@ -277,12 +242,13 @@ function nextPageReducer(state: ReaderState): { state: ReaderState; effects: Rea
     };
 
     const chapterId = getChapterId(next);
-    const effects: ReaderEffect[] = [{ type: "SET_PAGE_CSS", page: newPage }];
+    const effects: ReaderEffect[] = [{ type: "PAGE_POSITION_CHANGED", page: newPage }];
     if (chapterId) {
       effects.push({
-        type: "EMIT",
-        event: "page:changed",
-        payload: { bookId: next.bookId, chapterId, page: newPage, totalPages: total },
+        type: "PAGE_DID_CHANGE",
+        chapterId,
+        page: newPage,
+        totalPages: total,
       });
     }
     return { state: next, effects };
@@ -294,9 +260,9 @@ function nextPageReducer(state: ReaderState): { state: ReaderState; effects: Rea
   const nextChapter = state.chapters[nextIdx];
   const next: ReaderState = {
     ...state,
-    status: "loading-chapter",
+    status: "loading",
     currentChapterIndex: nextIdx,
-    page: { ...state.page, current: 0, total: 1, pendingTarget: null },
+    page: { ...state.page, current: 0, total: 0, pendingTarget: null },
   };
   const effects: ReaderEffect[] = [
     { type: "FETCH_CHAPTER", bookId: state.bookId, chapterId: nextChapter.id },
@@ -306,7 +272,7 @@ function nextPageReducer(state: ReaderState): { state: ReaderState; effects: Rea
 
 function prevPageReducer(state: ReaderState): { state: ReaderState; effects: ReaderEffect[] } {
   if (state.mode !== "pagination") return { state, effects: [] };
-  if (state.status === "loading-chapter") return { state, effects: [] };
+  if (state.status === "loading") return { state, effects: [] };
 
   if (state.page.current > 0) {
     const newPage = state.page.current - 1;
@@ -316,12 +282,13 @@ function prevPageReducer(state: ReaderState): { state: ReaderState; effects: Rea
     };
 
     const chapterId = getChapterId(next);
-    const effects: ReaderEffect[] = [{ type: "SET_PAGE_CSS", page: newPage }];
+    const effects: ReaderEffect[] = [{ type: "PAGE_POSITION_CHANGED", page: newPage }];
     if (chapterId) {
       effects.push({
-        type: "EMIT",
-        event: "page:changed",
-        payload: { bookId: next.bookId, chapterId, page: newPage, totalPages: state.page.total },
+        type: "PAGE_DID_CHANGE",
+        chapterId,
+        page: newPage,
+        totalPages: state.page.total,
       });
     }
     return { state: next, effects };
@@ -333,9 +300,9 @@ function prevPageReducer(state: ReaderState): { state: ReaderState; effects: Rea
   const prevChapter = state.chapters[prevIdx];
   const next: ReaderState = {
     ...state,
-    status: "loading-chapter",
+    status: "loading",
     currentChapterIndex: prevIdx,
-    page: { ...state.page, current: 0, total: 1, pendingTarget: -1 },
+    page: { ...state.page, current: 0, total: 0, pendingTarget: -1 },
   };
   const effects: ReaderEffect[] = [
     { type: "FETCH_CHAPTER", bookId: state.bookId, chapterId: prevChapter.id },
@@ -352,9 +319,9 @@ function goToChapterReducer(
 
   const next: ReaderState = {
     ...state,
-    status: "loading-chapter",
+    status: "loading",
     currentChapterIndex: idx,
-    page: { ...state.page, current: 0, total: 1, pendingTarget: action.targetPage ?? null },
+    page: { ...state.page, current: 0, total: 0, pendingTarget: action.targetPage ?? null },
   };
 
   const effects: ReaderEffect[] = [
@@ -377,12 +344,13 @@ function goToPageReducer(
   };
 
   const chapterId = getChapterId(next);
-  const effects: ReaderEffect[] = [{ type: "SET_PAGE_CSS", page }];
+  const effects: ReaderEffect[] = [{ type: "PAGE_POSITION_CHANGED", page }];
   if (chapterId) {
     effects.push({
-      type: "EMIT",
-      event: "page:changed",
-      payload: { bookId: next.bookId, chapterId, page, totalPages: state.page.total },
+      type: "PAGE_DID_CHANGE",
+      chapterId,
+      page,
+      totalPages: state.page.total,
     });
   }
   return { state: next, effects };
@@ -397,18 +365,14 @@ function setModeReducer(
   const next: ReaderState = {
     ...state,
     mode: action.mode,
-    page: { current: 0, total: 1, iframeWidth: 0, pendingTarget: null },
-    scroll: {
-      windowStart: state.currentChapterIndex,
-      windowEnd: state.currentChapterIndex,
-      progress: 0,
-    },
-    status: "loading-chapter",
+    page: { current: 0, total: 0, pendingTarget: null },
+    scroll: { progress: 0 },
+    status: "loading",
   };
 
   const chapterId = getChapterId(next);
   const effects: ReaderEffect[] = [
-    { type: "SET_MODE_CSS", mode: action.mode === "pagination" ? "paginated" : "scroll" },
+    { type: "MODE_CHANGED", mode: action.mode === "pagination" ? "paginated" : "scroll" },
   ];
   if (chapterId) {
     effects.push({ type: "FETCH_CHAPTER", bookId: state.bookId, chapterId });
@@ -422,7 +386,7 @@ function scrollProgressReducer(
 ): { state: ReaderState; effects: ReaderEffect[] } {
   const next: ReaderState = {
     ...state,
-    scroll: { ...state.scroll, progress: action.bookProgress },
+    scroll: { progress: action.bookProgress },
   };
 
   const effects: ReaderEffect[] = [];
@@ -433,13 +397,9 @@ function scrollProgressReducer(
       const previousChapterId = getChapterId(state);
       next.currentChapterIndex = idx;
       effects.push({
-        type: "EMIT",
-        event: "chapter:changed",
-        payload: {
-          bookId: state.bookId,
-          chapterId: action.visibleChapterId,
-          previousChapterId,
-        },
+        type: "CHAPTER_DID_CHANGE",
+        chapterId: action.visibleChapterId,
+        previousChapterId,
       });
     }
   }
@@ -447,57 +407,17 @@ function scrollProgressReducer(
   return { state: next, effects };
 }
 
-function scrollWindowExpandedReducer(
-  state: ReaderState,
-  action: Extract<ReaderAction, { type: "SCROLL_WINDOW_EXPANDED" }>,
-): { state: ReaderState; effects: ReaderEffect[] } {
-  return {
-    state: {
-      ...state,
-      scroll: {
-        ...state.scroll,
-        windowStart: action.newStart,
-        windowEnd: action.newEnd,
-      },
-    },
-    effects: [],
-  };
-}
-
-function cleanupReducer(state: ReaderState): { state: ReaderState; effects: ReaderEffect[] } {
+function teardownReducer(state: ReaderState): { state: ReaderState; effects: ReaderEffect[] } {
   const chapterId = getChapterId(state);
   const effects: ReaderEffect[] = [];
   if (state.bookId) {
     effects.push({
-      type: "EMIT",
-      event: "reader:unmounted",
-      payload: { bookId: state.bookId, chapterId },
+      type: "READER_UNMOUNTED",
+      bookId: state.bookId,
+      chapterId,
     });
   }
   return { state: createInitialState(), effects };
-}
-
-function zoomInReducer(state: ReaderState): { state: ReaderState; effects: ReaderEffect[] } {
-  return { state, effects: [] };
-}
-
-function zoomOutReducer(state: ReaderState): { state: ReaderState; effects: ReaderEffect[] } {
-  return { state, effects: [] };
-}
-
-function zoomFitReducer(state: ReaderState): { state: ReaderState; effects: ReaderEffect[] } {
-  return { state, effects: [] };
-}
-
-function zoomWidthReducer(state: ReaderState): { state: ReaderState; effects: ReaderEffect[] } {
-  return { state, effects: [] };
-}
-
-function rotateReducer(
-  state: ReaderState,
-  _action: Extract<ReaderAction, { type: "ROTATE" }>,
-): { state: ReaderState; effects: ReaderEffect[] } {
-  return { state, effects: [] };
 }
 
 export type ReducerResult = { state: ReaderState; effects: ReaderEffect[] };
@@ -510,8 +430,8 @@ export function reducer(state: ReaderState, action: ReaderAction): ReducerResult
       return chapterLoadedReducer(state, action);
     case "CHAPTER_FAILED":
       return chapterFailedReducer(state, action);
-    case "LAYOUT_MEASURED":
-      return layoutMeasuredReducer(state, action);
+    case "PAGE_COUNT_UPDATED":
+      return pageCountUpdatedReducer(state, action);
     case "NEXT_PAGE":
       return nextPageReducer(state);
     case "PREV_PAGE":
@@ -524,20 +444,8 @@ export function reducer(state: ReaderState, action: ReaderAction): ReducerResult
       return setModeReducer(state, action);
     case "SCROLL_PROGRESS":
       return scrollProgressReducer(state, action);
-    case "SCROLL_WINDOW_EXPANDED":
-      return scrollWindowExpandedReducer(state, action);
-    case "CLEANUP":
-      return cleanupReducer(state);
-    case "ZOOM_IN":
-      return zoomInReducer(state);
-    case "ZOOM_OUT":
-      return zoomOutReducer(state);
-    case "ZOOM_FIT":
-      return zoomFitReducer(state);
-    case "ZOOM_WIDTH":
-      return zoomWidthReducer(state);
-    case "ROTATE":
-      return rotateReducer(state, action);
+    case "TEARDOWN":
+      return teardownReducer(state);
   }
 }
 

@@ -17,13 +17,6 @@ export interface BaseHostOptions {
   ) => Promise<{ html: string | undefined; rawData?: ArrayBuffer }>;
 }
 
-/**
- * Format-agnostic base for reader hosts.
- *
- * Manages the state machine lifecycle, session registration, and effect
- * dispatch loop. Subclasses implement format-specific effects
- * (iframe rendering, PDF.js, CBZ images, etc).
- */
 export abstract class BaseHost {
   protected machine = createReaderMachine();
   protected state: ReaderState;
@@ -54,10 +47,9 @@ export abstract class BaseHost {
     initialPage?: Partial<{
       current: number;
       total: number;
-      iframeWidth: number;
       pendingTarget: number | null;
     }>,
-    initialScroll?: Partial<{ windowStart: number; windowEnd: number; progress: number }>,
+    initialScroll?: Partial<{ progress: number }>,
   ): void {
     this.dispatch({
       type: "INIT",
@@ -92,7 +84,7 @@ export abstract class BaseHost {
   }
 
   destroy(): void {
-    this.dispatch({ type: "CLEANUP" });
+    this.dispatch({ type: "TEARDOWN" });
     this.unsub();
   }
 
@@ -104,16 +96,11 @@ export abstract class BaseHost {
     }
   }
 
-  /** Run a single effect — override in subclasses for format-specific effects. */
   protected abstract runEffect(effect: ReaderEffect): void | Promise<void>;
 
-  /** Handle generic effects shared by all formats. */
+  /** Handle effects common to all host types. */
   protected async runGenericEffect(effect: ReaderEffect): Promise<void> {
     switch (effect.type) {
-      case "EMIT":
-      case "FETCH_CHAPTERS":
-        await Promise.resolve(this.onEffect?.(effect));
-        break;
       case "FETCH_CHAPTER":
         if (this.fetchChapter) {
           await this.fetchAndLoadChapter(effect.bookId, effect.chapterId);
@@ -121,8 +108,10 @@ export abstract class BaseHost {
           await Promise.resolve(this.onEffect?.(effect));
         }
         break;
-      case "NOOP":
-        break;
+      default:
+        // Structured effects (CHAPTER_DID_CHANGE, PAGE_DID_CHANGE, etc.)
+        // forwarded to onEffect for the composable to translate into plugin events.
+        await Promise.resolve(this.onEffect?.(effect));
     }
   }
 

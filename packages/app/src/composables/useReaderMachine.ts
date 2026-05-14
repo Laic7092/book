@@ -23,6 +23,37 @@ import type { Chapter } from "../core/types";
 
 export type { ReaderState, ReaderAction, ReaderEffect };
 
+function translateEffect(effect: ReaderEffect, bookId: string): void {
+  switch (effect.type) {
+    case "CHAPTER_DID_CHANGE":
+      void pluginEvents.emit("chapter:changed", {
+        bookId,
+        chapterId: effect.chapterId,
+        previousChapterId: effect.previousChapterId ?? undefined,
+      });
+      break;
+    case "PAGE_DID_CHANGE":
+      void pluginEvents.emit("page:changed", {
+        bookId,
+        chapterId: effect.chapterId,
+        page: effect.page,
+        totalPages: effect.totalPages,
+      });
+      break;
+    case "CONTENT_DID_LOAD":
+      void pluginEvents.emit("content:loaded", {
+        bookId,
+        chapterId: effect.chapterId,
+      });
+      break;
+    case "READER_UNMOUNTED":
+      void pluginEvents.emit("reader:unmounted", {
+        bookId: effect.bookId,
+      });
+      break;
+  }
+}
+
 export function useReaderMachine(
   bookId: Ref<string>,
   bookFormat: Ref<string>,
@@ -77,7 +108,7 @@ export function useReaderMachine(
   const totalBookProgress = readingProgress;
   const currentPage = computed(() => state.value.page.current);
   const totalPages = computed(() => state.value.page.total);
-  const isTransitioning = computed(() => state.value.status === "loading-chapter");
+  const isTransitioning = computed(() => state.value.status === "loading");
 
   const chapterLoading = computed(() => {
     if (isRestoring.value) return true;
@@ -143,17 +174,11 @@ export function useReaderMachine(
     isHistoryNav.value = false;
   }
 
-  // ── Iframe ready ──
-
   function handleColumnLayout(data: { contentWidth: number; iframeWidth: number }) {
-    host?.dispatch({
-      type: "LAYOUT_MEASURED",
-      contentWidth: data.contentWidth,
-      iframeWidth: data.iframeWidth,
-    });
+    const step = Math.max(data.iframeWidth, 1);
+    const total = Math.max(1, Math.ceil(data.contentWidth / step));
+    host?.dispatch({ type: "PAGE_COUNT_UPDATED", total });
   }
-
-  // ── Internal links (delegated to host) ──
 
   function handleInternalLinkClick(href: string) {
     host?.handleInternalLink(href);
@@ -197,9 +222,7 @@ export function useReaderMachine(
     host = new ReaderHost({
       container,
       onEffect: async (effect) => {
-        if (effect.type === "EMIT") {
-          void pluginEvents.emit(effect.event as any, effect.payload as any);
-        }
+        translateEffect(effect, bookId.value);
       },
       onStateChange: (s) => {
         state.value = s;
@@ -290,7 +313,7 @@ export function useReaderMachine(
         const bodyRect = doc.body.getBoundingClientRect();
         const elRect = element.getBoundingClientRect();
         const offset = elRect.left - bodyRect.left;
-        const step = state.value.page.iframeWidth || doc.documentElement.clientWidth;
+        const step = doc.documentElement.clientWidth;
         if (step > 0) {
           host?.dispatch({
             type: "GO_TO_PAGE",
@@ -305,8 +328,6 @@ export function useReaderMachine(
       }
     }
   }
-
-  // ── ReaderSession (provided by ReaderHost) ──
 
   return {
     readingMode,

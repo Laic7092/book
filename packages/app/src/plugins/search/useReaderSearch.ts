@@ -134,7 +134,7 @@ export function useReaderSearch(getSession: () => ReaderSession | null) {
     const offset = markRect.left - bodyRect.left;
     const state = session.getState();
     const total = state.page.total;
-    const step = state.page.iframeWidth;
+    const step = doc.documentElement.clientWidth;
     return step > 0 ? Math.max(0, Math.min(total - 1, Math.floor(offset / step))) : 0;
   }
 

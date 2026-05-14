@@ -12,12 +12,6 @@ export interface ReaderHostOptions extends BaseHostOptions {
   transformContent?: (html: string, bookId: string, chapterId: string) => Promise<string>;
 }
 
-/**
- * Reflowable reader host — creates an iframe, manages CSS-column pagination,
- * resolves EPUB resources (images/css/fonts → blob URLs), and handles internal links.
- *
- * Used by ReflowableReader for epub/txt formats.
- */
 export class ReaderHost extends BaseHost {
   private iframe!: HTMLIFrameElement;
   private iframeDoc!: Document;
@@ -48,18 +42,13 @@ export class ReaderHost extends BaseHost {
     initialPage?: Partial<{
       current: number;
       total: number;
-      iframeWidth: number;
       pendingTarget: number | null;
     }>,
-    initialScroll?: Partial<{ windowStart: number; windowEnd: number; progress: number }>,
+    initialScroll?: Partial<{ progress: number }>,
     format = "",
   ): void {
     this.bookFormat = format;
     super.init(bookId, chapters, chapterIndex, mode, initialPage, initialScroll);
-  }
-
-  loadChapter(chapterId: string, html: string): void {
-    this.dispatch({ type: "CHAPTER_LOADED", chapterId, html });
   }
 
   nextPage(): void {
@@ -119,10 +108,10 @@ export class ReaderHost extends BaseHost {
           this.iframeDoc.querySelector(`[name="${CSS.escape(anchor)}"]`);
         if (el) {
           if (this.state.mode === "pagination") {
-            const offset =
-              el.getBoundingClientRect().left - this.iframeDoc.body.getBoundingClientRect().left;
-            const step = this.state.page.iframeWidth || this.iframeDoc.documentElement.clientWidth;
+            const step = this.iframeDoc.documentElement.clientWidth;
             if (step > 0) {
+              const offset =
+                el.getBoundingClientRect().left - this.iframeDoc.body.getBoundingClientRect().left;
               this.dispatch({ type: "GO_TO_PAGE", page: Math.floor(offset / step) });
             }
           } else {
@@ -146,10 +135,10 @@ export class ReaderHost extends BaseHost {
         this.iframeDoc.querySelector(`[name="${CSS.escape(anchor)}"]`);
       if (el) {
         if (this.state.mode === "pagination") {
-          const offset =
-            el.getBoundingClientRect().left - this.iframeDoc.body.getBoundingClientRect().left;
-          const step = this.state.page.iframeWidth || this.iframeDoc.documentElement.clientWidth;
+          const step = this.iframeDoc.documentElement.clientWidth;
           if (step > 0) {
+            const offset =
+              el.getBoundingClientRect().left - this.iframeDoc.body.getBoundingClientRect().left;
             this.dispatch({ type: "GO_TO_PAGE", page: Math.floor(offset / step) });
           }
         } else {
@@ -176,39 +165,12 @@ export class ReaderHost extends BaseHost {
 
   protected async runEffect(effect: ReaderEffect): Promise<void> {
     switch (effect.type) {
-      case "RENDER_HTML": {
-        this.iframeDoc.body.innerHTML = effect.html;
-        break;
-      }
-      case "SET_PAGE_CSS":
+      case "PAGE_POSITION_CHANGED":
         this.iframeDoc.documentElement.style.setProperty("--current-page", String(effect.page));
         break;
-      case "SET_MODE_CSS":
+      case "MODE_CHANGED":
         this.iframeDoc.documentElement.dataset.mode = effect.mode;
         break;
-      case "SET_PAGE_MARGIN_CSS":
-        this.iframeDoc.documentElement.style.setProperty("--page-margin", `${effect.margin}px`);
-        break;
-      case "MEASURE_LAYOUT": {
-        requestAnimationFrame(() => {
-          if (!this.iframeDoc.body) return;
-          const contentWidth = this.iframeDoc.body.scrollWidth;
-          const iframeWidth = this.iframeDoc.documentElement.clientWidth;
-          this.dispatch({
-            type: "LAYOUT_MEASURED",
-            contentWidth: Math.max(contentWidth, iframeWidth),
-            iframeWidth: Math.max(iframeWidth, 1),
-          });
-        });
-        break;
-      }
-      case "SCROLL_INTO_VIEW": {
-        const el = this.iframeDoc.querySelector<HTMLElement>(
-          `[data-chapter-id="${effect.chapterId}"]`,
-        );
-        if (el) el.scrollIntoView({ behavior: "instant", block: "start" });
-        break;
-      }
       default:
         await this.runGenericEffect(effect);
     }
@@ -238,7 +200,24 @@ export class ReaderHost extends BaseHost {
       processed = await this.transformContent(processed, bookId, chapterId);
     }
 
-    this.loadChapter(chapterId, processed);
+    // Dispatch CHAPTER_LOADED so the machine records the chapter change.
+    this.dispatch({ type: "CHAPTER_LOADED", chapterId, html: processed });
+
+    // Render directly — no longer goes through a machine effect.
+    this.iframeDoc.body.innerHTML = processed;
+
+    // Measure layout and report page count back to the machine.
+    requestAnimationFrame(() => {
+      if (!this.iframeDoc.body) return;
+      const contentWidth = this.iframeDoc.body.scrollWidth;
+      const iframeWidth = this.iframeDoc.documentElement.clientWidth;
+      const step = Math.max(iframeWidth, 1);
+      const total = Math.max(1, Math.ceil(contentWidth / step));
+      this.dispatch({
+        type: "PAGE_COUNT_UPDATED",
+        total,
+      });
+    });
   }
 
   // ── Iframe ──

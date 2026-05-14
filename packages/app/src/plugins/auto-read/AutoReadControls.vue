@@ -34,7 +34,7 @@ function tick() {
   setAutoAdvancing(false);
   requestAnimationFrame(() => {
     const newState = s.getState();
-    if (newState.status === "loading-chapter") return;
+    if (newState.status === "loading") return;
     if (
       newState.page.current === prevPage &&
       newState.currentChapterIndex >= newState.chapters.length - 1

@@ -65,7 +65,7 @@ const displayPage = computed(() => currentPageNum.value);
 
 const canPrev = computed(() => currentPageNum.value > 1);
 const canNext = computed(() => currentPageNum.value < totalPages.value);
-const isTransitioning = computed(() => state.value.status === "loading-chapter");
+const isTransitioning = computed(() => state.value.status === "loading");
 
 const outline = computed(() => {
   if (isPdf.value) return outlineChapters.value;
@@ -292,8 +292,33 @@ onMounted(async () => {
       });
     },
     onEffect: async (effect) => {
-      if (effect.type === "EMIT") {
-        void pluginEvents.emit(effect.event as any, effect.payload as any);
+      switch (effect.type) {
+        case "CHAPTER_DID_CHANGE":
+          void pluginEvents.emit("chapter:changed", {
+            bookId: props.book.id,
+            chapterId: effect.chapterId,
+            previousChapterId: effect.previousChapterId ?? undefined,
+          });
+          break;
+        case "PAGE_DID_CHANGE":
+          void pluginEvents.emit("page:changed", {
+            bookId: props.book.id,
+            chapterId: effect.chapterId,
+            page: effect.page,
+            totalPages: effect.totalPages,
+          });
+          break;
+        case "CONTENT_DID_LOAD":
+          void pluginEvents.emit("content:loaded", {
+            bookId: props.book.id,
+            chapterId: effect.chapterId,
+          });
+          break;
+        case "READER_UNMOUNTED":
+          void pluginEvents.emit("reader:unmounted", {
+            bookId: effect.bookId,
+          });
+          break;
       }
     },
   });

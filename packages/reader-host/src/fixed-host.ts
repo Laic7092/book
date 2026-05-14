@@ -31,10 +31,9 @@ export class FixedHost extends BaseHost {
     initialPage?: Partial<{
       current: number;
       total: number;
-      iframeWidth: number;
       pendingTarget: number | null;
     }>,
-    initialScroll?: Partial<{ windowStart: number; windowEnd: number; progress: number }>,
+    initialScroll?: Partial<{ progress: number }>,
   ): void {
     // Fixed-layout always uses pagination — scroll mode is not applicable.
     super.init(bookId, chapters, chapterIndex, "pagination", initialPage, initialScroll);
@@ -96,20 +95,7 @@ export class FixedHost extends BaseHost {
   // ── Protected: effect handling ──
 
   protected async runEffect(effect: ReaderEffect): Promise<void> {
-    switch (effect.type) {
-      case "RENDER_HTML":
-      case "SET_PAGE_CSS":
-      case "SET_MODE_CSS":
-      case "SET_PAGE_MARGIN_CSS":
-      case "SCROLL_INTO_VIEW":
-      case "ZOOM_CHANGED":
-        break;
-      case "MEASURE_LAYOUT":
-        // Handled in fetchAndLoadChapter after the surface has loaded.
-        break;
-      default:
-        await this.runGenericEffect(effect);
-    }
+    await this.runGenericEffect(effect);
   }
 
   // ── Chapter fetching with surface integration ──
@@ -137,11 +123,7 @@ export class FixedHost extends BaseHost {
     // Report page count now that the surface has loaded the chapter.
     const pageCount = this.surface.getPageCount();
     if (pageCount > 0) {
-      this.dispatch({
-        type: "LAYOUT_MEASURED",
-        contentWidth: pageCount,
-        iframeWidth: 1,
-      });
+      this.dispatch({ type: "PAGE_COUNT_UPDATED", total: pageCount });
     }
   }
 }
