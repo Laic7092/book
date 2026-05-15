@@ -1,13 +1,31 @@
 import { ref } from "vue";
 import { searchInBook } from "./engine";
 import type { SearchResult } from "../../core/types";
-import type { ReaderSession } from "@book/reader-core";
+import type { ReaderSession, ReaderState } from "@book/reader-core";
 import { useDocumentMarker } from "../../composables/useDocumentMarker";
 import * as booksStore from "../../storage/books";
 import { useUIStore } from "../../stores/ui";
 
 const uiStore = useUIStore();
 const SEARCH_MARKER_ID = "search-temp";
+
+function waitForState(
+  getState: () => ReaderState,
+  predicate: (s: ReaderState) => boolean,
+  timeoutMs = 5000,
+): Promise<boolean> {
+  if (predicate(getState())) return Promise.resolve(true);
+  const deadline = performance.now() + timeoutMs;
+  return new Promise((resolve) => {
+    const tick = () => {
+      const s = getState();
+      if (predicate(s)) return resolve(true);
+      if (performance.now() > deadline) return resolve(false);
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+}
 
 export function useReaderSearch(getSession: () => ReaderSession | null) {
   const searchQuery = ref("");
@@ -59,10 +77,10 @@ export function useReaderSearch(getSession: () => ReaderSession | null) {
     position: number,
     textLength: number,
     expectedText: string,
-  ) {
+  ): boolean {
     const start = findTextNodeAtOffset(container, position);
     const end = findTextNodeAtOffset(container, position + textLength);
-    if (!start || !end) return;
+    if (!start || !end) return false;
 
     const range = doc.createRange();
     range.setStart(start.node, start.offset);
@@ -75,11 +93,12 @@ export function useReaderSearch(getSession: () => ReaderSession | null) {
         range.setStart(start.node, offset);
         range.setEnd(start.node, offset + expectedText.length);
       } else {
-        return;
+        return false;
       }
     }
 
     getMarker().add({ id: SEARCH_MARKER_ID, range, className: "search-match" });
+    return true;
   }
 
   const doSearch = async () => {
@@ -126,82 +145,65 @@ export function useReaderSearch(getSession: () => ReaderSession | null) {
 
   // ── Result navigation ──
 
-  function findPageFromMark(session: ReaderSession, mark: Element): number {
-    const doc = session.getDocument();
-    if (!doc) return 0;
+  function findPageFromMark(doc: Document, mark: Element, totalPages: number): number {
     const bodyRect = doc.body.getBoundingClientRect();
     const markRect = mark.getBoundingClientRect();
     const offset = markRect.left - bodyRect.left;
-    const state = session.getState();
-    const total = state.page.total;
     const step = doc.documentElement.clientWidth;
-    return step > 0 ? Math.max(0, Math.min(total - 1, Math.floor(offset / step))) : 0;
-  }
-
-  function paginateToElement(el: Element): void {
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    return step > 0 ? Math.max(0, Math.min(totalPages - 1, Math.floor(offset / step))) : 0;
   }
 
   async function navigateToResult(result: SearchResult) {
     const session = getSession();
     if (!session || !result) return;
 
-    const state = session.getState();
-    const targetChapter = state.chapters.find((c) => c.id === result.chapterId);
-    const targetIdx = state.chapters.findIndex((c) => c.id === result.chapterId);
-    if (!targetChapter || targetIdx < 0) return;
+    const targetIdx = session.getState().chapters.findIndex((c) => c.id === result.chapterId);
+    if (targetIdx < 0) return;
 
-    const currentChapter = state.chapters[state.currentChapterIndex];
-    const sameChapter = targetChapter.id === currentChapter?.id;
+    const sameChapter = session.getState().currentChapterIndex === targetIdx;
 
     if (!sameChapter) {
-      session.dispatch({ type: "GO_TO_CHAPTER", chapterId: targetChapter.id, targetPage: 0 });
-
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => resolve(), 5000);
-        const check = () => {
-          const s = session.getState();
-          if (s.currentChapterIndex === targetIdx && s.status === "ready") {
-            clearTimeout(timeout);
-            resolve();
-          } else if (s.error) {
-            clearTimeout(timeout);
-            reject(new Error(s.error || "Chapter load failed"));
-          } else {
-            requestAnimationFrame(check);
-          }
-        };
-        check();
-      }).catch(() => {});
+      session.dispatch({
+        type: "GO_TO_CHAPTER",
+        chapterId: session.getState().chapters[targetIdx].id,
+        targetPage: 0,
+      });
+      await waitForState(
+        () => session.getState(),
+        (s) => s.currentChapterIndex === targetIdx && s.status === "ready",
+      );
     }
 
+    const state = session.getState();
     const doc = session.getDocument();
     if (!doc?.body) return;
 
     ensureSearchStyle(doc);
 
-    const isPagination = session.getState().mode === "pagination";
+    const isPagination = state.mode === "pagination";
+    const targetChapterId = state.chapters[targetIdx].id;
     const container = isPagination
       ? doc.body
-      : (doc.querySelector(`[data-chapter-id="${targetChapter.id}"]`) as HTMLElement | null) ||
+      : (doc.querySelector(`[data-chapter-id="${targetChapterId}"]`) as HTMLElement | null) ||
         doc.body;
 
-    applyTempHighlight(doc, container, result.position, result.text.length, result.text);
+    if (!applyTempHighlight(doc, container, result.position, result.text.length, result.text))
+      return;
 
-    await new Promise((r) => setTimeout(r, 50));
+    // rAF ensures browser has completed layout after DOM mutation
+    await new Promise((r) => requestAnimationFrame(r));
     const mark = getMarker().getElement(SEARCH_MARKER_ID);
     if (mark) {
       if (isPagination) {
-        const page = findPageFromMark(session, mark);
+        const page = findPageFromMark(doc, mark, state.page.total);
         session.dispatch({ type: "GO_TO_PAGE", page });
       } else {
-        paginateToElement(mark);
+        mark.scrollIntoView({ behavior: "smooth", block: "center" });
       }
     }
 
     hasHighlights.value = true;
     currentResultIndex.value = searchResults.value.findIndex((r) => r === result);
-
     uiStore.closeModal();
   }
 

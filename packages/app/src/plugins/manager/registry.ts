@@ -13,10 +13,9 @@ import {
   registeredHeaderActions,
   registeredContentTransformers,
   registeredPages,
-  dynamicCapabilities,
   type TrackedContext,
 } from "../context";
-import type { ContentTransformer, SearchApi, ToolbarItem, HeaderAction } from "../types";
+import type { ContentTransformer, ToolbarItem, HeaderAction } from "../types";
 
 // ── Internal state ──
 
@@ -142,12 +141,6 @@ export async function initializePlugins(bootstrap?: PluginBootstrap): Promise<vo
   const { sorted, errors } = resolveDepGraph();
   for (const err of errors) {
     console.warn(`[Plugins] ${err}`);
-  }
-
-  // Reset dynamic capabilities only on first initialization
-  const isFirstInit = pluginContexts.size === 0;
-  if (isFirstInit) {
-    dynamicCapabilities.searchApis.length = 0;
   }
 
   for (const id of sorted) {
@@ -405,11 +398,6 @@ export function getHeaderActions(): HeaderAction[] {
 
 export function getPageComponent(name: string): Component | undefined {
   return registeredPages.value[name];
-}
-
-/** Returns all registered search APIs from plugins (dynamic capabilities + static provides). */
-export function getSearchApis(): SearchApi[] {
-  return [...dynamicCapabilities.searchApis];
 }
 
 // ── Content transformers ──

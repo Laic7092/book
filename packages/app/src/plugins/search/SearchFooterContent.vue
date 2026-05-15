@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, watch, onUnmounted } from "vue";
-import { getSearchApis } from "../manager/registry";
+import { getSearchApi } from ".";
 import { useUIStore } from "../../stores/ui";
 
 const uiStore = useUIStore();
 
-const api = computed(() => getSearchApis()[0] ?? null);
+const api = computed(() => getSearchApi());
 
 // Suppress header/footer/toolbar when search highlights are active
 const active = computed(() => !!(api.value?.hasHighlights && api.value?.searchResults.length));
@@ -18,7 +18,7 @@ watch(
 );
 
 function handlePrevMatch() {
-  const s = getSearchApis()[0];
+  const s = getSearchApi();
   const idx = s?.goToPreviousMatch();
   if (idx !== undefined && s?.searchResults) {
     s.navigateToResult(s.searchResults[idx]);
@@ -26,7 +26,7 @@ function handlePrevMatch() {
 }
 
 function handleNextMatch() {
-  const s = getSearchApis()[0];
+  const s = getSearchApi();
   const idx = s?.goToNextMatch();
   if (idx !== undefined && s?.searchResults) {
     s.navigateToResult(s.searchResults[idx]);
@@ -34,7 +34,7 @@ function handleNextMatch() {
 }
 
 function handleClear() {
-  const s = getSearchApis()[0];
+  const s = getSearchApi();
   s?.clearHighlights();
   uiStore.setSuppressControls(false);
 }

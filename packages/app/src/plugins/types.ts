@@ -1,5 +1,4 @@
 import type { Component, App } from "vue";
-import type { SearchResult } from "../core/types";
 import type { ThemeRegistry } from "../core/theme-registry";
 import type { ReaderSettings } from "./settings/types";
 import type { ReaderSession } from "@book/reader-core";
@@ -9,19 +8,6 @@ import type { ServerClient } from "../utils/api";
 export type Scene = "app" | "book-import" | "bookshelf" | "reader";
 
 // ── Search API (defined here so core doesn't need to know about search) ──
-
-export interface SearchApi {
-  searchQuery: string;
-  searchResults: SearchResult[];
-  hasHighlights: boolean;
-  currentResultIndex: number;
-  doSearch: () => Promise<void>;
-  clearHighlights: () => Promise<void>;
-  goToNextMatch: () => number | undefined;
-  goToPreviousMatch: () => number | undefined;
-  navigateToResult: (result: SearchResult) => Promise<void>;
-  reset: () => void;
-}
 
 /** Map of event names to their payload types. */
 export interface PluginEventMap {
@@ -186,11 +172,6 @@ export interface PluginContext {
   events: IEventBus<PluginEventMap>;
   /** Filter hooks — plugins modify config before reader init. */
   hooks: HookRegistry;
-  /** Register/unregister runtime capabilities. */
-  capabilities: {
-    register<K extends keyof CapabilityMap>(key: K, value: CapabilityMap[K][number]): void;
-    unregister<K extends keyof CapabilityMap>(key: K, value: CapabilityMap[K][number]): void;
-  };
   /** Register a cleanup callback called when the plugin is disabled/removed. */
   onCleanup(fn: () => void | Promise<void>): void;
   /** ReaderSession getter — returns null before a book is opened. */
@@ -207,12 +188,6 @@ export interface PluginContext {
 
 export interface PluginBootstrap {
   app: App<Element>;
-}
-
-// ── Capability map ──
-
-export interface CapabilityMap {
-  searchApis: SearchApi[];
 }
 
 // ── Plugin interface ──

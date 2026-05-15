@@ -2,7 +2,14 @@ import { reactive } from "vue";
 import { useReaderSearch } from "./useReaderSearch";
 import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
-import type { SearchApi } from "../types";
+
+type SearchApi = ReturnType<typeof useReaderSearch>;
+
+let activeApi: SearchApi | null = null;
+
+export function getSearchApi(): SearchApi | null {
+  return activeApi;
+}
 
 export const searchPlugin: Plugin = {
   [PLUGIN_BRAND]: true as const,
@@ -10,11 +17,11 @@ export const searchPlugin: Plugin = {
   name: "Full-Text Search",
   version: "1.0.0",
   setup(ctx) {
-    const api = reactive(useReaderSearch(ctx.readerSession)) as unknown as SearchApi;
-    ctx.capabilities.register("searchApis", api);
+    // reactive unwraps nested refs — components access properties without .value
+    activeApi = reactive(useReaderSearch(ctx.readerSession)) as unknown as SearchApi;
 
     ctx.onCleanup(() => {
-      ctx.capabilities.unregister("searchApis", api);
+      activeApi = null;
     });
 
     ctx.ui.registerModal("search", () => import("./SearchPanel.vue"));

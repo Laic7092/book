@@ -2,11 +2,11 @@
 import { onUnmounted } from "vue";
 import type { SearchResult } from "../../core/types";
 import ModalHeader from "../../components/modals/ModalHeader.vue";
-import { getSearchApis } from "../manager/registry";
+import { getSearchApi } from ".";
 
 const emit = defineEmits<{ (e: "close"): void }>();
 
-const api = getSearchApis()[0]!;
+const api = getSearchApi()!;
 
 let _closeByNavigation = false;
 

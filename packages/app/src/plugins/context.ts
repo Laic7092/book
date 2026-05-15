@@ -11,7 +11,6 @@ import type {
   BookshelfMenuAction,
   CssAPI,
   PluginEventMap,
-  CapabilityMap,
   IEventBus,
   EventHandler,
   ContentTransformer,
@@ -377,7 +376,6 @@ export function createPluginContext(id: string, _bootstrap: PluginBootstrap): Pl
     },
     events: pluginEvents,
     hooks: pluginHooks,
-    capabilities: createCapabilitySlots(),
     onCleanup(_fn: () => void | Promise<void>) {},
     readerSession: () => getReaderSession(),
     registerContentTransformer,
@@ -427,8 +425,6 @@ export function createTrackedContext(id: string, _bootstrap: PluginBootstrap): T
   const rawUi = createUISlots();
   const cleanupFns: (() => void | Promise<void>)[] = [];
   const eventUnsubs: (() => void)[] = [];
-  const registeredCapKeys: { key: keyof CapabilityMap; value: unknown }[] = [];
-
   const trackedCss = createTrackedCss(cleanupFns);
 
   const ui: UISlots = {
@@ -532,20 +528,6 @@ export function createTrackedContext(id: string, _bootstrap: PluginBootstrap): T
     run: pluginHooks.run.bind(pluginHooks),
   };
 
-  const rawCaps = createCapabilitySlots();
-
-  const capabilities = {
-    register<K extends keyof CapabilityMap>(key: K, value: CapabilityMap[K][number]) {
-      rawCaps.register(key, value);
-      registeredCapKeys.push({ key, value });
-    },
-    unregister<K extends keyof CapabilityMap>(key: K, value: CapabilityMap[K][number]) {
-      rawCaps.unregister(key, value);
-      const idx = registeredCapKeys.findIndex((r) => r.key === key && r.value === value);
-      if (idx >= 0) registeredCapKeys.splice(idx, 1);
-    },
-  };
-
   const trackedTransformers: ContentTransformer[] = [];
 
   return {
@@ -553,7 +535,6 @@ export function createTrackedContext(id: string, _bootstrap: PluginBootstrap): T
     ui,
     events,
     hooks,
-    capabilities,
     onCleanup(fn: () => void | Promise<void>) {
       cleanupFns.push(fn);
     },
@@ -601,35 +582,10 @@ export function createTrackedContext(id: string, _bootstrap: PluginBootstrap): T
         if (r.status === "rejected") console.error("[TrackedContext] Cleanup error:", r.reason);
       }
       cleanupFns.length = 0;
-      for (const { key, value } of registeredCapKeys) {
-        rawCaps.unregister(key as keyof CapabilityMap, value as never);
-      }
-      registeredCapKeys.length = 0;
       for (const t of trackedTransformers) {
         unregisterContentTransformer(t);
       }
       trackedTransformers.length = 0;
-    },
-  };
-}
-
-// ── Dynamic capability storage ──
-
-type CapabilityArrayMap = { [K in keyof CapabilityMap]: CapabilityMap[K][number][] };
-
-export const dynamicCapabilities: CapabilityArrayMap = {
-  searchApis: [],
-};
-
-export function createCapabilitySlots() {
-  return {
-    register<K extends keyof CapabilityMap>(key: K, value: CapabilityMap[K][number]) {
-      (dynamicCapabilities[key] as CapabilityMap[K][number][]).push(value);
-    },
-    unregister<K extends keyof CapabilityMap>(key: K, value: CapabilityMap[K][number]) {
-      const arr = dynamicCapabilities[key] as CapabilityMap[K][number][];
-      const idx = arr.indexOf(value);
-      if (idx >= 0) arr.splice(idx, 1);
     },
   };
 }
