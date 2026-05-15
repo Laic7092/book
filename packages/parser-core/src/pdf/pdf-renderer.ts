@@ -1,48 +1,61 @@
-/**
- * Self-contained PDF renderer using pdf.js.
- * Follows the classic PDF.js Hello World pattern:
- * getDocument → getPage → page.render(canvasContext).
- * Manages its own canvas inside a host-provided container.
- */
+// pdf-viewer-renderer.ts
+import "pdfjs-dist/web/pdf_viewer.css";
+import * as pdfjsLib from "pdfjs-dist";
+import * as pdfjsViewer from "pdfjs-dist/web/pdf_viewer.mjs";
+
 export class PdfRenderer {
+  // ── 公开属性 ──
+  onPageChange?: (page: number, total: number) => void;
+
+  // ── 内部状态 ──
   private container: HTMLElement | null = null;
   private pdfDoc: any = null;
-  private canvas: HTMLCanvasElement | null = null;
+  private pdfViewer: pdfjsViewer.PDFViewer | null = null;
   private currentPage = 0;
   private pageCount = 0;
   private scale = 1;
-  private rotation = 0;
-  /** Incremented before each render; any in-flight render with a stale id is discarded. */
-  private renderId = 0;
 
-  onPageChange?: (page: number, total: number) => void;
+  constructor() {
+    // 可传入额外配置，这里保持简单
+  }
 
+  /**
+   * 挂载到指定容器并打开 PDF。
+   * @param container  宿主 DOM 元素
+   * @param href       要跳转的页码字符串，例如 "3"
+   * @param rawData    文件的 ArrayBuffer
+   */
   async mount(container: HTMLElement, href: string, rawData: ArrayBuffer): Promise<void> {
+    // 如果之前在别的容器上挂载过，先清理
+    this.unmount();
+
     this.container = container;
     const pageNum = parseInt(href, 10);
     if (isNaN(pageNum)) return;
 
+    // 初始化 PDF.js 文档（只需要一次）
     if (!this.pdfDoc) {
       await this.initPdf(rawData);
     }
     this.currentPage = pageNum - 1;
 
-    if (!this.canvas) {
-      this.canvas = document.createElement("canvas");
-      this.canvas.style.display = "block";
-      container.appendChild(this.canvas);
-    }
+    // 创建 Viewer 实例
+    await this.createViewer();
 
-    await this.renderCurrentPage();
+    // 跳转到目标页
+    this.goToPage(this.currentPage);
   }
 
+  /** 清理当前容器中的所有 Viewer 元素 */
   unmount(): void {
-    this.renderId++;
-    this.canvas?.remove();
-    this.canvas = null;
-    if (this.container) {
-      this.container.innerHTML = "";
+    if (this.pdfViewer) {
+      // 移除 viewer 生成的所有 DOM
+      if (this.container) {
+        this.container.innerHTML = "";
+      }
+      this.pdfViewer = null;
     }
+    this.container = null;
   }
 
   getCurrentPage(): number {
@@ -54,47 +67,62 @@ export class PdfRenderer {
   }
 
   goToPage(page: number): void {
+    if (page < 0 || page >= this.pageCount) return;
     this.currentPage = page;
-    void this.renderCurrentPage();
+    if (this.pdfViewer) {
+      this.pdfViewer.currentPageNumber = page + 1;
+    }
   }
 
   zoomIn(): void {
-    this.scale *= 1.2;
-    void this.renderCurrentPage();
+    if (!this.pdfViewer) return;
+    const currentScale = this.pdfViewer.currentScale;
+    this.scale = currentScale * 1.2;
+    this.pdfViewer.currentScale = this.scale;
   }
 
   zoomOut(): void {
-    this.scale /= 1.2;
-    void this.renderCurrentPage();
+    if (!this.pdfViewer) return;
+    const currentScale = this.pdfViewer.currentScale;
+    this.scale = currentScale / 1.2;
+    this.pdfViewer.currentScale = this.scale;
   }
 
   zoomFit(): void {
-    this.scale = 1;
-    void this.renderCurrentPage();
+    if (this.pdfViewer) {
+      this.pdfViewer.currentScaleValue = "page-fit";
+      this.scale = 1; // 重置标记，下次 zoomIn 会基于实际 scale
+    }
   }
 
   zoomWidth(): void {
-    this.scale = -1; // sentinel: fit width
-    void this.renderCurrentPage();
+    if (this.pdfViewer) {
+      this.pdfViewer.currentScaleValue = "page-width";
+      this.scale = 1;
+    }
   }
 
+  /** 旋转功能通过 CSS 实现，会对 viewer 容器整体旋转 */
   rotate(degrees: number): void {
-    this.rotation = (((this.rotation + degrees) % 360) + 360) % 360;
-    void this.renderCurrentPage();
+    if (!this.container || !this.pdfViewer) return;
+    const viewerDiv = this.container.firstElementChild as HTMLElement;
+    if (!viewerDiv) return;
+
+    const current = viewerDiv.style.transform.match(/rotate\(([^)]+)deg\)/);
+    const currentDeg = current ? parseFloat(current[1]) : 0;
+    const newDeg = currentDeg + degrees;
+    viewerDiv.style.transform = `rotate(${newDeg}deg)`;
+    viewerDiv.style.transformOrigin = "center center";
   }
 
   destroy(): void {
-    this.renderId++;
-    this.canvas?.remove();
-    this.canvas = null;
+    this.unmount();
     this.pdfDoc = null;
-    this.container = null;
   }
 
-  // ── Private ──
+  // ── 私有方法 ──
 
   private async initPdf(rawData: ArrayBuffer): Promise<void> {
-    const pdfjsLib = await import("pdfjs-dist");
     pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
       "pdfjs-dist/build/pdf.worker.min.mjs",
       import.meta.url,
@@ -109,63 +137,43 @@ export class PdfRenderer {
     this.pageCount = this.pdfDoc.numPages;
   }
 
-  private async renderCurrentPage(): Promise<void> {
-    if (!this.pdfDoc || !this.canvas || !this.container) return;
+  private async createViewer(): Promise<void> {
+    if (!this.container || !this.pdfDoc) return;
 
-    const id = ++this.renderId;
+    // 清空容器（mount 时可能已有旧内容）
+    this.container.innerHTML = "";
 
-    let page: any;
-    try {
-      page = await this.pdfDoc.getPage(this.currentPage + 1);
-    } catch {
-      return;
-    }
-    // Invalidated while waiting for getPage
-    if (id !== this.renderId) return;
+    // 创建 viewer 所需的 DOM 结构
+    const viewerDiv = document.createElement("div");
+    viewerDiv.className = "pdfViewer";
+    this.container.appendChild(viewerDiv);
 
-    // Determine effective scale
-    const containerWidth = this.container.clientWidth;
-    const containerHeight = this.container.clientHeight;
-    if (containerWidth <= 0 || containerHeight <= 0) return;
+    // 准备事件总线与辅助服务
+    const eventBus = new pdfjsViewer.EventBus();
+    const linkService = new pdfjsViewer.PDFLinkService({ eventBus });
 
-    const baseViewport = page.getViewport({ scale: 1, rotation: this.rotation });
+    this.pdfViewer = new pdfjsViewer.PDFViewer({
+      container: this.container as HTMLDivElement,
+      viewer: viewerDiv,
+      eventBus,
+      linkService,
+      findController: undefined,
+      scriptingManager: undefined,
+    });
 
-    let effectiveScale: number;
-    if (this.scale === -1) {
-      // zoomWidth mode: fit page width to container
-      effectiveScale = containerWidth / baseViewport.width;
-    } else if (this.scale <= 0) {
-      // zoomFit mode: fit entire page
-      const sx = containerWidth / baseViewport.width;
-      const sy = containerHeight / baseViewport.height;
-      effectiveScale = Math.min(sx, sy);
-    } else {
-      effectiveScale = this.scale;
-    }
+    linkService.setViewer(this.pdfViewer);
 
-    const viewport = page.getViewport({ scale: effectiveScale, rotation: this.rotation });
+    // 绑定页面变化事件，用于 onPageChange 回调
+    eventBus.on("pagechanging", (evt: { pageNumber: number }) => {
+      this.currentPage = evt.pageNumber - 1;
+      this.onPageChange?.(this.currentPage, this.pageCount);
+    });
 
-    // HiDPI/retina support
-    const outputScale = window.devicePixelRatio || 1;
-    this.canvas.width = Math.floor(viewport.width * outputScale);
-    this.canvas.height = Math.floor(viewport.height * outputScale);
-    this.canvas.style.width = `${Math.floor(viewport.width)}px`;
-    this.canvas.style.height = `${Math.floor(viewport.height)}px`;
+    // 加载文档并设置
+    this.pdfViewer.setDocument(this.pdfDoc);
+    linkService.setDocument(this.pdfDoc, null);
 
-    const ctx = this.canvas.getContext("2d")!;
-    const transform =
-      outputScale !== 1 ? ([outputScale, 0, 0, outputScale, 0, 0] as unknown as any[]) : undefined;
-
-    // Cancel any previous in-flight render
-    try {
-      await page.render({ canvasContext: ctx, viewport, transform }).promise;
-    } catch {
-      return; // Render was cancelled by pdf.js internals or errored
-    }
-
-    // Invalidated while rendering
-    if (id !== this.renderId) return;
-
-    this.onPageChange?.(this.currentPage, this.pageCount);
+    // 等待至少一页渲染完成，确保后续缩放等操作有效
+    await this.pdfViewer.firstPagePromise;
   }
 }

@@ -387,9 +387,10 @@ onUnmounted(() => {
 }
 
 .fl-surface-wrapper {
-  position: relative;
-  flex: 1;
-  overflow: hidden;
+  position: absolute;
+  overflow: auto;
+  height: 100%;
+  width: 100%;
 }
 
 .fl-loading-overlay {
