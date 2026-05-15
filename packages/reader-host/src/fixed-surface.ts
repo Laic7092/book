@@ -16,6 +16,7 @@ export interface FixedLayoutSurface {
   zoomFit(): void;
   zoomWidth(): void;
   rotate(degrees: number): void;
+  getCurrentScale(): number;
   destroy(): void;
 }
 
@@ -44,6 +45,7 @@ export interface SelfContainedRenderer {
   zoomFit(): void;
   zoomWidth(): void;
   rotate(degrees: number): void;
+  getCurrentScale(): number;
 
   /** Host sets this — renderer calls when its current page changes autonomously. */
   onPageChange?: (page: number, total: number) => void;

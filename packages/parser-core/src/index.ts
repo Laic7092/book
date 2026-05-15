@@ -3,6 +3,7 @@
 
 export type { BookParser, ParserResult, ChapterData } from "./types";
 export { PdfRenderer } from "./pdf/pdf-renderer";
+export type { PdfOutlineItem } from "./pdf/pdf-renderer";
 export {
   registerParserLoader,
   getParserForFormat,
