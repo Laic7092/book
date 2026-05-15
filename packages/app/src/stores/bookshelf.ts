@@ -8,6 +8,7 @@ import { getCoverBlob, deleteCoverBlob } from "../storage/books";
 import { pluginEvents } from "../plugins/context";
 import * as booksStore from "../storage/books";
 import { useUIStore } from "./ui";
+import { truncateTitle } from "../utils/constants";
 import { assertValidBookFile } from "../utils/validation";
 import { getParserForFile, loadParserForFormat } from "@book/parser-core";
 
@@ -19,6 +20,14 @@ export interface BookshelfState {
   isUploading: boolean;
   searchQuery: string;
   coverUrls: Map<string, string>;
+}
+
+async function computeFileHash(file: File): Promise<string> {
+  const chunk = file.slice(0, 256 * 1024);
+  const buffer = await chunk.arrayBuffer();
+  const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 export const useBookshelfStore = defineStore("bookshelf", {
@@ -71,6 +80,16 @@ export const useBookshelfStore = defineStore("bookshelf", {
       assertValidBookFile(file);
       this.isUploading = true;
       try {
+        const contentHash = await computeFileHash(file);
+        const existing = this.books.find((b) => b.contentHash === contentHash);
+        if (existing) {
+          useUIStore().triggerToast(
+            `${file.name} 已导入为「${truncateTitle(existing.title)}」`,
+            true,
+          );
+          return;
+        }
+
         const ext = file.name.split(".").pop()?.toLowerCase();
         if (ext) await loadParserForFormat(ext);
         const parser = getParserForFile(file);
@@ -78,7 +97,7 @@ export const useBookshelfStore = defineStore("bookshelf", {
           throw new Error(`Unsupported file format: ${file.type || file.name}`);
         }
         const result = await parser.parse(file);
-        const parsedBook = mapParserResult(result, parser.format, file.size);
+        const parsedBook = mapParserResult(result, parser.format, file.size, contentHash);
         await booksStore.saveBook(parsedBook, parser);
         await this.loadBooks();
         return { book: parsedBook.book, chapters: parsedBook.chapters };

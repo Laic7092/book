@@ -169,7 +169,7 @@ export async function updateLastRead(bookId: string): Promise<void> {
  */
 export async function updateBook(
   bookId: string,
-  partial: Partial<Pick<Book, "title" | "author" | "folderId" | "coverUrl">>,
+  partial: Partial<Pick<Book, "title" | "author" | "folderId" | "coverUrl" | "contentHash">>,
 ): Promise<Book | undefined> {
   const book = await getBook(bookId);
   if (!book) return undefined;

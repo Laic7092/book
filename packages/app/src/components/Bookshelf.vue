@@ -239,6 +239,7 @@ async function handleFileUpload(e: Event) {
 
   try {
     const result = await bookshelfStore.addBookFromFile(file);
+    if (!result) return;
     const toast = formatBookToast(result.book.title, "added to library");
     uiStore.triggerToastWithTitle(toast.title, toast.message);
   } catch (err) {

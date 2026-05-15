@@ -123,6 +123,7 @@ async function importBook() {
     const file = new File([blob], fileName, { type: "text/plain" });
 
     const result = await bookshelfStore.addBookFromFile(file);
+    if (!result) return;
     uiStore.triggerToast(`《${result.book.title}》已导入 (${chapters.value.length} 章)`);
     goHome();
   } catch (err) {

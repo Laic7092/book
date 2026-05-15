@@ -106,6 +106,7 @@ async function importBook(entry: OpdsEntry, downloadUrl?: string, mimeType?: str
     const filename = entry.title.replace(/[/<>:"\\|?*]/g, "").slice(0, 60) + ext;
     const file = new File([blob], filename, { type: type || "application/epub+zip" });
     const result = await bookshelfStore.addBookFromFile(file);
+    if (!result) return;
     uiStore.triggerToast(`"${result.book.title}" imported`);
   } catch (err) {
     uiStore.triggerToast(

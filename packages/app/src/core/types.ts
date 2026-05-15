@@ -18,6 +18,7 @@ export interface Book {
   addedAt: number;
   lastReadAt?: number;
   folderId?: string;
+  contentHash?: string;
 }
 
 export interface Folder {
@@ -90,6 +91,7 @@ export function mapParserResult(
   result: ParserResult,
   format: string,
   fileSize: number,
+  contentHash?: string,
 ): ParsedBook {
   const book: Book = {
     id: result.id,
@@ -99,6 +101,7 @@ export function mapParserResult(
     format,
     fileSize,
     addedAt: Date.now(),
+    contentHash,
   };
   const chapters: Chapter[] = result.chapters.map((ch: ChapterData) => ({
     id: ch.id,
