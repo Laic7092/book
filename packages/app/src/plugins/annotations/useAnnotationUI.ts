@@ -1,7 +1,7 @@
 import { ref, watch, computed, onUnmounted } from "vue";
 import type { Annotation } from "../../core/types";
 import {
-  getAnnotationSession,
+  getReaderSession,
   useAnnotationStore,
   useAnnotationFilters,
   createAnnotation,
@@ -10,7 +10,7 @@ import { useAnnotationRenderer } from "./useAnnotationRenderer";
 import { generateCfiFromRange } from "../../utils/epub-cfi";
 
 export function useAnnotationUI() {
-  const session = getAnnotationSession();
+  const session = getReaderSession();
   const store = useAnnotationStore();
   const { currentBookId, currentChapterId } = useAnnotationFilters();
 

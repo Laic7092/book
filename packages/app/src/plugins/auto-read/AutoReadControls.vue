@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
-import { getAutoReadSession, setAutoAdvancing, setOnUserPageChange } from "./index";
+import { setAutoAdvancing, setOnUserPageChange } from "./index";
+import { getReaderSession } from "@book/reader-host";
 
 const isPlaying = ref(false);
 const intervalSec = ref(5);
@@ -26,7 +27,7 @@ function nextPreset() {
 function tick() {
   lastTick = Date.now();
   progress.value = 0;
-  const s = getAutoReadSession();
+  const s = getReaderSession();
   if (!s) return;
   const prevPage = s.getState().page.current;
   setAutoAdvancing(true);
@@ -46,7 +47,7 @@ function tick() {
 
 function start() {
   if (raf !== null) return;
-  const s = getAutoReadSession();
+  const s = getReaderSession();
   if (!s) return;
   isPlaying.value = true;
   lastTick = Date.now();

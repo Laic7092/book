@@ -2,7 +2,7 @@ import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
 import { createEntityStore, type EntityStore } from "../store-factory";
 import type { Bookmark } from "../../core/types";
-import type { ReaderSession } from "@book/reader-host";
+import { getReaderSession } from "@book/reader-host";
 import {
   LEGACY_FALLBACK_CFI,
   generateCfiFromElement,
@@ -13,17 +13,11 @@ import { stripHtml } from "../../utils/validation";
 // ── Module-level state (DI via closure, no global setter) ──
 
 let _store: EntityStore<Bookmark> | null = null;
-let _session: (() => ReaderSession | null) | null = null;
 
 /** Access the reactive bookmark store from Vue components. */
 export function useBookmarkStore(): EntityStore<Bookmark> {
   if (!_store) throw new Error("[bookmarks] Plugin not initialized — setup() hasn't run yet");
   return _store;
-}
-
-/** Access the reader host from Vue components. */
-export function getBookmarkSession(): ReaderSession | null {
-  return _session?.() ?? null;
 }
 
 // ── Legacy migration helpers ──
@@ -70,7 +64,7 @@ function createBookmark(
 
 /** Compute CFI from current reading position and persist a bookmark. */
 export async function addBookmarkFromHost(): Promise<void> {
-  const session = _session?.();
+  const session = getReaderSession();
   if (!session || !_store) return;
 
   const s = session.getState();
@@ -170,7 +164,6 @@ export const bookmarksPlugin: Plugin = {
   version: "1.0.0",
   setup(ctx) {
     _store = createEntityStore<Bookmark>(ctx.storage, "bookmark", (b) => b.id);
-    _session = ctx.readerSession;
 
     ctx.events.on("book:opened", ({ bookId }) => {
       void loadBookmarks(bookId);
@@ -188,6 +181,5 @@ export const bookmarksPlugin: Plugin = {
   },
   teardown() {
     _store = null;
-    _session = null;
   },
 };

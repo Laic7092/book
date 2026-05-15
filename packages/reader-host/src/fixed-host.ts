@@ -1,24 +1,34 @@
 import { type ReaderEffect, type Chapter } from "@book/reader-core";
 import { BaseHost, type BaseHostOptions } from "./base-host";
-import { type FixedLayoutSurface } from "./fixed-surface";
+import { type FixedLayoutSurface, type SelfContainedRenderer } from "./fixed-surface";
 
 export interface FixedHostOptions extends BaseHostOptions {
-  surface: FixedLayoutSurface;
+  /** Host-driven surface (CBZ etc.). */
+  surface?: FixedLayoutSurface;
+  /** Self-driving renderer (PDF etc.). Mutually exclusive with surface. */
+  renderer?: SelfContainedRenderer;
 }
 
 /**
- * Fixed-layout reader host — drives PDF, CBZ, and other single-page-per-view
- * formats via a pluggable rendering surface.
- *
- * The state machine handles chapter-level navigation while sub-page management
- * (PDF internal pages, CBZ images) is delegated to the surface.
+ * Fixed-layout reader host — supports two modes:
+ * - Host-driven (surface): CBZ and other formats where host calls loadChapter/goToPage.
+ * - Autonomous (renderer): PDF where the renderer manages its own DOM and navigation.
  */
 export class FixedHost extends BaseHost {
-  private surface: FixedLayoutSurface;
+  private surface: FixedLayoutSurface | undefined;
+  private renderer: SelfContainedRenderer | undefined;
+  private rendererContainer: HTMLElement | null = null;
 
   constructor(options: FixedHostOptions) {
     super(options);
     this.surface = options.surface;
+    this.renderer = options.renderer;
+
+    if (this.renderer) {
+      this.renderer.onPageChange = (_page, total) => {
+        this.dispatch({ type: "PAGE_COUNT_UPDATED", total });
+      };
+    }
   }
 
   // ── Public API ──
@@ -40,16 +50,20 @@ export class FixedHost extends BaseHost {
   }
 
   nextPage(): void {
-    if (this.surface.getCurrentPage() < this.surface.getPageCount() - 1) {
-      this.surface.goToPage(this.surface.getCurrentPage() + 1);
+    const target = this.renderer ?? this.surface;
+    if (!target) return;
+    if (target.getCurrentPage() < target.getPageCount() - 1) {
+      target.goToPage(target.getCurrentPage() + 1);
     } else {
       this.dispatch({ type: "NEXT_PAGE" });
     }
   }
 
   prevPage(): void {
-    if (this.surface.getCurrentPage() > 0) {
-      this.surface.goToPage(this.surface.getCurrentPage() - 1);
+    const target = this.renderer ?? this.surface;
+    if (!target) return;
+    if (target.getCurrentPage() > 0) {
+      target.goToPage(target.getCurrentPage() - 1);
     } else {
       this.dispatch({ type: "PREV_PAGE" });
     }
@@ -60,36 +74,49 @@ export class FixedHost extends BaseHost {
   }
 
   zoomIn(): void {
-    this.surface.zoomIn();
+    (this.renderer ?? this.surface)?.zoomIn();
   }
 
   zoomOut(): void {
-    this.surface.zoomOut();
+    (this.renderer ?? this.surface)?.zoomOut();
   }
 
   zoomFit(): void {
-    this.surface.zoomFit();
+    (this.renderer ?? this.surface)?.zoomFit();
   }
 
   zoomWidth(): void {
-    this.surface.zoomWidth();
+    (this.renderer ?? this.surface)?.zoomWidth();
   }
 
   rotate(degrees: number): void {
-    this.surface.rotate(degrees);
+    (this.renderer ?? this.surface)?.rotate(degrees);
   }
 
   getDocument(): Document | null {
     return null;
   }
 
-  getSurface(): FixedLayoutSurface {
+  getSurface(): FixedLayoutSurface | undefined {
     return this.surface;
+  }
+
+  getRenderer(): SelfContainedRenderer | undefined {
+    return this.renderer;
+  }
+
+  /**
+   * Set the mount container for autonomous renderer mode (PDF).
+   * Must be called before init() when using a renderer.
+   */
+  setRendererContainer(container: HTMLElement): void {
+    this.rendererContainer = container;
   }
 
   destroy(): void {
     super.destroy();
-    this.surface.destroy();
+    this.renderer?.destroy();
+    this.surface?.destroy();
   }
 
   // ── Protected: effect handling ──
@@ -111,19 +138,25 @@ export class FixedHost extends BaseHost {
 
     this.dispatch({ type: "CHAPTER_LOADED", chapterId, html: html ?? "" });
 
-    if (rawData && chapter.href) {
-      try {
+    if (!rawData || !chapter.href) return;
+
+    try {
+      if (this.renderer && this.rendererContainer) {
+        await this.renderer.mount(this.rendererContainer, chapter.href, rawData);
+      } else if (this.surface) {
         await this.surface.loadChapter(chapter.href, rawData);
-      } catch {
-        this.dispatch({ type: "CHAPTER_FAILED", chapterId, error: "Failed to render chapter" });
-        return;
       }
+    } catch {
+      this.dispatch({ type: "CHAPTER_FAILED", chapterId, error: "Failed to render chapter" });
+      return;
     }
 
-    // Report page count now that the surface has loaded the chapter.
-    const pageCount = this.surface.getPageCount();
-    if (pageCount > 0) {
-      this.dispatch({ type: "PAGE_COUNT_UPDATED", total: pageCount });
+    const target = this.renderer ?? this.surface;
+    if (target) {
+      const pageCount = target.getPageCount();
+      if (pageCount > 0) {
+        this.dispatch({ type: "PAGE_COUNT_UPDATED", total: pageCount });
+      }
     }
   }
 }

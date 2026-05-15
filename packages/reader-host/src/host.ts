@@ -179,6 +179,13 @@ export class ReaderHost extends BaseHost {
   // ── Chapter fetching with resource resolution ──
 
   protected async fetchAndLoadChapter(bookId: string, chapterId: string): Promise<void> {
+    // Clean up previous chapter resources before loading the next.
+    clearResources(this.iframeDoc, this.injectedResources);
+    for (const [, blobUrl] of this.resourceUrls) {
+      URL.revokeObjectURL(blobUrl);
+    }
+    this.resourceUrls.clear();
+
     const { html, rawData } = await this.fetchChapter!(bookId, chapterId);
     if (!html) {
       this.dispatch({ type: "CHAPTER_FAILED", chapterId, error: "Content not found" });

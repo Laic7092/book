@@ -2,7 +2,7 @@ export { ReaderHost } from "./host";
 export type { ReaderHostOptions } from "./host";
 export { FixedHost } from "./fixed-host";
 export type { FixedHostOptions } from "./fixed-host";
-export type { FixedLayoutSurface } from "./fixed-surface";
+export type { FixedLayoutSurface, SelfContainedRenderer } from "./fixed-surface";
 export { BaseHost } from "./base-host";
 export type { BaseHostOptions } from "./base-host";
 export type { ResolvedChapter } from "./content-pipeline";

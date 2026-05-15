@@ -2,6 +2,7 @@ import type { BookParser } from "./types";
 
 const cache = new Map<string, BookParser>();
 const loaders = new Map<string, () => Promise<BookParser>>();
+const extensionToFormat = new Map<string, string>();
 
 export function getParsers(): BookParser[] {
   return [...cache.values()];
@@ -11,8 +12,15 @@ export function getParserForFormat(format: string): BookParser | null {
   return cache.get(format) ?? null;
 }
 
-export function registerParserLoader(format: string, loader: () => Promise<BookParser>): void {
+export function registerParserLoader(
+  format: string,
+  extensions: string[],
+  loader: () => Promise<BookParser>,
+): void {
   loaders.set(format, loader);
+  for (const ext of extensions) {
+    extensionToFormat.set(ext, format);
+  }
 }
 
 export async function loadParserForFormat(format: string): Promise<void> {
@@ -23,20 +31,9 @@ export async function loadParserForFormat(format: string): Promise<void> {
   cache.set(format, parser);
 }
 
-export const EXTENSION_MIME_MAP: Record<string, string> = {
-  txt: "text/plain",
-  epub: "application/epub+zip",
-  pdf: "application/pdf",
-  cbz: "application/vnd.comicbook+zip",
-  fb2: "application/x-fictionbook+xml",
-  html: "text/html",
-  htm: "text/html",
-  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  cbr: "application/vnd.comicbook+rar",
-  mobi: "application/x-mobipocket-ebook",
-  azw3: "application/x-kindle",
-  azw: "application/x-mobipocket-ebook",
-};
+export function getFormatForExtension(ext: string): string | undefined {
+  return extensionToFormat.get(ext);
+}
 
 export function getParserForFile(file: File): BookParser | null {
   const parsers = getParsers();
@@ -46,12 +43,9 @@ export function getParserForFile(file: File): BookParser | null {
   }
 
   const ext = file.name.split(".").pop()?.toLowerCase();
-  if (ext && EXTENSION_MIME_MAP[ext]) {
-    for (const parser of parsers) {
-      if (parser.supportsFormat(EXTENSION_MIME_MAP[ext])) {
-        return parser;
-      }
-    }
+  if (ext) {
+    const format = getFormatForExtension(ext);
+    if (format) return cache.get(format) ?? null;
   }
 
   return null;

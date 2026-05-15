@@ -1,11 +1,6 @@
 import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
 import AutoReadControls from "./AutoReadControls.vue";
-import type { ReaderSession } from "@book/reader-host";
-
-let _session: (() => ReaderSession | null) | null = null;
-
-export const getAutoReadSession = () => _session?.() ?? null;
 
 // Flag: true while auto-read is dispatching NEXT_PAGE (so page:changed events from
 // auto-read itself are distinguishable from user-initiated page changes).
@@ -25,7 +20,6 @@ export const autoReadPlugin: Plugin = {
   name: "Auto Read",
   version: "1.0.0",
   setup(ctx) {
-    _session = ctx.readerSession;
     ctx.events.on("page:changed", () => {
       if (!_autoAdvancing) {
         _onUserPageChange?.();

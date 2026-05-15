@@ -9,7 +9,7 @@ import {
   getParserForFormat,
   loadParserForFormat,
   getParserForFile,
-  EXTENSION_MIME_MAP,
+  getFormatForExtension,
 } from "@book/parser-core";
 import * as booksStore from "../storage/books";
 import { pluginEvents } from "../plugins/context";
@@ -31,7 +31,7 @@ export const useReaderStore = defineStore("reader", {
       assertValidBookFile(file);
 
       const ext = file.name.split(".").pop()?.toLowerCase();
-      const format = ext && ext in EXTENSION_MIME_MAP ? ext : null;
+      const format = ext ? getFormatForExtension(ext) : undefined;
       if (format) {
         await loadParserForFormat(format);
       }

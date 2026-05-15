@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue";
 import { pluginEvents } from "../context";
-import { getProgressBarSession } from "./index";
+import { getReaderSession } from "@book/reader-host";
 
 const width = ref("0%");
 
 function update() {
-  const s = getProgressBarSession()?.getState();
+  const s = getReaderSession()?.getState();
   if (!s) return;
   const pct = s.page.total <= 1 ? 100 : ((s.page.current + 1) / s.page.total) * 100;
   width.value = `${pct}%`;

@@ -3,10 +3,11 @@ import { computed } from "vue";
 import type { Bookmark } from "../../core/types";
 import ModalHeader from "../../components/modals/ModalHeader.vue";
 import { compareCfi } from "../../utils/epub-cfi";
-import { useBookmarkStore, getBookmarkSession, addBookmarkFromHost } from "./index";
+import { useBookmarkStore, addBookmarkFromHost } from "./index";
+import { getReaderSession } from "@book/reader-host";
 
 const store = useBookmarkStore();
-const session = getBookmarkSession();
+const session = getReaderSession();
 
 const currentBookId = computed(() => session?.getState().bookId ?? null);
 

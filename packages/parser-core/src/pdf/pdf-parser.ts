@@ -52,21 +52,35 @@ export class PdfParser extends BaseBookParser implements BookParser {
     const arrayBuffer = await this.readAsArrayBuffer(file);
     const pdfjsLib = await getPdfjsModule();
 
-    const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer.slice(0)) }).promise;
+    let pdf: any;
+    try {
+      pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer.slice(0)) }).promise;
+    } catch (err) {
+      throw new Error(
+        `Failed to load PDF "${file.name}": ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
     const numPages = pdf.numPages;
 
-    const meta = await pdf.getMetadata();
-    const xmp = meta.metadata;
-    const metaInfo = meta.info as Record<string, unknown> | undefined;
-    const title =
-      (typeof xmp?.get === "function" ? xmp.get("dc:title") : "") ||
-      (typeof metaInfo?.Title === "string" ? metaInfo.Title : "") ||
-      file.name.replace(/\.pdf$/i, "") ||
-      "Untitled";
-    const author =
-      (typeof xmp?.get === "function" ? xmp.get("dc:creator") : "") ||
-      (typeof metaInfo?.Author === "string" ? metaInfo.Author : "") ||
-      "Unknown Author";
+    let title = file.name.replace(/\.pdf$/i, "") || "Untitled";
+    let author = "Unknown Author";
+    try {
+      const meta = await pdf.getMetadata();
+      const xmp = meta.metadata;
+      const metaInfo = meta.info as Record<string, unknown> | undefined;
+      title =
+        (typeof xmp?.get === "function" ? xmp.get("dc:title") : "") ||
+        (typeof metaInfo?.Title === "string" ? metaInfo.Title : "") ||
+        title;
+      author =
+        (typeof xmp?.get === "function" ? xmp.get("dc:creator") : "") ||
+        (typeof metaInfo?.Author === "string" ? metaInfo.Author : "") ||
+        author;
+    } catch {
+      // Metadata is best-effort; use defaults on failure.
+    }
+
     const bookId = generateId("book");
 
     const chapters: ChapterData[] = await PdfParser.buildOutlineChapters(pdf, numPages);
@@ -173,12 +187,17 @@ export class PdfParser extends BaseBookParser implements BookParser {
     const page = await pdf.getPage(pageNum);
     const viewport = page.getViewport({ scale });
 
+    // HiDPI/retina support: scale the canvas pixels so the rendered image is
+    // crisp on high-DPI displays when the browser downscales it to fit.
+    const outputScale = window.devicePixelRatio || 1;
     const canvas = document.createElement("canvas");
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
+    canvas.width = Math.floor(viewport.width * outputScale);
+    canvas.height = Math.floor(viewport.height * outputScale);
     const ctx = canvas.getContext("2d")!;
 
-    await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+    const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined;
+
+    await page.render({ canvas, canvasContext: ctx, viewport, transform }).promise;
     page.cleanup();
     await pdf.destroy();
 
