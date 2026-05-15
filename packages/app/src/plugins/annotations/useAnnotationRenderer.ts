@@ -6,6 +6,7 @@ import { useDocumentMarker } from "../../composables/useDocumentMarker";
 export interface SelectionInfo {
   rect: { top: number; left: number; bottom: number; right: number };
   text: string;
+  rawRect: any;
 }
 
 export function useAnnotationRenderer(getDocument: () => Document | null | undefined) {
@@ -120,6 +121,7 @@ export function useAnnotationRenderer(getDocument: () => Document | null | undef
           right: rect.right,
         } as DOMRect),
         text: sel.toString(),
+        rawRect: rect,
       });
     }
 

@@ -56,6 +56,36 @@ export function useAnnotationUI() {
     listenerCleanup?.();
     listenerCleanup = renderer.setupListeners({
       onSelectionChange: (info) => {
+        const BAR_WIDTH = 320;
+        const BAR_HEIGHT = 45;
+        const VIEW_EDGE = 24; // 距视口边缘的安全距离
+        const GAP = 24 + 45; // 与选区的垂直间距
+
+        const rect = info?.rawRect;
+        if (!rect) return;
+
+        const { top, bottom, left, right } = rect;
+        const viewWidth = doc.documentElement.offsetWidth;
+        const viewHeight = doc.documentElement.offsetHeight;
+
+        // ---- 垂直定位：优先下方（避开系统菜单），空间不够则上方 ----
+        // 候选1：选区下方 + GAP
+        let barTop = bottom + GAP;
+        // 如果下方放不下（超出底部 VIEW_EDGE 安全区），改上方
+        if (barTop + BAR_HEIGHT > viewHeight - VIEW_EDGE) {
+          barTop = top - BAR_HEIGHT - GAP;
+          // 上方也不够（超出顶部 VIEW_EDGE 安全区），强制吸附到顶部安全线
+          if (barTop < VIEW_EDGE) {
+            barTop = VIEW_EDGE;
+          }
+        }
+        // 最终垂直边界确保在 [VIEW_EDGE, viewHeight - BAR_HEIGHT - VIEW_EDGE]
+        barTop = Math.max(VIEW_EDGE, Math.min(barTop, viewHeight - BAR_HEIGHT - VIEW_EDGE));
+
+        // ---- 水平定位：与选区居中对齐，仅受 VIEW_EDGE 约束 ----
+        let barLeft = (left + right) / 2 - BAR_WIDTH / 2;
+        barLeft = Math.max(VIEW_EDGE, Math.min(barLeft, viewWidth - BAR_WIDTH - VIEW_EDGE));
+
         if (!info) {
           showToolbar.value = false;
           showNoteInput.value = false;
@@ -78,8 +108,8 @@ export function useAnnotationUI() {
 
         pendingSelection.value = { startCfi, endCfi, text: info.text };
         toolbarPos.value = {
-          top: Math.max(56, info.rect.top),
-          left: (info.rect.right + info.rect.left) / 4,
+          top: barTop,
+          left: barLeft,
         };
         showToolbar.value = true;
       },

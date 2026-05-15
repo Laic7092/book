@@ -107,7 +107,6 @@ let noteText = ref("");
 .selection-toolbar {
   position: fixed;
   z-index: var(--z-overlay);
-  transform: translateY(-100%) translateY(-8px);
   background: var(--modal-bg, #fff);
   border: 1px solid var(--border, #e5e7eb);
   border-radius: 10px;
