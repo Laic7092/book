@@ -20,7 +20,7 @@ import type {
   FilterHandler,
 } from "./types";
 import { themeRegistry } from "../core/theme-registry";
-import { getReaderSession } from "@book/reader-core";
+import { getReaderSession } from "@book/reader-host";
 import { navigate as routerNavigate } from "../utils/router";
 import { createServerClient } from "../utils/api";
 import { useUIStore } from "../stores/ui";

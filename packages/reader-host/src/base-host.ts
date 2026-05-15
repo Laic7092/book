@@ -3,9 +3,9 @@ import {
   type ReaderState,
   type ReaderAction,
   type ReaderEffect,
-  type ReaderSession,
   type Chapter,
 } from "@book/reader-core";
+import type { ReaderSession } from "./session";
 
 export interface BaseHostOptions {
   onEffect?: (effect: ReaderEffect) => void | Promise<void>;

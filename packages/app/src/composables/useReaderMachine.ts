@@ -1,11 +1,8 @@
 import { ref, computed, shallowRef, watch, onMounted, onUnmounted, type Ref } from "vue";
 import { ReaderHost } from "@book/reader-host";
 import type { ReaderState, ReaderAction, ReaderEffect } from "@book/reader-core";
-import {
-  createInitialState,
-  registerReaderSession,
-  unregisterReaderSession,
-} from "@book/reader-core";
+import { createInitialState } from "@book/reader-core";
+import { registerReaderSession, unregisterReaderSession } from "@book/reader-host";
 import { processChapterHtml } from "../content-pipeline";
 import { useUIStore } from "../stores/ui";
 import { NavigationStack } from "./useNavigationStack";

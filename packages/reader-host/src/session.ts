@@ -1,4 +1,4 @@
-import type { ReaderAction, ReaderState } from "./machine";
+import type { ReaderAction, ReaderState } from "@book/reader-core";
 
 export interface ReaderSession {
   dispatch(action: ReaderAction): void;

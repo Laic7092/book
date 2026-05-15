@@ -4,11 +4,8 @@ import FixedLayoutPage from "./reader/FixedLayoutPage.vue";
 import { useNavigationStack } from "../composables/useNavigationStack";
 import { FixedHost } from "@book/reader-host";
 import type { FixedLayoutSurface } from "@book/reader-host";
-import {
-  registerReaderSession,
-  unregisterReaderSession,
-  createInitialState,
-} from "@book/reader-core";
+import { createInitialState } from "@book/reader-core";
+import { registerReaderSession, unregisterReaderSession } from "@book/reader-host";
 import type { Chapter, ReaderState } from "@book/reader-core";
 import type { Book } from "../core/types";
 import * as booksStore from "../storage/books";

@@ -1,6 +1,6 @@
 import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
-import type { ReaderSession } from "@book/reader-core";
+import type { ReaderSession } from "@book/reader-host";
 
 let _session: (() => ReaderSession | null) | null = null;
 export const getProgressBarSession = () => _session?.() ?? null;
