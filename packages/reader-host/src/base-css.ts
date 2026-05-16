@@ -30,6 +30,12 @@ export const PAGINATION_CSS = `
     overflow: visible;
     transform: translateX(calc(-1 * var(--current-page, 0) * 100dvw));
   }
+  html[data-mode="paginated"] body.reader-content pre,
+  html[data-mode="paginated"] body.reader-content table,
+  html[data-mode="paginated"] body.reader-content blockquote {
+    max-width: 100%;
+    overflow-x: auto;
+  }
   html[data-mode="scroll"] {
     overflow-y: auto;
   }

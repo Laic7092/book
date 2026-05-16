@@ -1,19 +1,12 @@
-// Reader Store - Manages book reading state and operations
-
-import { defineStore } from "./store";
+import { defineStore } from "pinia";
 import type { Book, Chapter } from "../core/types";
-import { mapParserResult } from "../core/types";
 import { ErrorCode, createReaderError } from "../core/errors";
 import { loadPluginsFor } from "../plugins/loader";
-import {
-  getParserForFormat,
-  loadParserForFormat,
-  getParserForFile,
-  getFormatForExtension,
-} from "@book/parser-core";
+import { getParserForFormat, loadParserForFormat } from "@book/parser-core";
 import * as booksStore from "../storage/books";
+import { parseAndSaveBook } from "../storage/parse-save";
 import { pluginEvents } from "../plugins/context";
-import { assertValidBookFile, validateBookId } from "../utils/validation";
+import { validateBookId } from "../utils/validation";
 
 const REFLOWABLE_FORMATS = new Set(["epub", "txt", "fb2", "html", "docx", "mobi", "azw3", "azw"]);
 
@@ -28,26 +21,14 @@ export const useReaderStore = defineStore("reader", {
 
   actions: {
     async loadBook(file: File): Promise<{ book: Book; chapters: Chapter[] }> {
-      assertValidBookFile(file);
-
-      const ext = file.name.split(".").pop()?.toLowerCase();
-      const format = ext ? getFormatForExtension(ext) : undefined;
-      if (format) {
-        await loadParserForFormat(format);
+      try {
+        return await parseAndSaveBook(file);
+      } catch (e) {
+        if (e instanceof Error && e.message.startsWith("Unsupported file format")) {
+          throw createReaderError(e.message, ErrorCode.UNSUPPORTED_FORMAT);
+        }
+        throw e;
       }
-      const parser = getParserForFile(file);
-      if (!parser) {
-        throw createReaderError(
-          `Unsupported file format: ${file.type || file.name}`,
-          ErrorCode.UNSUPPORTED_FORMAT,
-        );
-      }
-
-      const result = await parser.parse(file);
-      const parsedBook = mapParserResult(result, parser.format, file.size);
-      await booksStore.saveBook(parsedBook, parser);
-
-      return { book: parsedBook.book, chapters: parsedBook.chapters };
     },
 
     async openBook(bookId: string): Promise<{ book: Book; chapters: Chapter[] }> {

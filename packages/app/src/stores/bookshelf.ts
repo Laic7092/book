@@ -1,16 +1,12 @@
-// Bookshelf Store - Manages library state
-
-import { defineStore } from "./store";
+import { defineStore } from "pinia";
 import type { Book, Folder } from "../core/types";
-import { mapParserResult } from "../core/types";
 import { dbGetAll, STORES } from "../storage/db";
 import { getCoverBlob, deleteCoverBlob } from "../storage/books";
+import { parseAndSaveBook } from "../storage/parse-save";
 import { pluginEvents } from "../plugins/context";
 import * as booksStore from "../storage/books";
 import { useUIStore } from "./ui";
 import { truncateTitle } from "../utils/constants";
-import { assertValidBookFile } from "../utils/validation";
-import { getParserForFile, loadParserForFormat } from "@book/parser-core";
 
 export interface BookshelfState {
   books: Book[];
@@ -77,7 +73,6 @@ export const useBookshelfStore = defineStore("bookshelf", {
     },
 
     async addBookFromFile(file: File) {
-      assertValidBookFile(file);
       this.isUploading = true;
       try {
         const contentHash = await computeFileHash(file);
@@ -90,17 +85,9 @@ export const useBookshelfStore = defineStore("bookshelf", {
           return;
         }
 
-        const ext = file.name.split(".").pop()?.toLowerCase();
-        if (ext) await loadParserForFormat(ext);
-        const parser = getParserForFile(file);
-        if (!parser) {
-          throw new Error(`Unsupported file format: ${file.type || file.name}`);
-        }
-        const result = await parser.parse(file);
-        const parsedBook = mapParserResult(result, parser.format, file.size, contentHash);
-        await booksStore.saveBook(parsedBook, parser);
+        const result = await parseAndSaveBook(file, contentHash);
         await this.loadBooks();
-        return { book: parsedBook.book, chapters: parsedBook.chapters };
+        return result;
       } finally {
         this.isUploading = false;
       }

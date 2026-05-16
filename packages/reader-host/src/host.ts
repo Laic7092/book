@@ -219,6 +219,8 @@ export class ReaderHost extends BaseHost {
       const contentWidth = this.iframeDoc.body.scrollWidth;
       const iframeWidth = this.iframeDoc.documentElement.clientWidth;
       const step = Math.max(iframeWidth, 1);
+      // Use body.scrollWidth directly; CSS overflow prevention handles wide
+      // elements (pre, table, blockquote) that would inflate the page count.
       const total = Math.max(1, Math.ceil(contentWidth / step));
       this.dispatch({
         type: "PAGE_COUNT_UPDATED",

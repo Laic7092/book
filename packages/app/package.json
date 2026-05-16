@@ -8,6 +8,7 @@
     "@book/reader-host": "workspace:*",
     "@zip.js/zip.js": "^2.8.26",
     "pdfjs-dist": "^5.7.284",
+    "pinia": "^3.0.4",
     "vue": "^3.5.34"
   },
   "devDependencies": {
