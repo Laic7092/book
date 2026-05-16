@@ -5,12 +5,12 @@ import { useNavigationStack } from "../composables/useNavigationStack";
 import { FixedHost } from "@book/reader-host";
 import type { FixedLayoutSurface, SelfContainedRenderer } from "@book/reader-host";
 import { createInitialState } from "@book/reader-core";
-import { registerReaderSession, unregisterReaderSession } from "@book/reader-host";
 import type { ReaderState } from "@book/reader-core";
 import type { Book } from "../core/types";
 import * as booksStore from "../storage/books";
 import { navigate } from "../utils/router";
 import { TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../utils/constants";
+import { currentSession } from "../stores/reader-session";
 import { pluginEvents, pluginHooks } from "../plugins/context";
 import type { InitConfig } from "../plugins/types";
 import { PdfRenderer } from "@book/parser-core";
@@ -290,7 +290,7 @@ onMounted(async () => {
   }
 
   host.value = h;
-  registerReaderSession(h.getSession());
+  currentSession.value = h.getSession();
 
   const baseConfig: InitConfig = {
     bookId: props.book.id,
@@ -313,7 +313,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   host.value?.destroy();
-  unregisterReaderSession();
+  currentSession.value = null;
   navStack.reset();
   window.removeEventListener("keydown", handleKeydown);
 });

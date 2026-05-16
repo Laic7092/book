@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue";
 import { pluginEvents } from "../context";
-import { getReaderSession } from "@book/reader-host";
+import { currentSession } from "../../stores/reader-session";
 
 const width = ref("0%");
 
 function update() {
-  const s = getReaderSession()?.getState();
+  const s = currentSession.value?.getState();
   if (!s) return;
   const pct = s.page.total <= 1 ? 100 : ((s.page.current + 1) / s.page.total) * 100;
   width.value = `${pct}%`;

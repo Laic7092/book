@@ -7,17 +7,3 @@ export interface ReaderSession {
   setPageMargin(margin: number): void;
   navigateToCfi(cfi: string, chapterId: string): Promise<void>;
 }
-
-let currentSession: ReaderSession | null = null;
-
-export function registerReaderSession(session: ReaderSession): void {
-  currentSession = session;
-}
-
-export function unregisterReaderSession(): void {
-  currentSession = null;
-}
-
-export function getReaderSession(): ReaderSession | null {
-  return currentSession;
-}

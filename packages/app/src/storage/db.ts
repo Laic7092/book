@@ -87,9 +87,14 @@ export async function dbOperation<T>(
   const tx = db.transaction(storeName, mode);
   const store = tx.objectStore(storeName);
 
-  return new Promise((resolve, reject) => {
+  return new Promise<T>((resolve, reject) => {
+    let result: T;
+    tx.oncomplete = () => resolve(result);
+    tx.onerror = () => reject(tx.error);
     const request = operation(store);
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      result = request.result;
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -107,9 +112,15 @@ export async function dbTransaction<T>(
     stores.set(storeName, tx.objectStore(storeName));
   }
 
-  return new Promise((resolve, reject) => {
+  return new Promise<T>((resolve, reject) => {
+    let result: T;
+    tx.oncomplete = () => resolve(result);
     tx.onerror = () => reject(tx.error);
-    operation(stores).then(resolve).catch(reject);
+    operation(stores)
+      .then((r) => {
+        result = r;
+      })
+      .catch(reject);
   });
 }
 

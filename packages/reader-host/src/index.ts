@@ -9,4 +9,3 @@ export type { ResolvedChapter } from "./content-pipeline";
 export { injectResources, clearResources } from "./iframe-resources";
 export type { ResourceInfo } from "./iframe-resources";
 export type { ReaderSession } from "./session";
-export { registerReaderSession, unregisterReaderSession, getReaderSession } from "./session";

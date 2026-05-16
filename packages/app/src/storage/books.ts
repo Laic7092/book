@@ -134,19 +134,27 @@ export async function deleteBook(bookId: string): Promise<void> {
   await dbTransaction([STORES.PLUGIN_STORE], "readwrite", async (stores) => {
     const ps = stores.get(STORES.PLUGIN_STORE)!;
 
+    // Delete known cover entry directly
+    ps.delete(["_covers", bookId]);
+
+    // Scan remaining entries for bookId references using a cursor (O(1) memory)
     await new Promise<void>((resolve, reject) => {
-      const req = ps.getAll();
+      const req = ps.openCursor();
       req.onsuccess = () => {
-        for (const record of req.result as Array<{
-          pluginId: string;
-          key: string;
-          value: { bookId?: string };
-        }>) {
+        const cursor = req.result;
+        if (cursor) {
+          const record = cursor.value as {
+            pluginId: string;
+            key: string;
+            value?: { bookId?: string };
+          };
           if (record.value?.bookId === bookId || record.key.includes(bookId)) {
-            ps.delete([record.pluginId, record.key]);
+            cursor.delete();
           }
+          cursor.continue();
+        } else {
+          resolve();
         }
-        resolve();
       };
       req.onerror = () => reject(req.error);
     });

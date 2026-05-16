@@ -4,8 +4,6 @@ import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
 import { createEntityStore, type EntityStore } from "../store-factory";
 import type { Annotation } from "../../core/types";
-import { getReaderSession } from "@book/reader-host";
-
 // ── Module-level state ──
 
 let _store: EntityStore<Annotation> | null = null;
@@ -17,9 +15,6 @@ export function useAnnotationStore(): EntityStore<Annotation> {
   if (!_store) throw new Error("[annotations] Plugin not initialized");
   return _store;
 }
-
-/** Access the reader host from Vue components. */
-export { getReaderSession };
 
 /** Create a new Annotation object with a unique ID. */
 export function createAnnotation(

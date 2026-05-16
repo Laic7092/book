@@ -2,7 +2,7 @@ import { ref, computed, shallowRef, watch, onMounted, onUnmounted, type Ref } fr
 import { ReaderHost } from "@book/reader-host";
 import type { ReaderState, ReaderAction, ReaderEffect } from "@book/reader-core";
 import { createInitialState } from "@book/reader-core";
-import { registerReaderSession, unregisterReaderSession } from "@book/reader-host";
+import { currentSession } from "../stores/reader-session";
 import { processChapterHtml } from "../content-pipeline";
 import { useUIStore } from "../stores/ui";
 import { NavigationStack } from "./useNavigationStack";
@@ -256,14 +256,14 @@ export function useReaderMachine(
         processChapterHtml(html, bookId, chapterId, undefined),
     });
 
-    registerReaderSession(host!.getSession());
+    currentSession.value = host!.getSession();
     isRestoring.value = true;
     void initMachine();
   });
 
   onUnmounted(() => {
     host?.destroy();
-    unregisterReaderSession();
+    currentSession.value = null;
     navStack.reset();
   });
 

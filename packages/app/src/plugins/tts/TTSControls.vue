@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
-import { getReaderSession } from "@book/reader-host";
+import { currentSession } from "../../stores/reader-session";
 
 // ── State ──
 type TTSState = "idle" | "playing" | "paused";
@@ -22,7 +22,7 @@ const SPEED_PERSIST_KEY = "tts_speed";
 // ── Text extraction ──
 
 function getChapterText(): string {
-  const session = getReaderSession();
+  const session = currentSession.value;
   if (!session) return "";
   const article = session.getDocument()?.body;
   if (!article) return "";
@@ -96,7 +96,7 @@ function speakSentence(index: number) {
 
 function advanceChapter() {
   stop();
-  const session = getReaderSession();
+  const session = currentSession.value;
   if (!session) return;
   const s = session.getState();
   const chapters = s.chapters;
@@ -214,7 +214,7 @@ onMounted(() => {
   document.addEventListener("keydown", onKeyDown);
 
   // Chapter change detection: watch machine state for chapter transitions
-  const session = getReaderSession();
+  const session = currentSession.value;
   if (session) {
     let lastChapterId = session.getState().chapters[session.getState().currentChapterIndex]?.id;
     chapterChangeUnsub = (() => {

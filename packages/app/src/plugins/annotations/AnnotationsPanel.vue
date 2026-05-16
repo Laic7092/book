@@ -2,10 +2,11 @@
 import { computed, ref } from "vue";
 import type { Annotation } from "../../core/types";
 import ModalHeader from "../../components/modals/ModalHeader.vue";
-import { useAnnotationStore, useAnnotationFilters, getReaderSession } from "./index";
+import { useAnnotationStore, useAnnotationFilters } from "./index";
+import { currentSession } from "../../stores/reader-session";
 
 const store = useAnnotationStore();
-const session = getReaderSession();
+const session = currentSession.value;
 const { currentBookId } = useAnnotationFilters();
 
 const emit = defineEmits<{

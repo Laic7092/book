@@ -4,10 +4,10 @@ import type { Bookmark } from "../../core/types";
 import ModalHeader from "../../components/modals/ModalHeader.vue";
 import { compareCfi } from "../../utils/epub-cfi";
 import { useBookmarkStore, addBookmarkFromHost } from "./index";
-import { getReaderSession } from "@book/reader-host";
+import { currentSession } from "../../stores/reader-session";
 
 const store = useBookmarkStore();
-const session = getReaderSession();
+const session = currentSession.value;
 
 const currentBookId = computed(() => session?.getState().bookId ?? null);
 

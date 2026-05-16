@@ -2,7 +2,7 @@ import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
 import { createEntityStore, type EntityStore } from "../store-factory";
 import type { Bookmark } from "../../core/types";
-import { getReaderSession } from "@book/reader-host";
+import { currentSession } from "../../stores/reader-session";
 import {
   LEGACY_FALLBACK_CFI,
   generateCfiFromElement,
@@ -64,7 +64,7 @@ function createBookmark(
 
 /** Compute CFI from current reading position and persist a bookmark. */
 export async function addBookmarkFromHost(): Promise<void> {
-  const session = getReaderSession();
+  const session = currentSession.value;
   if (!session || !_store) return;
 
   const s = session.getState();

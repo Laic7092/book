@@ -20,7 +20,7 @@ import type {
   FilterHandler,
 } from "./types";
 import { themeRegistry } from "../core/theme-registry";
-import { getReaderSession } from "@book/reader-host";
+import { currentSession } from "../stores/reader-session";
 import { navigate as routerNavigate } from "../utils/router";
 import { createServerClient } from "../utils/api";
 import { useUIStore } from "../stores/ui";
@@ -338,7 +338,7 @@ export function createCssAPI(): CssAPI {
       resetThemeVars();
     },
     injectIframeStyle(id: string, css: string) {
-      const doc = getReaderSession()?.getDocument();
+      const doc = currentSession.value?.getDocument();
       if (!doc) return;
       const styleId = `plugin-${id}`;
       let style = doc.getElementById(styleId);
@@ -350,7 +350,7 @@ export function createCssAPI(): CssAPI {
       style.textContent = css;
     },
     removeIframeStyle(id: string) {
-      const doc = getReaderSession()?.getDocument();
+      const doc = currentSession.value?.getDocument();
       if (!doc) return;
       const style = doc.getElementById(`plugin-${id}`);
       if (style) style.remove();
@@ -511,7 +511,7 @@ export function createTrackedContext(id: string, _bootstrap: PluginBootstrap): T
     onCleanup(fn: () => void | Promise<void>) {
       cleanupFns.push(fn);
     },
-    readerSession: () => getReaderSession(),
+    readerSession: () => currentSession.value,
     registerContentTransformer(t: ContentTransformer) {
       registerContentTransformer(t);
       trackedTransformers.push(t);
