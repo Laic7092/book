@@ -1,5 +1,5 @@
 {
-  "name": "@book/reader-host",
+  "name": "@book/reader-engine",
   "version": "0.0.0",
   "private": true,
   "license": "MIT",

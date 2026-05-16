@@ -1,4 +1,11 @@
-import type { Chapter } from "./types";
+export interface Chapter {
+  id: string;
+  bookId: string;
+  title: string;
+  href?: string;
+  order: number;
+  inToc?: boolean;
+}
 
 /** Sentinel value indicating "go to the last page" when used as pendingTarget */
 export const PENDING_TARGET_LAST_PAGE = -1;

@@ -1,5 +1,5 @@
 import { ref, computed, shallowRef, watch, onMounted, onUnmounted, type Ref } from "vue";
-import { ReaderHost } from "@book/reader-host";
+import { ReflowableHost } from "@book/reader-engine";
 import type { ReaderState, ReaderAction, ReaderEffect } from "@book/reader-core";
 import { createInitialState } from "@book/reader-core";
 import { currentSession } from "../stores/reader-session";
@@ -70,7 +70,7 @@ export function useReaderMachine(
 
   const isRestoring = ref(true);
   const isHistoryNav = ref(false);
-  let host: ReaderHost | null = null;
+  let host: ReflowableHost | null = null;
 
   const overlayComponents = computed(() => {
     void pluginStateVersion.value;
@@ -216,7 +216,7 @@ export function useReaderMachine(
     const container = containerRef.value;
     if (!container) return;
 
-    host = new ReaderHost({
+    host = new ReflowableHost({
       container,
       onEffect: async (effect) => {
         translateEffect(effect, bookId.value);

@@ -5,9 +5,16 @@ import {
   type ReaderEffect,
   type Chapter,
 } from "@book/reader-core";
-import type { ReaderSession } from "./session";
 
-export interface BaseHostOptions {
+export interface ReaderSession {
+  dispatch(action: ReaderAction): void;
+  getState(): ReaderState;
+  getDocument(): Document | null;
+  setPageMargin(margin: number): void;
+  navigateToCfi(cfi: string, chapterId: string): Promise<void>;
+}
+
+export interface EngineOptions {
   onEffect?: (effect: ReaderEffect) => void | Promise<void>;
   onStateChange?: (state: ReaderState) => void;
   onReady?: () => void;
@@ -17,15 +24,15 @@ export interface BaseHostOptions {
   ) => Promise<{ html: string | undefined; rawData?: ArrayBuffer }>;
 }
 
-export abstract class BaseHost {
+export abstract class Engine {
   protected machine = createReaderMachine();
   protected state: ReaderState;
   private unsub: () => void;
   private onReady: (() => void) | undefined;
   protected onEffect: ((effect: ReaderEffect) => void | Promise<void>) | undefined;
-  protected fetchChapter: BaseHostOptions["fetchChapter"];
+  protected fetchChapter: EngineOptions["fetchChapter"];
 
-  constructor(options: BaseHostOptions) {
+  constructor(options: EngineOptions) {
     this.onReady = options.onReady;
     this.onEffect = options.onEffect;
     this.fetchChapter = options.fetchChapter;
@@ -36,8 +43,6 @@ export abstract class BaseHost {
       options.onStateChange?.(s);
     });
   }
-
-  // ── Public API ──
 
   init(
     bookId: string,
@@ -88,8 +93,6 @@ export abstract class BaseHost {
     this.unsub();
   }
 
-  // ── Effect dispatch ──
-
   protected async runEffects(effects: ReaderEffect[]): Promise<void> {
     for (const effect of effects) {
       await this.runEffect(effect);
@@ -98,7 +101,6 @@ export abstract class BaseHost {
 
   protected abstract runEffect(effect: ReaderEffect): void | Promise<void>;
 
-  /** Handle effects common to all host types. */
   protected async runGenericEffect(effect: ReaderEffect): Promise<void> {
     switch (effect.type) {
       case "FETCH_CHAPTER":
@@ -109,8 +111,6 @@ export abstract class BaseHost {
         }
         break;
       default:
-        // Structured effects (CHAPTER_DID_CHANGE, PAGE_DID_CHANGE, etc.)
-        // forwarded to onEffect for the composable to translate into plugin events.
         await Promise.resolve(this.onEffect?.(effect));
     }
   }
@@ -123,8 +123,6 @@ export abstract class BaseHost {
     }
     this.dispatch({ type: "CHAPTER_LOADED", chapterId });
   }
-
-  // ── State watcher ──
 
   private afterState(state: ReaderState): void {
     if (state.status === "ready" && this.onReady) {

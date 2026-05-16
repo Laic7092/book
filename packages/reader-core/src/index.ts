@@ -1,4 +1,4 @@
-export type { Chapter } from "./types";
+export type { Chapter } from "./machine";
 export type {
   ReaderState,
   ReaderAction,

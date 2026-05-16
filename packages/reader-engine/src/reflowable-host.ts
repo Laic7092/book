@@ -1,29 +1,33 @@
 import { type ReaderEffect, type Chapter } from "@book/reader-core";
 import { getParserForFormat } from "@book/parser-core";
-import { BaseHost, type BaseHostOptions } from "./base-host";
-import { BASE_CSS, PAGINATION_CSS } from "./base-css";
-import { resolveChapterResources } from "./content-pipeline";
-import { injectResources, clearResources, type ResourceInfo } from "./iframe-resources";
+import { Engine, type EngineOptions } from "./engine";
+import { BASE_CSS, PAGINATION_CSS } from "./styles";
+import {
+  resolveChapterResources,
+  injectResources,
+  clearResources,
+  type ResourceInfo,
+} from "./resources";
 
-export interface ReaderHostOptions extends BaseHostOptions {
+export interface ReflowableHostOptions extends EngineOptions {
   container: HTMLElement;
   onClick?: (e: MouseEvent) => void;
   navigateToCfi?: (cfi: string, chapterId: string) => Promise<void>;
   transformContent?: (html: string, bookId: string, chapterId: string) => Promise<string>;
 }
 
-export class ReaderHost extends BaseHost {
+export class ReflowableHost extends Engine {
   private iframe!: HTMLIFrameElement;
   private iframeDoc!: Document;
   private container: HTMLElement;
   private navigateToCfi: ((cfi: string, chapterId: string) => Promise<void>) | undefined;
   private clickHandlerRef: ((e: MouseEvent) => void) | null = null;
-  private transformContent: ReaderHostOptions["transformContent"];
+  private transformContent: ReflowableHostOptions["transformContent"];
   private bookFormat = "";
   private resourceUrls = new Map<string, string>();
   private injectedResources = new Map<string, ResourceInfo>();
 
-  constructor(options: ReaderHostOptions) {
+  constructor(options: ReflowableHostOptions) {
     super(options);
     this.container = options.container;
     this.navigateToCfi = options.navigateToCfi;
@@ -31,8 +35,6 @@ export class ReaderHost extends BaseHost {
     this.createIframe();
     this.setupClickHandler(options.onClick);
   }
-
-  // ── Public API ──
 
   init(
     bookId: string,
@@ -161,8 +163,6 @@ export class ReaderHost extends BaseHost {
     this.iframe.remove();
   }
 
-  // ── Protected: effect handling ──
-
   protected async runEffect(effect: ReaderEffect): Promise<void> {
     switch (effect.type) {
       case "PAGE_POSITION_CHANGED":
@@ -176,10 +176,7 @@ export class ReaderHost extends BaseHost {
     }
   }
 
-  // ── Chapter fetching with resource resolution ──
-
   protected async fetchAndLoadChapter(bookId: string, chapterId: string): Promise<void> {
-    // Clean up previous chapter resources before loading the next.
     clearResources(this.iframeDoc, this.injectedResources);
     for (const [, blobUrl] of this.resourceUrls) {
       URL.revokeObjectURL(blobUrl);
@@ -207,29 +204,19 @@ export class ReaderHost extends BaseHost {
       processed = await this.transformContent(processed, bookId, chapterId);
     }
 
-    // Dispatch CHAPTER_LOADED so the machine records the chapter change.
     this.dispatch({ type: "CHAPTER_LOADED", chapterId });
 
-    // Render directly — no longer goes through a machine effect.
     this.iframeDoc.body.innerHTML = processed;
 
-    // Measure layout and report page count back to the machine.
     requestAnimationFrame(() => {
       if (!this.iframeDoc.body) return;
       const contentWidth = this.iframeDoc.body.scrollWidth;
       const iframeWidth = this.iframeDoc.documentElement.clientWidth;
       const step = Math.max(iframeWidth, 1);
-      // Use body.scrollWidth directly; CSS overflow prevention handles wide
-      // elements (pre, table, blockquote) that would inflate the page count.
       const total = Math.max(1, Math.ceil(contentWidth / step));
-      this.dispatch({
-        type: "PAGE_COUNT_UPDATED",
-        total,
-      });
+      this.dispatch({ type: "PAGE_COUNT_UPDATED", total });
     });
   }
-
-  // ── Iframe ──
 
   private createIframe(): void {
     this.iframe = document.createElement("iframe");

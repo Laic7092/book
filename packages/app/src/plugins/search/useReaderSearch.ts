@@ -2,7 +2,7 @@ import { ref } from "vue";
 import { searchInBook } from "./engine";
 import type { SearchResult } from "../../core/types";
 import type { ReaderState } from "@book/reader-core";
-import type { ReaderSession } from "@book/reader-host";
+import type { ReaderSession } from "@book/reader-engine";
 import { useDocumentMarker } from "../../composables/useDocumentMarker";
 import * as booksStore from "../../storage/books";
 import { useUIStore } from "../../stores/ui";

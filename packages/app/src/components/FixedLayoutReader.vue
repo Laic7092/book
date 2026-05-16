@@ -2,8 +2,8 @@
 import { ref, computed, onMounted, onUnmounted, shallowRef } from "vue";
 import FixedLayoutPage from "./reader/FixedLayoutPage.vue";
 import { useNavigationStack } from "../composables/useNavigationStack";
-import { FixedHost } from "@book/reader-host";
-import type { FixedLayoutSurface, SelfContainedRenderer } from "@book/reader-host";
+import { FixedHost } from "@book/reader-engine";
+import type { FixedLayoutSurface, SelfContainedRenderer } from "@book/reader-engine";
 import { createInitialState } from "@book/reader-core";
 import type { ReaderState } from "@book/reader-core";
 import type { Book } from "../core/types";

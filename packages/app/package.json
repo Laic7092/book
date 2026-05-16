@@ -5,7 +5,7 @@
   "dependencies": {
     "@book/parser-core": "workspace:*",
     "@book/reader-core": "workspace:*",
-    "@book/reader-host": "workspace:*",
+    "@book/reader-engine": "workspace:*",
     "@zip.js/zip.js": "^2.8.26",
     "pdfjs-dist": "^5.7.284",
     "pinia": "^3.0.4",

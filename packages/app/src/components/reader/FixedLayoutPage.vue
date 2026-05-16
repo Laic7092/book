@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onUnmounted, nextTick } from "vue";
-import type { FixedLayoutSurface } from "@book/reader-host";
+import type { FixedLayoutSurface } from "@book/reader-engine";
 
 const props = defineProps<{
   bookId: string;

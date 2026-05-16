@@ -1,7 +1,7 @@
 import type { Component, App } from "vue";
 import type { ThemeRegistry } from "../core/theme-registry";
 import type { ReaderSettings } from "./settings/types";
-import type { ReaderSession } from "@book/reader-host";
+import type { ReaderSession } from "@book/reader-engine";
 import type { ServerClient } from "../utils/api";
 
 /** Scene a plugin loads during. */

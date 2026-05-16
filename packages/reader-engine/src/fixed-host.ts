@@ -1,8 +1,37 @@
 import { type ReaderEffect, type Chapter } from "@book/reader-core";
-import { BaseHost, type BaseHostOptions } from "./base-host";
-import { type FixedLayoutSurface, type SelfContainedRenderer } from "./fixed-surface";
+import { Engine, type EngineOptions } from "./engine";
 
-export interface FixedHostOptions extends BaseHostOptions {
+export interface FixedLayoutSurface {
+  loadChapter(href: string, rawData: ArrayBuffer): Promise<void>;
+  getCurrentPage(): number;
+  getPageCount(): number;
+  goToPage(page: number): void;
+  zoomIn(): void;
+  zoomOut(): void;
+  zoomFit(): void;
+  zoomWidth(): void;
+  rotate(degrees: number): void;
+  getCurrentScale(): number;
+  destroy(): void;
+}
+
+export interface SelfContainedRenderer {
+  mount(container: HTMLElement, href: string, rawData: ArrayBuffer): Promise<void>;
+  unmount(): void;
+  getCurrentPage(): number;
+  getPageCount(): number;
+  goToPage(page: number): void;
+  zoomIn(): void;
+  zoomOut(): void;
+  zoomFit(): void;
+  zoomWidth(): void;
+  rotate(degrees: number): void;
+  getCurrentScale(): number;
+  onPageChange?: (page: number, total: number) => void;
+  destroy(): void;
+}
+
+export interface FixedHostOptions extends EngineOptions {
   /** Host-driven surface (CBZ etc.). */
   surface?: FixedLayoutSurface;
   /** Self-driving renderer (PDF etc.). Mutually exclusive with surface. */
@@ -14,7 +43,7 @@ export interface FixedHostOptions extends BaseHostOptions {
  * - Host-driven (surface): CBZ and other formats where host calls loadChapter/goToPage.
  * - Autonomous (renderer): PDF where the renderer manages its own DOM and navigation.
  */
-export class FixedHost extends BaseHost {
+export class FixedHost extends Engine {
   private surface: FixedLayoutSurface | undefined;
   private renderer: SelfContainedRenderer | undefined;
   private rendererContainer: HTMLElement | null = null;
