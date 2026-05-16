@@ -325,17 +325,17 @@ export async function setPluginEnabled(id: string, on: boolean): Promise<void> {
   }
 
   bump();
-  savePluginStates();
+  await savePluginStates();
 }
 
 // ── Persistence ──
 
-function savePluginStates(): void {
+async function savePluginStates(): Promise<void> {
   const states: Record<string, boolean> = {};
   for (const [id, mp] of managedPlugins) {
     states[id] = mp.enabled;
   }
-  void saveAllPluginStates(states);
+  await saveAllPluginStates(states);
 }
 
 export async function loadPluginStates(): Promise<void> {

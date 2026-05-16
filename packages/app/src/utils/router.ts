@@ -1,4 +1,4 @@
-import { reactive } from "vue";
+import { reactive, readonly } from "vue";
 
 export interface Route {
   name: "bookshelf" | "reader" | "page";
@@ -27,7 +27,9 @@ function matchAppPath(appPath: string): Route {
   return { name: "bookshelf", params: {} };
 }
 
-export const currentRoute = reactive<Route>(matchAppPath(getAppPath(window.location.pathname)));
+const writableRoute = reactive<Route>(matchAppPath(getAppPath(window.location.pathname)));
+
+export const currentRoute = readonly(writableRoute);
 
 export function navigate(url: string, replace = false) {
   const appPath = url.startsWith("/") ? url : "/" + url;
@@ -36,9 +38,9 @@ export function navigate(url: string, replace = false) {
   } else {
     history.pushState(null, "", toUrl(appPath));
   }
-  Object.assign(currentRoute, matchAppPath(appPath));
+  Object.assign(writableRoute, matchAppPath(appPath));
 }
 
 window.addEventListener("popstate", () => {
-  Object.assign(currentRoute, matchAppPath(getAppPath(window.location.pathname)));
+  Object.assign(writableRoute, matchAppPath(getAppPath(window.location.pathname)));
 });

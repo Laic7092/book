@@ -358,33 +358,6 @@ export function createCssAPI(): CssAPI {
   };
 }
 
-export function createPluginContext(id: string, _bootstrap: PluginBootstrap): PluginContext {
-  const slots = createUISlots();
-  const css = createCssAPI();
-  return {
-    storage: createPluginStorageAdapter(id),
-    ui: {
-      ...slots,
-      openModal: (name) => {
-        const uiStore = useUIStore();
-        uiStore.openModal(name);
-      },
-      setTheme: (t) => css.setTheme(t),
-      clearTheme: () => css.clearTheme(),
-      injectIframeStyle: (id, c) => css.injectIframeStyle(id, c),
-      removeIframeStyle: (id) => css.removeIframeStyle(id),
-    },
-    events: pluginEvents,
-    hooks: pluginHooks,
-    onCleanup(_fn: () => void | Promise<void>) {},
-    readerSession: () => getReaderSession(),
-    registerContentTransformer,
-    navigate: routerNavigate,
-    server: createServerClient(),
-    themes: themeRegistry,
-  };
-}
-
 function createTrackedCss(cleanupFns: (() => void | Promise<void>)[]): CssAPI {
   const raw = createCssAPI();
   const injectedStyles: string[] = [];

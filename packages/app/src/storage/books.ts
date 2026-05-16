@@ -1,7 +1,7 @@
 // Books storage module
 
 import type { Book, Folder, ParsedBook } from "../core/types";
-import { STORES, dbPut, dbGet, dbGetAll, dbTransaction, dbDelete } from "./db";
+import { STORES, dbPut, dbGet, dbGetAll, dbTransaction, dbDelete, dbGetAllFromIndex } from "./db";
 import type { BookParser } from "@book/parser-core";
 import { getParserForFormat, generateId } from "@book/parser-core";
 import { saveZip, getZip } from "./raw-data";
@@ -273,20 +273,12 @@ async function lazyExtractChapterContent(
  * Get all chapter IDs for a book
  */
 export async function getChapterIds(bookId: string): Promise<string[]> {
-  const db = await import("./db");
-  const chaptersStore = await db.openDB();
-  const tx = chaptersStore.transaction(STORES.CHAPTERS, "readonly");
-  const store = tx.objectStore(STORES.CHAPTERS);
-  const index = store.index("bookId");
-
-  return new Promise((resolve, reject) => {
-    const request = index.getAllKeys(IDBKeyRange.only(bookId));
-    request.onsuccess = () => {
-      const keys = request.result as Array<[string, string]>;
-      resolve(keys.map(([_, chapterId]) => chapterId));
-    };
-    request.onerror = () => reject(request.error);
-  });
+  const chapters = await dbGetAllFromIndex<{ chapterId: string }>(
+    STORES.CHAPTERS,
+    "bookId",
+    bookId,
+  );
+  return chapters.map((ch) => ch.chapterId);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -361,34 +353,21 @@ export async function deleteFolder(id: string): Promise<void> {
 export async function getChapters(
   bookId: string,
 ): Promise<Array<{ id: string; title: string; order: number; href?: string; inToc?: boolean }>> {
-  const db = await import("./db");
-  const chaptersStore = await db.openDB();
-  const tx = chaptersStore.transaction(STORES.CHAPTERS, "readonly");
-  const store = tx.objectStore(STORES.CHAPTERS);
-  const index = store.index("bookId");
+  const results = await dbGetAllFromIndex<{
+    bookId: string;
+    chapterId: string;
+    title: string;
+    order: number;
+    href?: string;
+    inToc?: boolean;
+  }>(STORES.CHAPTERS, "bookId", bookId);
 
-  return new Promise((resolve, reject) => {
-    const request = index.getAll(IDBKeyRange.only(bookId));
-    request.onsuccess = () => {
-      const results = request.result as Array<{
-        bookId: string;
-        chapterId: string;
-        title: string;
-        order: number;
-        href?: string;
-        inToc?: boolean;
-      }>;
-      // Sort by the stored order field
-      results.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-      const mapped = results.map((ch) => ({
-        id: ch.chapterId,
-        title: ch.title || `Chapter ${ch.order + 1}`,
-        order: ch.order ?? 0,
-        href: ch.href,
-        inToc: ch.inToc,
-      }));
-      resolve(mapped);
-    };
-    request.onerror = () => reject(request.error);
-  });
+  results.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  return results.map((ch) => ({
+    id: ch.chapterId,
+    title: ch.title || `Chapter ${ch.order + 1}`,
+    order: ch.order ?? 0,
+    href: ch.href,
+    inToc: ch.inToc,
+  }));
 }

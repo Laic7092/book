@@ -1,5 +1,8 @@
 import type { Chapter } from "./types";
 
+/** Sentinel value indicating "go to the last page" when used as pendingTarget */
+export const PENDING_TARGET_LAST_PAGE = -1;
+
 export interface PageState {
   current: number;
   total: number;
@@ -33,11 +36,7 @@ export type ReaderAction =
       initialPage?: Partial<PageState>;
       initialScroll?: Partial<ScrollState>;
     }
-  | {
-      type: "CHAPTER_LOADED";
-      chapterId: string;
-      html: string;
-    }
+  | { type: "CHAPTER_LOADED"; chapterId: string }
   | { type: "CHAPTER_FAILED"; chapterId: string; error: string }
   | { type: "PAGE_COUNT_UPDATED"; total: number }
   | { type: "NEXT_PAGE" }
@@ -302,7 +301,7 @@ function prevPageReducer(state: ReaderState): { state: ReaderState; effects: Rea
     ...state,
     status: "loading",
     currentChapterIndex: prevIdx,
-    page: { ...state.page, current: 0, total: 0, pendingTarget: -1 },
+    page: { ...state.page, current: 0, total: 0, pendingTarget: PENDING_TARGET_LAST_PAGE },
   };
   const effects: ReaderEffect[] = [
     { type: "FETCH_CHAPTER", bookId: state.bookId, chapterId: prevChapter.id },

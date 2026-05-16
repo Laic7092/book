@@ -116,12 +116,12 @@ export abstract class BaseHost {
   }
 
   protected async fetchAndLoadChapter(bookId: string, chapterId: string): Promise<void> {
-    const { html } = await this.fetchChapter!(bookId, chapterId);
-    if (!html) {
+    const result = await this.fetchChapter!(bookId, chapterId);
+    if (!result?.html) {
       this.dispatch({ type: "CHAPTER_FAILED", chapterId, error: "Content not found" });
       return;
     }
-    this.dispatch({ type: "CHAPTER_LOADED", chapterId, html });
+    this.dispatch({ type: "CHAPTER_LOADED", chapterId });
   }
 
   // ── State watcher ──

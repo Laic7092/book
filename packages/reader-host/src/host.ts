@@ -208,7 +208,7 @@ export class ReaderHost extends BaseHost {
     }
 
     // Dispatch CHAPTER_LOADED so the machine records the chapter change.
-    this.dispatch({ type: "CHAPTER_LOADED", chapterId, html: processed });
+    this.dispatch({ type: "CHAPTER_LOADED", chapterId });
 
     // Render directly — no longer goes through a machine effect.
     this.iframeDoc.body.innerHTML = processed;

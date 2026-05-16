@@ -128,7 +128,7 @@ export class FixedHost extends BaseHost {
   // ── Chapter fetching with surface integration ──
 
   protected async fetchAndLoadChapter(bookId: string, chapterId: string): Promise<void> {
-    const { html, rawData } = await this.fetchChapter!(bookId, chapterId);
+    const { rawData } = await this.fetchChapter!(bookId, chapterId);
 
     const chapter = this.state.chapters.find((c) => c.id === chapterId);
     if (!chapter) {
@@ -136,7 +136,7 @@ export class FixedHost extends BaseHost {
       return;
     }
 
-    this.dispatch({ type: "CHAPTER_LOADED", chapterId, html: html ?? "" });
+    this.dispatch({ type: "CHAPTER_LOADED", chapterId });
 
     if (!rawData || !chapter.href) return;
 
