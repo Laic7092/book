@@ -1,4 +1,4 @@
-import { BaseBookParser, generateId } from "../base";
+import { generateId, readAsArrayBuffer } from "../base";
 import type { BookParser, ParserResult, ChapterData } from "../types";
 
 const WORD_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
@@ -25,7 +25,7 @@ interface DocxParagraph {
   headingLevel: number | null;
 }
 
-export class DocxParser extends BaseBookParser implements BookParser {
+export class DocxParser implements BookParser {
   private static readonly SUPPORTED_MIME_TYPES = [
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/msword",
@@ -38,7 +38,7 @@ export class DocxParser extends BaseBookParser implements BookParser {
   }
 
   async parse(file: File): Promise<ParserResult> {
-    const arrayBuffer = await this.readAsArrayBuffer(file);
+    const arrayBuffer = await readAsArrayBuffer(file);
     const { ZipReader, Uint8ArrayReader, BlobWriter } = await getZipModule();
     const zipReader = new ZipReader(new Uint8ArrayReader(new Uint8Array(arrayBuffer)));
 
@@ -73,8 +73,8 @@ export class DocxParser extends BaseBookParser implements BookParser {
         const doc = new DOMParser().parseFromString(await stylesXml.text(), "text/xml");
         const styleEls = doc.getElementsByTagNameNS(WORD_NS, "style");
         for (const style of styleEls) {
-          const styleId = style.getAttributeNS(WORD_NS, "val") || style.getAttribute("w:val");
-          const type = style.getAttributeNS(WORD_NS, "type") || style.getAttribute("w:type");
+          const styleId = style.getAttributeNS(WORD_NS, "val");
+          const type = style.getAttributeNS(WORD_NS, "type");
           if (type === "paragraph" && styleId && /^heading\s*\d$/i.test(styleId)) {
             headingStyles.add(styleId.toLowerCase());
           }

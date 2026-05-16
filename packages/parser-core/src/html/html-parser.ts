@@ -1,10 +1,9 @@
-import { BaseBookParser, generateId } from "../base";
+import { generateId, readAsText } from "../base";
 import type { BookParser, ParserResult, ChapterData } from "../types";
 
 const HEADING_TAGS = new Set(["h1", "h2", "h3", "h4"]);
-const MAX_CHAPTER_CHARS = 100_000;
 
-export class HtmlParser extends BaseBookParser implements BookParser {
+export class HtmlParser implements BookParser {
   private static readonly SUPPORTED_MIME_TYPES = ["text/html", "application/xhtml+xml"];
 
   readonly format = "html";
@@ -14,7 +13,7 @@ export class HtmlParser extends BaseBookParser implements BookParser {
   }
 
   async parse(file: File): Promise<ParserResult> {
-    const rawHtml = await this.readAsText(file);
+    const rawHtml = await readAsText(file);
     const doc = new DOMParser().parseFromString(rawHtml, "text/html");
 
     const title =
@@ -59,10 +58,7 @@ export class HtmlParser extends BaseBookParser implements BookParser {
         const headingTitle = headings[i].el.textContent?.trim() || `Chapter ${i + 1}`;
 
         const chapterHtml = HtmlParser.collectChildren(body, startIdx, endIdx);
-        let processed = chapterHtml;
-        if (processed.length > MAX_CHAPTER_CHARS && i === 0) {
-          // Single-chapter fallback for very large content
-        }
+        const processed = chapterHtml;
 
         const id = generateId("ch");
         content.set(id, HtmlParser.wrapHtml(processed, headingTitle));

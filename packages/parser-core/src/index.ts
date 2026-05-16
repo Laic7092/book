@@ -2,24 +2,17 @@
 /// <reference path="./cbr/unrar.d.ts" />
 
 export type { BookParser, ParserResult, ChapterData } from "./types";
-export { PdfRenderer } from "./pdf/pdf-renderer";
 export type { PdfOutlineItem } from "./pdf/pdf-renderer";
 export {
   registerParserLoader,
   getParserForFormat,
   getParserForFile,
   loadParserForFormat,
+  getParserForFileAuto,
   getParsers,
   getFormatForExtension,
 } from "./registry";
-export {
-  BaseBookParser,
-  generateId,
-  sanitizeFilename,
-  parseXML,
-  extractTextFromHtml,
-  cleanHtml,
-} from "./base";
+export { generateId, getFileMetadata, readAsText, readAsArrayBuffer, parseXML } from "./base";
 
 // ── Built-in parsers (registered eagerly at import time) ──
 

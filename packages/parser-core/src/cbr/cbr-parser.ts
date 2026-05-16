@@ -1,7 +1,22 @@
-import { BaseBookParser, generateId } from "../base";
+import { generateId, readAsArrayBuffer } from "../base";
 import type { BookParser, ParserResult, ChapterData } from "../types";
 
 const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp", "bmp"]);
+
+async function unrarAsync(
+  data: ArrayBuffer,
+): Promise<Array<{ filename: string; fileData: Uint8Array }>> {
+  return new Promise((resolve, reject) => {
+    setTimeout(async () => {
+      try {
+        const { default: unrar } = await import("unrar-js/lib/Unrar.js");
+        resolve(unrar(data));
+      } catch (e) {
+        reject(e);
+      }
+    }, 0);
+  });
+}
 
 function getMimeType(ext: string): string {
   const map: Record<string, string> = {
@@ -15,7 +30,7 @@ function getMimeType(ext: string): string {
   return map[ext.toLowerCase()] || "image/jpeg";
 }
 
-export class CbrParser extends BaseBookParser implements BookParser {
+export class CbrParser implements BookParser {
   private static readonly SUPPORTED_MIME_TYPES = [
     "application/vnd.comicbook+rar",
     "application/x-cbr",
@@ -30,9 +45,8 @@ export class CbrParser extends BaseBookParser implements BookParser {
   }
 
   async parse(file: File): Promise<ParserResult> {
-    const arrayBuffer = await this.readAsArrayBuffer(file);
-    const { default: unrar } = await import("unrar-js/lib/Unrar.js");
-    const files = unrar(arrayBuffer);
+    const arrayBuffer = await readAsArrayBuffer(file);
+    const files = await unrarAsync(arrayBuffer);
 
     const imageEntries = files
       .filter((f) => {
@@ -64,8 +78,11 @@ export class CbrParser extends BaseBookParser implements BookParser {
     const firstEntry = imageEntries[0];
     if (firstEntry) {
       coverUrl = firstEntry.filename;
-      const buf = firstEntry.fileData.buffer;
-      resources.set(firstEntry.filename, buf.slice(0) as ArrayBuffer);
+      const { buffer, byteOffset, byteLength } = firstEntry.fileData;
+      resources.set(
+        firstEntry.filename,
+        buffer.slice(byteOffset, byteOffset + byteLength) as ArrayBuffer,
+      );
     }
 
     return {
@@ -90,12 +107,14 @@ export class CbrParser extends BaseBookParser implements BookParser {
     const mimeType = getMimeType(ext);
 
     try {
-      const { default: unrar } = await import("unrar-js/lib/Unrar.js");
-      const files = unrar(rawData);
+      const files = await unrarAsync(rawData);
       const entry = files.find((f) => f.filename === chapter.href);
       if (!entry?.fileData) return undefined;
 
-      const blob = new Blob([entry.fileData.buffer as ArrayBuffer], { type: mimeType });
+      const { buffer, byteOffset, byteLength } = entry.fileData;
+      const blob = new Blob([buffer.slice(byteOffset, byteOffset + byteLength) as ArrayBuffer], {
+        type: mimeType,
+      });
       const url = URL.createObjectURL(blob);
       return CbrParser.pageToHtml(url);
     } catch {
@@ -105,10 +124,11 @@ export class CbrParser extends BaseBookParser implements BookParser {
 
   async extractResource(rawData: ArrayBuffer, path: string): Promise<ArrayBuffer | undefined> {
     try {
-      const { default: unrar } = await import("unrar-js/lib/Unrar.js");
-      const files = unrar(rawData);
+      const files = await unrarAsync(rawData);
       const entry = files.find((f) => f.filename === path);
-      return entry?.fileData?.buffer.slice(0) as ArrayBuffer | undefined;
+      if (!entry?.fileData) return undefined;
+      const { buffer, byteOffset, byteLength } = entry.fileData;
+      return buffer.slice(byteOffset, byteOffset + byteLength) as ArrayBuffer;
     } catch {
       return undefined;
     }

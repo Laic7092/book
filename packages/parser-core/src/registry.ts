@@ -50,3 +50,20 @@ export function getParserForFile(file: File): BookParser | null {
 
   return null;
 }
+
+export async function getParserForFileAuto(file: File): Promise<BookParser | null> {
+  for (const parser of getParsers()) {
+    if (parser.supportsFormat(file.type)) return parser;
+  }
+
+  const ext = file.name.split(".").pop()?.toLowerCase();
+  if (ext) {
+    const format = getFormatForExtension(ext);
+    if (format) {
+      await loadParserForFormat(format);
+      return cache.get(format) ?? null;
+    }
+  }
+
+  return null;
+}

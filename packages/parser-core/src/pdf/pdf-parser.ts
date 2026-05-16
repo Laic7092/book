@@ -1,4 +1,4 @@
-import { BaseBookParser, generateId } from "../base";
+import { generateId, readAsArrayBuffer } from "../base";
 import type { BookParser, ParserResult, ChapterData } from "../types";
 
 async function getPdfjsModule() {
@@ -10,7 +10,7 @@ async function getPdfjsModule() {
   return pdfjsLib;
 }
 
-export class PdfParser extends BaseBookParser implements BookParser {
+export class PdfParser implements BookParser {
   private static readonly SUPPORTED_MIME_TYPES = ["application/pdf", "application/x-pdf"];
 
   readonly format = "pdf";
@@ -49,7 +49,7 @@ export class PdfParser extends BaseBookParser implements BookParser {
   }
 
   async parse(file: File): Promise<ParserResult> {
-    const arrayBuffer = await this.readAsArrayBuffer(file);
+    const arrayBuffer = await readAsArrayBuffer(file);
     const pdfjsLib = await getPdfjsModule();
 
     let pdf: any;

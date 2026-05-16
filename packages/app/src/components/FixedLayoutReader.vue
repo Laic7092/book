@@ -13,7 +13,7 @@ import { TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../utils/constants";
 import { currentSession } from "../stores/reader-session";
 import { pluginEvents, pluginHooks } from "../plugins/context";
 import type { InitConfig } from "../plugins/types";
-import { PdfRenderer } from "@book/parser-core";
+import { PdfRenderer } from "@book/parser-core/pdf-renderer";
 import type { PdfOutlineItem } from "@book/parser-core";
 
 const props = defineProps<{ book: Book }>();

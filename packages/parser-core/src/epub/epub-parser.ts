@@ -1,5 +1,6 @@
 import type { Entry, FileEntry, ZipReader } from "@zip.js/zip.js";
-import { BaseBookParser, generateId, parseXML, cleanHtml } from "../base";
+import { generateId, readAsArrayBuffer, parseXML } from "../base";
+import { cleanHtml } from "./html-cleaner";
 import type { BookParser, ParserResult, ChapterData } from "../types";
 
 let _zipModule: typeof import("@zip.js/zip.js") | null = null;
@@ -35,13 +36,37 @@ interface ZipContext {
   pathMap: Map<string, FileEntry>;
 }
 
-export class EpubParser extends BaseBookParser implements BookParser {
+interface CachedZipData {
+  entries: Entry[];
+  pathMap: Map<string, FileEntry>;
+}
+
+export class EpubParser implements BookParser {
   private static readonly SUPPORTED_MIME_TYPES = ["application/epub+zip", "application/x-epub+zip"];
 
   readonly format = "epub" as const;
 
+  private _entriesCache = new WeakMap<ArrayBuffer, CachedZipData>();
+
   supportsFormat(mimeType: string): boolean {
     return EpubParser.SUPPORTED_MIME_TYPES.includes(mimeType);
+  }
+
+  private async _getZipEntries(rawData: ArrayBuffer): Promise<CachedZipData> {
+    const cached = this._entriesCache.get(rawData);
+    if (cached) return cached;
+
+    const { ZipReader: ZR, Uint8ArrayReader: UAR } = await getZipModule();
+    const zipReader = new ZR(new UAR(new Uint8Array(rawData)));
+    try {
+      const entries = await zipReader.getEntries();
+      const pathMap = EpubParser.buildEntryMap(entries);
+      const result: CachedZipData = { entries, pathMap };
+      this._entriesCache.set(rawData, result);
+      return result;
+    } finally {
+      await zipReader.close();
+    }
   }
 
   async extractChapterContent(
@@ -49,11 +74,29 @@ export class EpubParser extends BaseBookParser implements BookParser {
     chapter: { id: string; href?: string },
   ): Promise<string | undefined> {
     if (!chapter.href) return undefined;
-    return EpubParser.extractChapterContent(rawData, chapter.href);
+
+    try {
+      const { pathMap } = await this._getZipEntries(rawData);
+      const entry = EpubParser.findEntry(pathMap, chapter.href);
+      if (!entry) return undefined;
+
+      const { TextWriter: TW } = await getZipModule();
+      const html = await entry.getData(new TW());
+      return cleanHtml(html);
+    } catch {
+      return undefined;
+    }
   }
 
   async extractResource(rawData: ArrayBuffer, path: string): Promise<ArrayBuffer | undefined> {
-    return EpubParser.extractResource(rawData, path);
+    try {
+      const { pathMap } = await this._getZipEntries(rawData);
+      const entry = EpubParser.findEntry(pathMap, path);
+      if (!entry) return undefined;
+      return await entry.arrayBuffer();
+    } catch {
+      return undefined;
+    }
   }
 
   private static buildEntryMap(entries: Entry[]): Map<string, FileEntry> {
@@ -81,7 +124,7 @@ export class EpubParser extends BaseBookParser implements BookParser {
   }
 
   async parse(file: File): Promise<ParserResult> {
-    const arrayBuffer = await this.readAsArrayBuffer(file);
+    const arrayBuffer = await readAsArrayBuffer(file);
     const { ZipReader: ZR, Uint8ArrayReader: UAR } = await getZipModule();
     const zipReader = new ZR(new UAR(new Uint8Array(arrayBuffer)));
 
@@ -157,43 +200,6 @@ export class EpubParser extends BaseBookParser implements BookParser {
         resources,
         rawData: arrayBuffer,
       };
-    } finally {
-      await zipReader.close();
-    }
-  }
-
-  static async extractChapterContent(rawData: ArrayBuffer, chapterHref: string): Promise<string> {
-    const { ZipReader: ZR, Uint8ArrayReader: UAR, TextWriter: TW } = await getZipModule();
-    const zipReader = new ZR(new UAR(new Uint8Array(rawData)));
-    try {
-      const entries = await zipReader.getEntries();
-      const pathMap = EpubParser.buildEntryMap(entries);
-      const entry = EpubParser.findEntry(pathMap, chapterHref);
-
-      if (!entry) {
-        throw new Error(`Chapter not found in EPUB: ${chapterHref}`);
-      }
-
-      const html = await entry.getData(new TW());
-      return cleanHtml(html);
-    } finally {
-      await zipReader.close();
-    }
-  }
-
-  static async extractResource(rawData: ArrayBuffer, resourceHref: string): Promise<ArrayBuffer> {
-    const { ZipReader: ZR, Uint8ArrayReader: UAR } = await getZipModule();
-    const zipReader = new ZR(new UAR(new Uint8Array(rawData)));
-    try {
-      const entries = await zipReader.getEntries();
-      const pathMap = EpubParser.buildEntryMap(entries);
-      const entry = EpubParser.findEntry(pathMap, resourceHref);
-
-      if (!entry) {
-        throw new Error(`Resource not found in EPUB: ${resourceHref}`);
-      }
-
-      return await entry.arrayBuffer();
     } finally {
       await zipReader.close();
     }

@@ -1,5 +1,5 @@
 import type { FileEntry } from "@zip.js/zip.js";
-import { BaseBookParser, generateId } from "../base";
+import { generateId, readAsArrayBuffer } from "../base";
 import type { BookParser, ParserResult, ChapterData } from "../types";
 
 const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp", "bmp"]);
@@ -25,7 +25,7 @@ async function getZipModule() {
   };
 }
 
-export class CbzParser extends BaseBookParser implements BookParser {
+export class CbzParser implements BookParser {
   private static readonly SUPPORTED_MIME_TYPES = [
     "application/vnd.comicbook+zip",
     "application/x-cbz",
@@ -67,7 +67,7 @@ export class CbzParser extends BaseBookParser implements BookParser {
   }
 
   async parse(file: File): Promise<ParserResult> {
-    const arrayBuffer = await this.readAsArrayBuffer(file);
+    const arrayBuffer = await readAsArrayBuffer(file);
     const { ZipReader, Uint8ArrayReader, BlobWriter } = await getZipModule();
     const zipReader = new ZipReader(new Uint8ArrayReader(new Uint8Array(arrayBuffer)));
 

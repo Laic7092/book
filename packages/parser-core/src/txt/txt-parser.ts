@@ -1,4 +1,4 @@
-import { BaseBookParser, generateId } from "../base";
+import { generateId, getFileMetadata, readAsArrayBuffer } from "../base";
 import type { BookParser, ParserResult, ChapterData } from "../types";
 
 const PARAGRAPHS_PER_CHUNK = 320;
@@ -67,7 +67,7 @@ const CHAPTER_PATTERNS: ChapterPattern[] = [
   },
 ];
 
-export class TxtParser extends BaseBookParser implements BookParser {
+export class TxtParser implements BookParser {
   private static readonly SUPPORTED_MIME_TYPES = [
     "text/plain",
     "text/markdown",
@@ -88,7 +88,7 @@ export class TxtParser extends BaseBookParser implements BookParser {
     }
 
     const rawContent = await this.readText(file);
-    const metadata = this.getFileMetadata(file);
+    const metadata = getFileMetadata(file);
     const title = metadata.name.replace(/\.[^.]+$/, "") || "Untitled";
     const bookId = generateId("book");
 
@@ -106,7 +106,7 @@ export class TxtParser extends BaseBookParser implements BookParser {
   }
 
   private async readText(file: File): Promise<string> {
-    const buffer = await this.readAsArrayBuffer(file);
+    const buffer = await readAsArrayBuffer(file);
     const bytes = new Uint8Array(buffer);
 
     const { default: chardet } = await import("chardet");

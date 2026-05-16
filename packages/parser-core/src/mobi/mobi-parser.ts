@@ -1,4 +1,4 @@
-import { BaseBookParser, generateId } from "../base";
+import { generateId, readAsArrayBuffer } from "../base";
 import type { BookParser, ParserResult, ChapterData } from "../types";
 
 // ── PDB / PalmDB container constants ──
@@ -165,7 +165,7 @@ function findKf8ZipOffset(data: Uint8Array): number {
   return -1;
 }
 
-export class MobiParser extends BaseBookParser implements BookParser {
+export class MobiParser implements BookParser {
   private static readonly SUPPORTED_MIME_TYPES = [
     "application/x-mobipocket-ebook",
     "application/x-mobi",
@@ -180,7 +180,7 @@ export class MobiParser extends BaseBookParser implements BookParser {
   }
 
   async parse(file: File): Promise<ParserResult> {
-    const arrayBuffer = await this.readAsArrayBuffer(file);
+    const arrayBuffer = await readAsArrayBuffer(file);
     const data = new Uint8Array(arrayBuffer);
     const view = new DataView(arrayBuffer);
 

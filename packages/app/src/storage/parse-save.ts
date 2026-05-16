@@ -1,4 +1,4 @@
-import { loadParserForFormat, getParserForFile, getFormatForExtension } from "@book/parser-core";
+import { getParserForFileAuto } from "@book/parser-core";
 import { mapParserResult } from "../core/types";
 import { assertValidBookFile } from "../utils/validation";
 import * as booksStore from "./books";
@@ -15,12 +15,7 @@ export async function parseAndSaveBook(
 ): Promise<ParseAndSaveResult> {
   assertValidBookFile(file);
 
-  const ext = file.name.split(".").pop()?.toLowerCase();
-  const format = ext ? getFormatForExtension(ext) : undefined;
-  if (format) {
-    await loadParserForFormat(format);
-  }
-  const parser = getParserForFile(file);
+  const parser = await getParserForFileAuto(file);
   if (!parser) {
     throw new Error(`Unsupported file format: ${file.type || file.name}`);
   }

@@ -1,7 +1,7 @@
-import { BaseBookParser, generateId } from "../base";
+import { generateId, readAsText } from "../base";
 import type { BookParser, ParserResult, ChapterData } from "../types";
 
-export class Fb2Parser extends BaseBookParser implements BookParser {
+export class Fb2Parser implements BookParser {
   private static readonly SUPPORTED_MIME_TYPES = [
     "application/x-fictionbook+xml",
     "application/x-fictionbook",
@@ -15,7 +15,7 @@ export class Fb2Parser extends BaseBookParser implements BookParser {
   }
 
   async parse(file: File): Promise<ParserResult> {
-    const rawContent = await this.readAsText(file);
+    const rawContent = await readAsText(file);
     const xmlDoc = new DOMParser().parseFromString(rawContent, "application/xml");
 
     const parseError = xmlDoc.querySelector("parsererror");
