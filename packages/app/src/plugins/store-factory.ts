@@ -12,7 +12,7 @@
  *   store.update(...) → merge + persist + auto-sync
  */
 
-import { ref, shallowRef, triggerRef, type Ref } from "vue";
+import { ref, shallowRef, triggerRef, watch, type Ref } from "vue";
 import type { PluginStorageAdapter } from "./types";
 
 // ── Key helpers ──
@@ -28,6 +28,8 @@ export interface EntityStore<T extends { id: string }> {
   items: Readonly<Ref<readonly T[]>>;
   /** True after the initial load from storage completes. */
   loaded: Ref<boolean>;
+  /** Resolves when the initial load from storage completes. */
+  whenLoaded: () => Promise<void>;
 
   /** Lookup in local cache (no storage round-trip). */
   getById(id: string): T | undefined;
@@ -64,6 +66,18 @@ export function createEntityStore<T extends { id: string }>(
   const _cache: T[] = [];
   const _itemsRef = shallowRef<readonly T[]>(_cache);
   const loaded = ref(false);
+  const _loadedPromise = new Promise<void>((resolve) => {
+    const stop = watch(
+      loaded,
+      (v) => {
+        if (v) {
+          stop();
+          resolve();
+        }
+      },
+      { immediate: true },
+    );
+  });
 
   function sync(): void {
     triggerRef(_itemsRef);
@@ -83,6 +97,7 @@ export function createEntityStore<T extends { id: string }>(
   return {
     items: _itemsRef as Readonly<Ref<readonly T[]>>,
     loaded,
+    whenLoaded: () => _loadedPromise,
 
     getById(id: string): T | undefined {
       return _cache.find((i) => getKey(i) === id);

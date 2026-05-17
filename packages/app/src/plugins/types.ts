@@ -104,19 +104,6 @@ export interface HeaderAction {
   onClick: () => void;
 }
 
-// ── CSS injection API ──
-
-export interface CssAPI {
-  /** Apply a theme from the registry — sets CSS variables on :root. */
-  setTheme(theme: string): void;
-  /** Remove all inline theme CSS variables — falls back to index.css defaults. */
-  clearTheme(): void;
-  /** Inject or update a <style> element in the reader iframe. */
-  injectIframeStyle(id: string, css: string): void;
-  /** Remove an injected <style> from the reader iframe. */
-  removeIframeStyle(id: string): void;
-}
-
 // ── PluginContext types ──
 
 export interface PluginStorageAdapter {

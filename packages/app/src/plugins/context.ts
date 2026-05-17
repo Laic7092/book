@@ -9,7 +9,6 @@ import type {
   FooterAction,
   HeaderAction,
   BookshelfMenuAction,
-  CssAPI,
   PluginEventMap,
   IEventBus,
   EventHandler,
@@ -99,8 +98,6 @@ export function createPluginStorageAdapter(pluginId: string): PluginStorageAdapt
   };
 }
 
-// ── UISlots implementation ──
-
 export const registeredModals = shallowRef<Record<string, Component>>({});
 export const registeredOverlays = shallowRef<Record<string, Component>>({});
 export const registeredFooterActions = shallowRef<FooterAction[]>([]);
@@ -113,62 +110,6 @@ export const registeredPages = shallowRef<Record<string, Component>>({});
 
 function resolveComponent(v: Component | (() => Promise<Component>)): Component {
   return typeof v === "function" ? defineAsyncComponent(v as never) : v;
-}
-
-export function createUISlots(): Omit<
-  UISlots,
-  "openModal" | "setTheme" | "clearTheme" | "injectIframeStyle" | "removeIframeStyle"
-> {
-  return {
-    registerModal(name: string, component: Component | (() => Promise<Component>)) {
-      registeredModals.value = {
-        ...registeredModals.value,
-        [name]: resolveComponent(component),
-      };
-    },
-    registerOverlay(name: string, component: Component | (() => Promise<Component>)) {
-      registeredOverlays.value = {
-        ...registeredOverlays.value,
-        [name]: resolveComponent(component),
-      };
-    },
-    registerFooterAction(action: FooterAction) {
-      const existing = registeredFooterActions.value.filter((a) => a.id !== action.id);
-      const actions = [...existing, action];
-      actions.sort((a, b) => a.order - b.order);
-      registeredFooterActions.value = actions;
-    },
-    registerBookshelfWidget(component: Component | (() => Promise<Component>)) {
-      registeredBookshelfWidgets.value = [
-        ...registeredBookshelfWidgets.value,
-        resolveComponent(component),
-      ];
-    },
-    registerBookshelfMenuAction(action: BookshelfMenuAction) {
-      const existing = registeredBookshelfMenuActions.value.filter((a) => a.id !== action.id);
-      const actions = [...existing, action];
-      actions.sort((a, b) => a.order - b.order);
-      registeredBookshelfMenuActions.value = actions;
-    },
-    registerToolbarItem(item: ToolbarItem) {
-      const existing = registeredToolbarItems.value.filter((i) => i.id !== item.id);
-      const items = [...existing, item];
-      items.sort((a, b) => a.order - b.order);
-      registeredToolbarItems.value = items;
-    },
-    registerHeaderAction(action: HeaderAction) {
-      const existing = registeredHeaderActions.value.filter((a) => a.id !== action.id);
-      const actions = [...existing, action];
-      actions.sort((a, b) => a.order - b.order);
-      registeredHeaderActions.value = actions;
-    },
-    registerPage(name: string, component: Component | (() => Promise<Component>)) {
-      registeredPages.value = {
-        ...registeredPages.value,
-        [name]: resolveComponent(component),
-      };
-    },
-  };
 }
 
 export function registerContentTransformer(t: ContentTransformer): void {
@@ -279,11 +220,6 @@ class HookBus implements HookRegistry {
 /** Global hook bus. Plugins register filters; reader runs them before init. */
 export const pluginHooks = new HookBus();
 
-// ── PluginContext factory ──
-
-// ── CssAPI implementation ──
-
-/** Remove all inline theme CSS variables — falls back to index.css neutral defaults. */
 function resetThemeVars() {
   const root = document.documentElement;
   const props = [
@@ -309,102 +245,62 @@ function resetThemeVars() {
   root.removeAttribute("data-theme");
 }
 
-export function createCssAPI(): CssAPI {
-  return {
-    setTheme(theme: string) {
-      const def = themeRegistry.get(theme);
-      const c = def.chrome;
-      const root = document.documentElement;
-      root.style.setProperty("--reader-bg", c.bg);
-      root.style.setProperty("--reader-text", c.text);
-      root.style.setProperty("--text-secondary", c.textSecondary);
-      root.style.setProperty("--header-bg", c.headerBg);
-      root.style.setProperty("--border", c.border);
-      root.style.setProperty("--border-subtle", c.borderSubtle);
-      root.style.setProperty("--hover-bg", c.hoverBg);
-      root.style.setProperty("--accent", c.accent);
-      root.style.setProperty("--accent-soft", c.accentSoft);
-      root.style.setProperty("--modal-bg", c.modalBg);
-      root.style.setProperty("--modal-text", c.modalText);
-      root.style.setProperty("--progress-track", c.progressTrack);
-      root.style.setProperty("--bg-elevated", c.bgElevated);
-      root.style.setProperty("--bg-secondary", c.bgSecondary);
-      root.style.setProperty("--bg-tertiary", c.bgTertiary);
-      root.style.setProperty("--accent-muted", c.accentMuted);
-      root.style.setProperty("--accent-hover", c.accentHover);
-      root.setAttribute("data-theme", theme);
-    },
-    clearTheme() {
-      resetThemeVars();
-    },
-    injectIframeStyle(id: string, css: string) {
-      const doc = currentSession.value?.getDocument();
-      if (!doc) return;
-      const styleId = `plugin-${id}`;
-      let style = doc.getElementById(styleId);
-      if (!style) {
-        style = doc.createElement("style");
-        style.id = styleId;
-        doc.head.appendChild(style);
-      }
-      style.textContent = css;
-    },
-    removeIframeStyle(id: string) {
-      const doc = currentSession.value?.getDocument();
-      if (!doc) return;
-      const style = doc.getElementById(`plugin-${id}`);
-      if (style) style.remove();
-    },
-  };
-}
-
-function createTrackedCss(cleanupFns: (() => void | Promise<void>)[]): CssAPI {
-  const raw = createCssAPI();
-  const injectedStyles: string[] = [];
-  let themeApplied = false;
-
-  return {
-    setTheme(theme: string) {
-      if (!themeApplied) {
-        themeApplied = true;
-        cleanupFns.push(() => resetThemeVars());
-      }
-      raw.setTheme(theme);
-    },
-    clearTheme() {
-      raw.clearTheme();
-    },
-    injectIframeStyle(id: string, css: string) {
-      raw.injectIframeStyle(id, css);
-      if (!injectedStyles.includes(id)) {
-        injectedStyles.push(id);
-        cleanupFns.push(() => raw.removeIframeStyle(id));
-      }
-    },
-    removeIframeStyle(id: string) {
-      raw.removeIframeStyle(id);
-      const idx = injectedStyles.indexOf(id);
-      if (idx >= 0) injectedStyles.splice(idx, 1);
-    },
-  };
-}
-
-/** Tracked context: wraps UI slots and events for automatic cleanup on teardown. */
 export interface TrackedContext extends PluginContext {
   runCleanup(): Promise<void>;
   addTeardown(fn: () => void | Promise<void>): void;
 }
 
+function applyCssTheme(theme: string) {
+  const def = themeRegistry.get(theme);
+  const c = def.chrome;
+  const root = document.documentElement;
+  root.style.setProperty("--reader-bg", c.bg);
+  root.style.setProperty("--reader-text", c.text);
+  root.style.setProperty("--text-secondary", c.textSecondary);
+  root.style.setProperty("--header-bg", c.headerBg);
+  root.style.setProperty("--border", c.border);
+  root.style.setProperty("--border-subtle", c.borderSubtle);
+  root.style.setProperty("--hover-bg", c.hoverBg);
+  root.style.setProperty("--accent", c.accent);
+  root.style.setProperty("--accent-soft", c.accentSoft);
+  root.style.setProperty("--modal-bg", c.modalBg);
+  root.style.setProperty("--modal-text", c.modalText);
+  root.style.setProperty("--progress-track", c.progressTrack);
+  root.style.setProperty("--bg-elevated", c.bgElevated);
+  root.style.setProperty("--bg-secondary", c.bgSecondary);
+  root.style.setProperty("--bg-tertiary", c.bgTertiary);
+  root.style.setProperty("--accent-muted", c.accentMuted);
+  root.style.setProperty("--accent-hover", c.accentHover);
+  root.setAttribute("data-theme", theme);
+}
+
+function injectStyle(id: string, css: string) {
+  const doc = currentSession.value?.getDocument();
+  if (!doc) return;
+  const el =
+    doc.getElementById(`plugin-${id}`) ??
+    Object.assign(doc.createElement("style"), { id: `plugin-${id}` });
+  if (!el.parentNode) doc.head.appendChild(el);
+  el.textContent = css;
+}
+
+function removeStyle(id: string) {
+  const doc = currentSession.value?.getDocument();
+  doc?.getElementById(`plugin-${id}`)?.remove();
+}
+
 export function createTrackedContext(id: string, _bootstrap: PluginBootstrap): TrackedContext {
-  const rawUi = createUISlots();
   const cleanupFns: (() => void | Promise<void>)[] = [];
   const eventUnsubs: (() => void)[] = [];
-  const trackedCss = createTrackedCss(cleanupFns);
+  const hookUnsubs: (() => void)[] = [];
+  const trackedTransformers: ContentTransformer[] = [];
+  const injectedStyleIds: string[] = [];
+  let themeWasSet = false;
 
   const ui: UISlots = {
     registerModal(name, component) {
       const resolved = resolveComponent(component);
-      rawUi.registerModal(name, resolved);
+      registeredModals.value = { ...registeredModals.value, [name]: resolved };
       cleanupFns.push(() => {
         const copy = { ...registeredModals.value };
         delete copy[name];
@@ -413,7 +309,7 @@ export function createTrackedContext(id: string, _bootstrap: PluginBootstrap): T
     },
     registerOverlay(name, component) {
       const resolved = resolveComponent(component);
-      rawUi.registerOverlay(name, resolved);
+      registeredOverlays.value = { ...registeredOverlays.value, [name]: resolved };
       cleanupFns.push(() => {
         const copy = { ...registeredOverlays.value };
         delete copy[name];
@@ -421,7 +317,9 @@ export function createTrackedContext(id: string, _bootstrap: PluginBootstrap): T
       });
     },
     registerFooterAction(action) {
-      rawUi.registerFooterAction(action);
+      const existing = registeredFooterActions.value.filter((a) => a.id !== action.id);
+      const actions = [...existing, action].sort((a, b) => a.order - b.order);
+      registeredFooterActions.value = actions;
       cleanupFns.push(() => {
         registeredFooterActions.value = registeredFooterActions.value.filter(
           (a) => a.id !== action.id,
@@ -430,7 +328,7 @@ export function createTrackedContext(id: string, _bootstrap: PluginBootstrap): T
     },
     registerBookshelfWidget(component) {
       const resolved = resolveComponent(component);
-      rawUi.registerBookshelfWidget(resolved);
+      registeredBookshelfWidgets.value = [...registeredBookshelfWidgets.value, resolved];
       cleanupFns.push(() => {
         registeredBookshelfWidgets.value = registeredBookshelfWidgets.value.filter(
           (c) => c !== resolved,
@@ -438,7 +336,9 @@ export function createTrackedContext(id: string, _bootstrap: PluginBootstrap): T
       });
     },
     registerBookshelfMenuAction(action) {
-      rawUi.registerBookshelfMenuAction(action);
+      const existing = registeredBookshelfMenuActions.value.filter((a) => a.id !== action.id);
+      const actions = [...existing, action].sort((a, b) => a.order - b.order);
+      registeredBookshelfMenuActions.value = actions;
       cleanupFns.push(() => {
         registeredBookshelfMenuActions.value = registeredBookshelfMenuActions.value.filter(
           (a) => a.id !== action.id,
@@ -446,13 +346,17 @@ export function createTrackedContext(id: string, _bootstrap: PluginBootstrap): T
       });
     },
     registerToolbarItem(item) {
-      rawUi.registerToolbarItem(item);
+      const existing = registeredToolbarItems.value.filter((i) => i.id !== item.id);
+      const items = [...existing, item].sort((a, b) => a.order - b.order);
+      registeredToolbarItems.value = items;
       cleanupFns.push(() => {
         registeredToolbarItems.value = registeredToolbarItems.value.filter((i) => i.id !== item.id);
       });
     },
     registerHeaderAction(action) {
-      rawUi.registerHeaderAction(action);
+      const existing = registeredHeaderActions.value.filter((a) => a.id !== action.id);
+      const actions = [...existing, action].sort((a, b) => a.order - b.order);
+      registeredHeaderActions.value = actions;
       cleanupFns.push(() => {
         registeredHeaderActions.value = registeredHeaderActions.value.filter(
           (a) => a.id !== action.id,
@@ -461,54 +365,61 @@ export function createTrackedContext(id: string, _bootstrap: PluginBootstrap): T
     },
     registerPage(name, component) {
       const resolved = resolveComponent(component);
-      rawUi.registerPage(name, resolved);
+      registeredPages.value = { ...registeredPages.value, [name]: resolved };
       cleanupFns.push(() => {
         const copy = { ...registeredPages.value };
         delete copy[name];
         registeredPages.value = copy;
       });
     },
-    openModal: (name) => {
-      const uiStore = useUIStore();
-      uiStore.openModal(name);
+    openModal: (name) => useUIStore().openModal(name),
+    setTheme(theme) {
+      if (!themeWasSet) {
+        themeWasSet = true;
+        cleanupFns.push(resetThemeVars);
+      }
+      applyCssTheme(theme);
     },
-    setTheme: (t) => trackedCss.setTheme(t),
-    clearTheme: () => trackedCss.clearTheme(),
-    injectIframeStyle: (id, c) => trackedCss.injectIframeStyle(id, c),
-    removeIframeStyle: (id) => trackedCss.removeIframeStyle(id),
-  };
-
-  const events: IEventBus<PluginEventMap> = {
-    on<K extends keyof PluginEventMap>(event: K, handler: EventHandler<PluginEventMap[K]>) {
-      const unsub = pluginEvents.on(event, handler);
-      eventUnsubs.push(unsub);
-      return unsub;
+    clearTheme() {
+      resetThemeVars();
     },
-    emit: pluginEvents.emit.bind(pluginEvents),
-  };
-
-  const hookUnsubs: (() => void)[] = [];
-
-  const hooks: HookRegistry = {
-    filter<K extends keyof HookMap>(
-      name: K,
-      handler: FilterHandler<HookMap[K]>,
-      priority?: number,
-    ) {
-      const unsub = pluginHooks.filter(name, handler, priority);
-      hookUnsubs.push(unsub);
-      return unsub;
+    injectIframeStyle(id, css) {
+      injectStyle(id, css);
+      if (!injectedStyleIds.includes(id)) {
+        injectedStyleIds.push(id);
+        cleanupFns.push(() => removeStyle(id));
+      }
     },
-    run: pluginHooks.run.bind(pluginHooks),
+    removeIframeStyle(id) {
+      removeStyle(id);
+      const idx = injectedStyleIds.indexOf(id);
+      if (idx >= 0) injectedStyleIds.splice(idx, 1);
+    },
   };
-
-  const trackedTransformers: ContentTransformer[] = [];
 
   return {
     storage: createPluginStorageAdapter(id),
     ui,
-    events,
-    hooks,
+    events: {
+      on<K extends keyof PluginEventMap>(event: K, handler: EventHandler<PluginEventMap[K]>) {
+        const unsub = pluginEvents.on(event, handler);
+        eventUnsubs.push(unsub);
+        return unsub;
+      },
+      emit: pluginEvents.emit.bind(pluginEvents),
+    },
+    hooks: {
+      filter<K extends keyof HookMap>(
+        name: K,
+        handler: FilterHandler<HookMap[K]>,
+        priority?: number,
+      ) {
+        const unsub = pluginHooks.filter(name, handler, priority);
+        hookUnsubs.push(unsub);
+        return unsub;
+      },
+      run: pluginHooks.run.bind(pluginHooks),
+    },
     readerSession: () => currentSession.value,
     addTeardown(fn: () => void | Promise<void>) {
       cleanupFns.push(fn);
@@ -521,18 +432,12 @@ export function createTrackedContext(id: string, _bootstrap: PluginBootstrap): T
     server: createServerClient(),
     themes: themeRegistry,
     async runCleanup() {
-      const unsubResults = await Promise.allSettled(
-        eventUnsubs.map((fn) => {
-          try {
-            fn();
-            return Promise.resolve();
-          } catch (e) {
-            return Promise.reject(e);
-          }
-        }),
-      );
-      for (const r of unsubResults) {
-        if (r.status === "rejected") console.error("[TrackedContext] Event unsub error:", r.reason);
+      for (const fn of eventUnsubs) {
+        try {
+          fn();
+        } catch (e) {
+          console.error("[TrackedContext] Event unsub error:", e);
+        }
       }
       eventUnsubs.length = 0;
       for (const fn of hookUnsubs) {
@@ -543,17 +448,12 @@ export function createTrackedContext(id: string, _bootstrap: PluginBootstrap): T
         }
       }
       hookUnsubs.length = 0;
-      const results = await Promise.allSettled(
-        cleanupFns.map((fn) => {
-          try {
-            return Promise.resolve(fn());
-          } catch (e) {
-            return Promise.reject(e);
-          }
-        }),
-      );
-      for (const r of results) {
-        if (r.status === "rejected") console.error("[TrackedContext] Cleanup error:", r.reason);
+      for (const fn of cleanupFns) {
+        try {
+          await fn();
+        } catch (e) {
+          console.error("[TrackedContext] Cleanup error:", e);
+        }
       }
       cleanupFns.length = 0;
       for (const t of trackedTransformers) {

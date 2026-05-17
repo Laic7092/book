@@ -1,7 +1,8 @@
 import { ref, type Component } from "vue";
 import type { Plugin, FooterAction, BookshelfMenuAction, PluginBootstrap } from "../types";
 import { PLUGIN_BRAND } from "../types";
-import { saveAllPluginStates, getAllPluginStates } from "./plugin-states";
+import { createPluginStorageAdapter } from "../context";
+import { createEntityStore } from "../store-factory";
 import {
   createTrackedContext,
   registeredModals,
@@ -160,40 +161,44 @@ export async function initializePlugins(bootstrap?: PluginBootstrap): Promise<vo
       continue;
     }
 
-    // Optional capability check before setup
-    const ctxForCheck = pluginContexts.get(id);
-    if (mp.plugin.canActivate && !ctxForCheck) {
-      const checkCtx = createTrackedContext(id, bs);
+    // Optional capability check — reuse the same context for setup
+    if (mp.plugin.canActivate) {
+      const ctx = createTrackedContext(id, bs);
       try {
-        const ok = await Promise.resolve(mp.plugin.canActivate(checkCtx));
+        const ok = await Promise.resolve(mp.plugin.canActivate(ctx));
         if (!ok) {
           mp.available = false;
           mp.availableReason = mp.plugin.activationFailedReason ?? "Capability check failed";
           console.warn(`[Plugin ${id}] Skipped: ${mp.availableReason}`);
-          void checkCtx.runCleanup();
+          void ctx.runCleanup();
           continue;
         }
       } catch (err) {
         mp.available = false;
         mp.availableReason = mp.plugin.activationFailedReason ?? `Error: ${String(err)}`;
         console.warn(`[Plugin ${id}] canActivate() threw:`, err);
-        void checkCtx.runCleanup();
+        void ctx.runCleanup();
         continue;
       }
+      await setupPluginInternal(id, bs, ctx);
+    } else {
+      await setupPluginInternal(id, bs);
     }
-
-    await setupPluginInternal(id, bs);
   }
 
   bump();
 }
 
-async function setupPluginInternal(id: string, bootstrap: PluginBootstrap): Promise<void> {
+async function setupPluginInternal(
+  id: string,
+  bootstrap: PluginBootstrap,
+  ctx?: TrackedContext,
+): Promise<void> {
   const mp = managedPlugins.get(id);
   if (!mp || !mp.plugin.setup) return;
 
   try {
-    const tracked = createTrackedContext(id, bootstrap);
+    const tracked = ctx ?? createTrackedContext(id, bootstrap);
     await mp.plugin.setup(tracked, { onTeardown: (fn) => tracked.addTeardown(fn) });
     mp.setupError = undefined;
     pluginContexts.set(id, tracked);
@@ -225,27 +230,27 @@ export async function setupPlugin(id: string): Promise<void> {
     return;
   }
 
-  // Re-run canActivate if the plugin was previously hidden
+  // Re-run canActivate if the plugin was previously hidden — reuse context
   if (mp.available === false && mp.plugin.canActivate) {
-    const checkCtx = createTrackedContext(id, storedBootstrap);
+    const ctx = createTrackedContext(id, storedBootstrap);
     try {
-      const ok = await Promise.resolve(mp.plugin.canActivate(checkCtx));
+      const ok = await Promise.resolve(mp.plugin.canActivate(ctx));
       if (!ok) {
-        void checkCtx.runCleanup();
+        void ctx.runCleanup();
         console.warn(`[Plugin ${id}] Still unavailable: ${mp.availableReason}`);
         return;
       }
       mp.available = true;
       mp.availableReason = undefined;
-      void checkCtx.runCleanup();
+      await setupPluginInternal(id, storedBootstrap, ctx);
+      return;
     } catch (err) {
-      void checkCtx.runCleanup();
+      void ctx.runCleanup();
       console.warn(`[Plugin ${id}] canActivate() re-threw:`, err);
       return;
     }
   }
 
-  // Reset dynamic capabilities for this plugin by rebuilding from remaining contexts
   await setupPluginInternal(id, storedBootstrap);
 }
 
@@ -268,30 +273,24 @@ export async function setPluginEnabled(id: string, on: boolean): Promise<void> {
       return;
     }
 
-    // If this is a stub (registered from meta, no setup), load the real module first
-    if (!mp.plugin.setup && pluginModuleLoaders.has(id)) {
-      const loader = pluginModuleLoaders.get(id)!;
-      pluginModuleLoaders.delete(id);
-      const mod = await loader();
-      let upgraded = false;
-      for (const val of Object.values(mod)) {
-        if (
-          typeof val === "object" &&
-          val !== null &&
-          (val as Record<string, unknown>)[PLUGIN_BRAND] === true
-        ) {
-          const realPlugin = val as unknown as Plugin;
-          // Preserve the disabled flag — registerPlugin sets it from realPlugin,
-          // but we're about to enable it, so set enabled: true first
-          realPlugin.enabled = true;
-          registerPlugin(realPlugin);
-          upgraded = true;
-          break;
+    // If this is a stub (registered from metadata, no setup), load the real module
+    if (!mp.plugin.setup) {
+      const loader = pluginModuleLoaders.get(id);
+      if (loader) {
+        pluginModuleLoaders.delete(id);
+        const mod = await loader();
+        const realPlugin = Object.values(mod).find(
+          (v): v is Plugin =>
+            typeof v === "object" &&
+            v !== null &&
+            (v as Record<string, unknown>)[PLUGIN_BRAND] === true,
+        );
+        if (!realPlugin) {
+          console.error(`[Plugins] No plugin export found in module for "${id}"`);
+          return;
         }
-      }
-      if (!upgraded) {
-        console.error(`[Plugins] Failed to find branded export in module for "${id}"`);
-        return;
+        realPlugin.enabled = true;
+        registerPlugin(realPlugin);
       }
     }
 
@@ -318,6 +317,40 @@ export async function setPluginEnabled(id: string, on: boolean): Promise<void> {
 
   bump();
   await savePluginStates();
+}
+
+// ── Plugin state storage (IndexedDB-backed, manager namespace) ──
+
+type PluginStateEntity = { id: string; enabled: boolean };
+
+const _stateStorage = createPluginStorageAdapter("manager");
+const pluginStatesStore = createEntityStore<PluginStateEntity>(_stateStorage, "plugin-state");
+
+async function savePluginState(id: string, enabled: boolean): Promise<void> {
+  const existing = pluginStatesStore.getById(id);
+  if (existing) {
+    await pluginStatesStore.update(id, { enabled });
+  } else {
+    await pluginStatesStore.add({ id, enabled });
+  }
+}
+
+export async function getAllPluginStates(): Promise<Record<string, boolean>> {
+  await pluginStatesStore.whenLoaded();
+  const result: Record<string, boolean> = {};
+  for (const entity of pluginStatesStore.items.value) {
+    result[entity.id] = entity.enabled;
+  }
+  return result;
+}
+
+async function saveAllPluginStates(states: Record<string, boolean>): Promise<void> {
+  await pluginStatesStore.whenLoaded();
+  const tasks: Promise<void>[] = [];
+  for (const [id, enabled] of Object.entries(states)) {
+    tasks.push(savePluginState(id, enabled));
+  }
+  await Promise.all(tasks);
 }
 
 // ── Persistence ──

@@ -2,11 +2,11 @@ import {
   registerPlugin,
   initializePlugins,
   loadPluginStates,
+  getAllPluginStates,
   pluginModuleLoaders,
 } from "./manager/registry";
 import { PLUGIN_BRAND } from "./types";
 import type { Plugin, Scene } from "./types";
-import { getAllPluginStates } from "./manager/plugin-states";
 import PLUGIN_METADATA from "./plugin-metadata.json";
 
 function isPlugin(obj: unknown): obj is Plugin {
@@ -58,34 +58,28 @@ async function ensureSceneMap(): Promise<void> {
   if (sceneMapReady) return;
   sceneMapReady = true;
 
-  // Pre-load enable states from the manager plugin's entity store
   const states = await getAllPluginStates();
 
   for (const meta of metas) {
-    const loader = pluginLoaders[`./${meta.dir}/index.ts`];
+    if (!meta.pluginId) continue;
+    const loader = pluginLoaders[`${meta.dir}/index.ts`];
     if (!loader) continue;
 
-    // Always register a stub from manifest metadata so the plugin is visible in the panel
-    if (meta.pluginId) {
-      const effectiveEnabled = states?.[meta.pluginId] ?? meta.defaultEnabled ?? true;
+    const effectiveEnabled = states?.[meta.pluginId] ?? meta.defaultEnabled ?? true;
 
-      registerPlugin({
-        [PLUGIN_BRAND]: true as const,
-        id: meta.pluginId,
-        name: meta.name ?? meta.pluginId,
-        version: "0.0.0",
-        enabled: effectiveEnabled,
-        core: false,
-      });
+    // Register metadata stub for panel visibility, store loader for later enabling
+    registerPlugin({
+      [PLUGIN_BRAND]: true as const,
+      id: meta.pluginId,
+      name: meta.name ?? meta.pluginId,
+      version: "0.0.0",
+      enabled: effectiveEnabled,
+      core: false,
+    });
+    pluginModuleLoaders.set(meta.pluginId, loader);
 
-      // If disabled, store the loader for later and skip scene loading
-      if (!effectiveEnabled) {
-        if (loader) pluginModuleLoaders.set(meta.pluginId, loader);
-        continue;
-      }
-    }
+    if (!effectiveEnabled) continue;
 
-    // The manifest values are guaranteed to be valid Scene values
     const scenes = (Array.isArray(meta.loadOn) ? meta.loadOn : [meta.loadOn]) as Scene[];
     for (const scene of scenes) {
       if (!sceneMap.has(scene)) sceneMap.set(scene, []);
@@ -94,7 +88,6 @@ async function ensureSceneMap(): Promise<void> {
         for (const exportValue of Object.values(mod)) {
           if (isPlugin(exportValue)) registerPlugin(exportValue);
         }
-        // States already known but re-apply to catch any toggle since pre-load
         await loadPluginStates();
         await initializePlugins();
       });
