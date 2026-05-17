@@ -1,105 +1,92 @@
-# Book Reader PWA
+# book
 
-A Progressive Web App ebook reader built with Vue 3, TypeScript, Pinia, and IndexedDB.
+A browser-based ebook reader PWA. Import books from files or OPDS catalogs, read them in a paginated or scrollable view, with plugins for bookmarks, annotations, search, TTS, reading stats, and more.
 
-## Features
+## Quick start
 
-- **Format Support**: TXT and EPUB (extensible via plugin parsers)
-- **Pagination**: Block-level pagination with hidden iframe measurement
-- **Offline Storage**: All data stored in IndexedDB
-- **Plugins**: Annotations, Bookmarks, Full-text Search, Reading Statistics, Themes
-- **PWA**: Installable, works offline
+```bash
+pnpm install
+vp dev packages/app
+```
 
-## Commands
+Open the dev server URL in your browser. Import EPUB/PDF/CBZ/CBR/TXT/FB2/DOCX/MOBI files to start reading.
 
-| Command      | Description              |
-| ------------ | ------------------------ |
-| `vp dev`     | Start development server |
-| `vp build`   | Build for production     |
-| `vp preview` | Preview production build |
-| `vp check`   | Lint and typecheck       |
-| `vp fmt`     | Format code              |
-| `vp test`    | Run tests                |
+### Dev commands
 
-## Tech Stack
+| Command                          | Description                               |
+| -------------------------------- | ----------------------------------------- |
+| `vp dev packages/app`            | Start the PWA dev server                  |
+| `vp check`                       | Lint + TypeScript typecheck               |
+| `vp check --fix`                 | Lint + typecheck with auto-fix            |
+| `vp fmt`                         | Format code (oxc)                         |
+| `vp test`                        | Run vitest tests                          |
+| `vp build packages/app`          | Production build                          |
+| `pnpm --filter @book/server dev` | Start Hono API server (OPDS, local files) |
 
-- Vue 3 + TypeScript
-- Pinia (state management)
-- IndexedDB (storage)
-- Vite+ (build tool)
-- vite-plugin-pwa (PWA support)
+### Prerequisites
+
+- Node.js >= 18.12 (CI uses Node 24)
+- pnpm 10.28.2
 
 ## Architecture
 
+The project is a pnpm workspace monorepo with 5 packages under `packages/`:
+
 ```
-src/
-├── core/             # Types, errors, plugin contracts (ReaderHost, SearchApi)
-├── plugins/          # Feature plugins (self-contained, core has no knowledge of them)
-│   ├── context.ts        PluginContext, UISlots, EventBus, storage adapter, TrackedContext
-│   ├── store-factory.ts  createEntityStore / createSingletonStore — reactive persistence
-│   ├── loader.ts         Scene-based lazy loading + on-demand parser loading
-│   ├── plugin-manifest.ts  (auto-generated at build time)
-│   ├── manager/          Plugin management (registry, states, PluginsPanel)
-│   │   ├── registry.ts       Register, dependency resolution, lifecycle, enable/disable
-│   │   ├── plugin-states.ts  Plugin on/off states via createEntityStore
-│   │   ├── PluginsPanel.vue  Plugin management UI
-│   │   └── index.ts          Manager plugin entry
-│   ├── settings/        Reader settings (theme, font, typography) + panels
-│   ├── annotations/     Highlight/underline + selection toolbar + popover
-│   ├── bookmarks/       Bookmarks + reading progress persistence
-│   ├── search/          Full-text search engine + panel
-│   ├── stats/           Reading statistics tracking + panels
-│   ├── epub/            EPUB parser + resource/zip management
-│   ├── txt-parser/      TXT format parser
-│   ├── cbz-parser/      CBZ comic parser
-│   ├── pdf-parser/      PDF parser (pdfjs-dist)
-│   ├── book-sources/    OPDS book source management
-│   ├── opds/            OPDS catalog browser
-│   └── ... (auto-read, tts, progress-bar, reading-progress, last-book)
-├── storage/          # IndexedDB wrapper (db.ts) + book/chapter CRUD
-├── stores/           # Pinia stores (reader, bookshelf, ui)
-├── composables/      # Reader engine (pagination, chapter loading, iframe renderer)
-├── components/       # Core UI (Bookshelf, ReaderView, ReaderHeader/Footer/Content, ModalWrapper)
-└── reader-engine/    # Iframe rendering, resource resolution, reader styles
+packages/
+  app/            Vue 3 PWA — UI, router, storage, plugin manager
+  parser-core/    Parser registry + lazy-loaded format parsers (epub, pdf, cbz, …)
+  reader-core/    Pure reader state machine (framework-agnostic reducer)
+  reader-engine/  Iframe-based rendering engine (reflowable + fixed-layout hosts)
+  server/         Hono server for OPDS catalogs and filesystem access
 ```
 
-### Plugin System
+### Plugin system
 
-Plugins conform to the `Plugin` interface. Metadata (`meta.ts`) is scanned at **build time** by a Vite plugin that generates `plugin-manifest.ts`. At runtime, `loader.ts` uses the manifest for scene-based lazy loading and on-demand parser loading.
+Features are self-contained plugins under `app/src/plugins/`. Each plugin exports a `Plugin` object with a `setup(ctx, helpers)` function. Plugins load lazily per-scene:
 
-| Core API           | Location              | Consumed by                          |
-| ------------------ | --------------------- | ------------------------------------ |
-| `ReaderHost`       | `core/reader-host.ts` | Annotations, settings, progress      |
-| `PluginContext`    | `plugins/context.ts`  | All plugins via `setup(ctx)`         |
-| `Plugin` callbacks | `manager/registry.ts` | EPUB (resource/zip), Stats (session) |
-| `BookParser`       | `core/types.ts`       | Reader store, parser plugins         |
+- `app` — startup plugins (manager, settings, last-book restore)
+- `bookshelf` — library view (book sources, OPDS, stats)
+- `reader` — reading view (bookmarks, annotations, search, TTS, progress)
 
-A plugin can contribute:
+Plugins have access to reactive IndexedDB storage, a typed event bus, filter hooks, and UI registration APIs (modals, overlays, toolbar actions).
 
-- `parsers` — format parsers (epub, cbz, pdf, txt) via `ctx.capabilities.register("parsers", ...)`
-- `modalComponents` — panels rendered by `ModalWrapper` (dynamic `<component :is>`)
-- `overlayComponents` — UI rendered inside `ReaderView` (e.g. annotation toolbar)
-- `footerActions` / `headerActions` — toolbar/menu buttons (`ReaderFooter`, `ReaderHeader`)
-- `bookshelfWidgets` / `bookshelfMenuActions` — bookshelf UI contributions
-- `contentTransformers` — modify chapter HTML before rendering
-- `registerContentTransformer` — inject per-chapter CSS/JS
-- Events: `book:opened`, `book:closed`, `chapter:changed`, `page:changed`, `settings:changed`
-- Enable/disable toggle (persisted to `plugin_store` IndexedDB via `createEntityStore`, UI in `PluginsPanel`)
+### Reader pipeline
 
-### Key Patterns
+1. **Parse** — parser extracts chapters and content from the file
+2. **Store** — book metadata and chapters saved to IndexedDB
+3. **Render** — chapter HTML passes through content transformers → resource injection → iframe
+4. **Paginate** — offscreen iframe measures block positions, pages computed and LRU-cached (capacity 10)
 
-- **Build-time manifest:** `vite-plugin-manifest` (built into `vite.config.ts`) scans `meta.ts` files and generates `src/plugins/plugin-manifest.ts`. No runtime `import.meta.glob` for metadata.
-- **Parser on-demand loading:** Instead of loading all parsers via scene, `loadParserForFormat("epub")` loads only the matching parser. The manifest's `formats` field maps format → plugin.
-- **Entity store persistence:** `createEntityStore<T>` provides reactive collection management + IndexedDB persistence. Used by settings, plugin states, annotations, bookmarks.
-- **Pagination engine:** `usePagination` splits HTML into blocks, measures them in a hidden offscreen iframe, and computes pages. Results cached with LRU (capacity 10) keyed by `bookId:chapterId:styleHash`.
-- **EPUB resources:** Images/CSS/fonts stored as `ArrayBuffer` in IndexedDB, served via `blob:` URLs. Lazy extraction from stored zip via registry callbacks.
-- **Annotations:** Highlights/underlines stored via CFI-based position references. Rendered as `<span>` wraps in the iframe DOM.
-- **Deployment base:** `vite.config.ts` sets `base: "/book/"` for the PWA.
+### Format support
 
-### Key Patterns
+All formats use lazy-loaded parsers registered in `packages/parser-core/src/index.ts`:
 
-- **Pagination engine:** `usePagination` splits HTML into blocks, measures them in a hidden offscreen iframe, and computes pages. Results cached with LRU (capacity 10) keyed by `bookId:chapterId:styleHash`.
-- **EPUB resources:** Images/CSS/fonts stored as `ArrayBuffer` in IndexedDB, served via `blob:` URLs. Lazy extraction from stored zip via registry callbacks.
-- **Annotations:** Highlights/underlines stored via CFI-based position references. Rendered as `<span>` wraps in the iframe DOM. Selection toolbar + popover are self-contained plugin overlay components.
-- **Bookmarks:** CFI-based position tracking. Reading progress persisted as a special bookmark entry.
-- **Deployment base:** `vite.config.ts` sets `base: "/book/"` for the PWA.
+| Format        | Extensions               |
+| ------------- | ------------------------ |
+| EPUB          | `.epub`                  |
+| PDF           | `.pdf`                   |
+| CBZ           | `.cbz`                   |
+| CBR           | `.cbr`                   |
+| MOBI/AZW3/AZW | `.mobi`, `.azw3`, `.azw` |
+| FB2           | `.fb2`                   |
+| DOCX          | `.docx`                  |
+| TXT           | `.txt`                   |
+| HTML          | `.html`, `.htm`          |
+
+## Deployment
+
+Push to `main` triggers GitHub Actions: `pnpm install` → `pnpm build` → deploys `packages/app/dist` to `gh-pages` branch.
+
+## Tech stack
+
+- **Vue 3** with Composition API, Pinia state management
+- **Vite** with vite-plus CLI (oxc linting + formatting + typecheck)
+- **TypeScript** (ES2023, bundler module resolution, `verbatimModuleSyntax`)
+- **IndexedDB** for offline storage (4 object stores)
+- **Hono** server for OPDS proxying and local file access
+- **PWA** via `vite-plugin-pwa` (auto-update register strategy)
+
+## License
+
+MIT

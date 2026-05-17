@@ -20,10 +20,6 @@ export const searchPlugin: Plugin = {
     // reactive unwraps nested refs — components access properties without .value
     activeApi = reactive(useReaderSearch(ctx.readerSession)) as unknown as SearchApi;
 
-    ctx.onCleanup(() => {
-      activeApi = null;
-    });
-
     ctx.ui.registerModal("search", () => import("./SearchPanel.vue"));
     ctx.ui.registerOverlay("search-nav", () => import("./SearchFooterContent.vue"));
     ctx.ui.registerFooterAction({

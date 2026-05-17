@@ -19,13 +19,11 @@ export const readingProgressPlugin: Plugin = {
   name: "Reading Progress",
   version: "1.0.0",
   setup(ctx) {
-    const subs: (() => void)[] = [
-      ctx.events.on("page:changed", ({ bookId }) => void save(bookId)),
-      ctx.events.on("chapter:changed", ({ bookId }) => void save(bookId)),
-      ctx.events.on("reader:unmounted", ({ bookId }) => {
-        void save(bookId);
-      }),
-    ];
+    ctx.events.on("page:changed", ({ bookId }) => void save(bookId));
+    ctx.events.on("chapter:changed", ({ bookId }) => void save(bookId));
+    ctx.events.on("reader:unmounted", ({ bookId }) => {
+      void save(bookId);
+    });
 
     async function save(bookId: string) {
       const h = ctx.readerSession();
@@ -48,10 +46,6 @@ export const readingProgressPlugin: Plugin = {
         chapterIndex: data.chapterIndex,
         initialPage: { ...config.initialPage, pendingTarget: data.pageIndex },
       };
-    });
-
-    ctx.onCleanup(() => {
-      subs.forEach((fn) => fn());
     });
   },
 };

@@ -84,9 +84,4 @@ export const annotationsPlugin: Plugin = {
       order: 30,
     });
   },
-  teardown() {
-    _store = null;
-    _currentBookId.value = null;
-    _currentChapterId.value = null;
-  },
 };

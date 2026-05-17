@@ -179,7 +179,4 @@ export const bookmarksPlugin: Plugin = {
       order: 10,
     });
   },
-  teardown() {
-    _store = null;
-  },
 };

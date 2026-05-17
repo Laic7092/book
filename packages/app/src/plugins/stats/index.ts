@@ -43,7 +43,4 @@ export const statsPlugin: Plugin = {
       },
     });
   },
-  teardown() {
-    setStatsEngine(null);
-  },
 };

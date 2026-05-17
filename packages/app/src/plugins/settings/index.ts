@@ -42,7 +42,7 @@ export const settingsPlugin: Plugin = {
   id: "settings",
   name: "Settings",
   version: "1.0.0",
-  async setup(ctx) {
+  async setup(ctx, { onTeardown }) {
     const store = createEntityStore<SettingsEntity>(ctx.storage, "setting");
     _store = store;
 
@@ -179,7 +179,7 @@ export const settingsPlugin: Plugin = {
       },
     );
 
-    ctx.onCleanup(() => {
+    onTeardown(() => {
       _store = null;
       try {
         localStorage.removeItem("reader-bg");

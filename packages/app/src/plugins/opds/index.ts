@@ -24,7 +24,4 @@ export const opdsPlugin: Plugin = {
       modal: "opds",
     });
   },
-  teardown() {
-    pluginContext = null;
-  },
 };

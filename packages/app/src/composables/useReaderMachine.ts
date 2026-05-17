@@ -3,10 +3,10 @@ import { ReflowableHost } from "@book/reader-engine";
 import type { ReaderState, ReaderAction, ReaderEffect } from "@book/reader-core";
 import { createInitialState } from "@book/reader-core";
 import { currentSession } from "../stores/reader-session";
-import { processChapterHtml } from "../content-pipeline";
 import { useUIStore } from "../stores/ui";
 import { NavigationStack } from "./useNavigationStack";
 import {
+  applyContentTransformers,
   getOverlayComponents,
   getHeaderActions,
   pluginStateVersion,
@@ -253,7 +253,7 @@ export function useReaderMachine(
         return { html, rawData };
       },
       transformContent: (html, bookId, chapterId) =>
-        processChapterHtml(html, bookId, chapterId, undefined),
+        applyContentTransformers(html, { bookId, chapterId }),
     });
 
     currentSession.value = host!.getSession();

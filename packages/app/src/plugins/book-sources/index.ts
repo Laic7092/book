@@ -25,7 +25,4 @@ export const bookSourcesPlugin: Plugin = {
       modal: "book-sources",
     });
   },
-  teardown() {
-    _manager = null;
-  },
 };

@@ -166,14 +166,17 @@ export interface ContentTransformer {
   transform(html: string, ctx: { bookId: string; chapterId: string }): string | Promise<string>;
 }
 
+export interface SetupHelpers {
+  /** Register a cleanup callback called when the plugin is disabled/removed. */
+  onTeardown: (fn: () => void | Promise<void>) => void;
+}
+
 export interface PluginContext {
   storage: PluginStorageAdapter;
   ui: UISlots;
   events: IEventBus<PluginEventMap>;
   /** Filter hooks — plugins modify config before reader init. */
   hooks: HookRegistry;
-  /** Register a cleanup callback called when the plugin is disabled/removed. */
-  onCleanup(fn: () => void | Promise<void>): void;
   /** ReaderSession getter — returns null before a book is opened. */
   readerSession: () => ReaderSession | null;
   /** Register a content transformer applied to chapter HTML before rendering. */
@@ -205,10 +208,7 @@ export interface Plugin {
   dependsOn?: string[];
 
   /** Called after registration, before mount. Use ctx.ui / ctx.storage / ctx.events. */
-  setup?: (context: PluginContext) => void | Promise<void>;
-
-  /** Called when the plugin is disabled. Clean up registrations, state, timers. */
-  teardown?: (context: PluginContext) => void | Promise<void>;
+  setup?: (context: PluginContext, helpers: SetupHelpers) => void | Promise<void>;
 
   /**
    * Optional capability check. Called before setup() with the same context.

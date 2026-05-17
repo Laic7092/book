@@ -194,7 +194,7 @@ async function setupPluginInternal(id: string, bootstrap: PluginBootstrap): Prom
 
   try {
     const tracked = createTrackedContext(id, bootstrap);
-    await mp.plugin.setup(tracked);
+    await mp.plugin.setup(tracked, { onTeardown: (fn) => tracked.addTeardown(fn) });
     mp.setupError = undefined;
     pluginContexts.set(id, tracked);
   } catch (err) {
@@ -211,14 +211,6 @@ export async function teardownPlugin(id: string): Promise<void> {
 
   const ctx = pluginContexts.get(id);
   if (!ctx) return;
-
-  try {
-    if (mp.plugin.teardown) {
-      await mp.plugin.teardown(ctx);
-    }
-  } catch (err) {
-    console.error(`[Plugin ${id}] teardown() failed:`, err);
-  }
 
   await ctx.runCleanup();
   pluginContexts.delete(id);

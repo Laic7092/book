@@ -392,6 +392,7 @@ function createTrackedCss(cleanupFns: (() => void | Promise<void>)[]): CssAPI {
 /** Tracked context: wraps UI slots and events for automatic cleanup on teardown. */
 export interface TrackedContext extends PluginContext {
   runCleanup(): Promise<void>;
+  addTeardown(fn: () => void | Promise<void>): void;
 }
 
 export function createTrackedContext(id: string, _bootstrap: PluginBootstrap): TrackedContext {
@@ -508,10 +509,10 @@ export function createTrackedContext(id: string, _bootstrap: PluginBootstrap): T
     ui,
     events,
     hooks,
-    onCleanup(fn: () => void | Promise<void>) {
+    readerSession: () => currentSession.value,
+    addTeardown(fn: () => void | Promise<void>) {
       cleanupFns.push(fn);
     },
-    readerSession: () => currentSession.value,
     registerContentTransformer(t: ContentTransformer) {
       registerContentTransformer(t);
       trackedTransformers.push(t);
