@@ -4,7 +4,7 @@ import type { Book, Folder, ParsedBook } from "../core/types";
 import { STORES, dbPut, dbGet, dbGetAll, dbTransaction, dbDelete, dbGetAllFromIndex } from "./db";
 import type { BookParser } from "@book/parser-core";
 import { getParserForFormat, generateId } from "@book/parser-core";
-import { saveZip, getZip } from "./raw-data";
+import { saveZip, getZip, deleteZip as deleteRawZip } from "./raw-data";
 import { getMimeTypeFromExtension } from "../utils/constants";
 
 const PLUGIN_ID = "_covers";
@@ -111,7 +111,7 @@ export async function getAllBooks(): Promise<Book[]> {
  * Delete a book and all its associated data
  */
 export async function deleteBook(bookId: string): Promise<void> {
-  await dbTransaction([STORES.BOOKS, STORES.CHAPTERS, STORES.ZIPS], "readwrite", async (stores) => {
+  await dbTransaction([STORES.BOOKS, STORES.CHAPTERS], "readwrite", async (stores) => {
     // Delete book metadata
     stores.get(STORES.BOOKS)!.delete(bookId);
 
@@ -129,6 +129,9 @@ export async function deleteBook(bookId: string): Promise<void> {
       request.onerror = () => reject(request.error);
     });
   });
+
+  // Delete raw zip data (OPFS + IDB fallback)
+  await deleteRawZip(bookId);
 
   // Also clean up plugin_store entries for this book (any plugin)
   await dbTransaction([STORES.PLUGIN_STORE], "readwrite", async (stores) => {
@@ -158,6 +161,38 @@ export async function deleteBook(bookId: string): Promise<void> {
       };
       req.onerror = () => reject(req.error);
     });
+  });
+}
+
+/**
+ * Save book metadata only (used during streaming parse when chapters arrive separately)
+ */
+export async function saveBookMetadata(book: Book): Promise<void> {
+  await dbPut(STORES.BOOKS, book);
+}
+
+/**
+ * Save a single chapter to the database (used during streaming parse)
+ */
+export async function saveSingleChapter(
+  bookId: string,
+  chapter: {
+    id: string;
+    title: string;
+    content?: string;
+    order: number;
+    href?: string;
+    inToc?: boolean;
+  },
+): Promise<void> {
+  await dbPut(STORES.CHAPTERS, {
+    bookId,
+    chapterId: chapter.id,
+    title: chapter.title,
+    content: chapter.content || "",
+    order: chapter.order,
+    href: chapter.href,
+    inToc: chapter.inToc,
   });
 }
 

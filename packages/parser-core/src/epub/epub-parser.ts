@@ -1,7 +1,7 @@
 import type { Entry, FileEntry, ZipReader } from "@zip.js/zip.js";
 import { generateId, readAsArrayBuffer, parseXML } from "../base";
 import { cleanHtml } from "./html-cleaner";
-import type { BookParser, ParserResult, ChapterData } from "../types";
+import type { BookParser, ParserResult, ChapterData, StreamingParseEvent } from "../types";
 
 let _zipModule: typeof import("@zip.js/zip.js") | null = null;
 async function getZipModule() {
@@ -121,6 +121,99 @@ export class EpubParser implements BookParser {
       }
     }
     return stack.join("/");
+  }
+
+  async *parseStreaming(file: File): AsyncGenerator<StreamingParseEvent> {
+    const { ZipReader: ZR, BlobReader: BR } = await getZipModule();
+    const zipReader = new ZR(new BR(file));
+
+    try {
+      const entries = await zipReader.getEntries();
+      const pathMap = EpubParser.buildEntryMap(entries);
+      const ctx: ZipContext = { reader: zipReader, entries, pathMap };
+
+      const containerXml = await this.readZipEntry(ctx, "META-INF/container.xml");
+      if (!containerXml) {
+        throw new Error("Invalid EPUB: Missing container.xml");
+      }
+
+      const containerDoc = parseXML(containerXml);
+      const rawOpfPath =
+        containerDoc.querySelector("rootfile")?.getAttribute("full-path") || "OEBPS/content.opf";
+
+      const opfDir = rawOpfPath.substring(0, rawOpfPath.lastIndexOf("/") + 1);
+      const opfXml = await this.readZipEntry(ctx, rawOpfPath);
+      if (!opfXml) {
+        throw new Error("Invalid EPUB: Missing content.opf");
+      }
+
+      const opfDoc = parseXML(opfXml);
+      const metadata = this.extractMetadata(opfDoc);
+      const spineItems = this.extractSpine(opfDoc);
+      const navItems = await this.extractToc(ctx, opfDoc, opfDir);
+
+      const bookId = generateId("book");
+      const tocMap = new Map(navItems.map((item) => [item.href, item]));
+
+      yield {
+        type: "metadata",
+        id: bookId,
+        title: metadata.title,
+        author: metadata.creator,
+        coverUrl: metadata.coverHref,
+      };
+
+      const { TextWriter: TW } = await getZipModule();
+      let order = 0;
+      for (const item of spineItems) {
+        const fullPath = EpubParser.resolvePath(opfDir, item.href);
+        const tocItem = tocMap.get(item.href) || tocMap.get(fullPath);
+
+        let chapterId: string;
+        let chapterTitle: string;
+        if (tocItem) {
+          chapterId = tocItem.id;
+          chapterTitle = tocItem.title;
+        } else {
+          chapterId = generateId("ch");
+          chapterTitle = item.id || `Chapter ${order + 1}`;
+        }
+
+        let content = "";
+        const entry = EpubParser.findEntry(pathMap, fullPath);
+        if (entry) {
+          try {
+            const html = await entry.getData(new TW());
+            content = cleanHtml(html);
+          } catch {
+            /* entry not found or unreadable; will retry from stored zip */
+          }
+        }
+
+        yield {
+          type: "chapter",
+          chapter: { id: chapterId, title: chapterTitle, href: fullPath, order, content },
+        };
+        order++;
+      }
+
+      let coverData: ArrayBuffer | undefined;
+      if (metadata.coverHref) {
+        const coverFullPath = EpubParser.resolvePath(opfDir, metadata.coverHref);
+        const entry = EpubParser.findEntry(pathMap, coverFullPath);
+        if (entry) {
+          try {
+            coverData = await entry.arrayBuffer();
+          } catch {
+            /* cover non-critical */
+          }
+        }
+      }
+
+      yield { type: "done", coverData };
+    } finally {
+      await zipReader.close();
+    }
   }
 
   async parse(file: File): Promise<ParserResult> {

@@ -1,6 +1,7 @@
 import type { FileEntry } from "@zip.js/zip.js";
 import { generateId, readAsArrayBuffer } from "../base";
-import type { BookParser, ParserResult, ChapterData } from "../types";
+
+import type { BookParser, ParserResult, ChapterData, StreamingParseEvent } from "../types";
 
 const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp", "bmp"]);
 
@@ -21,6 +22,7 @@ async function getZipModule() {
   return {
     ZipReader: mod.ZipReader,
     Uint8ArrayReader: mod.Uint8ArrayReader,
+    BlobReader: mod.BlobReader,
     BlobWriter: mod.BlobWriter,
   };
 }
@@ -63,6 +65,67 @@ export class CbzParser implements BookParser {
       return await CbzParser.extractImage(rawData, path);
     } catch {
       return undefined;
+    }
+  }
+
+  async *parseStreaming(file: File): AsyncGenerator<StreamingParseEvent> {
+    const { ZipReader, BlobReader } = await getZipModule();
+    const zipReader = new ZipReader(new BlobReader(file));
+
+    try {
+      const entries = await zipReader.getEntries();
+      const imageEntries = entries
+        .filter((entry): entry is FileEntry => {
+          if (entry.directory) return false;
+          const ext = entry.filename.split(".").pop()?.toLowerCase();
+          return ext ? IMAGE_EXTENSIONS.has(ext) : false;
+        })
+        .sort((a, b) => a.filename.localeCompare(b.filename, undefined, { numeric: true }));
+
+      if (imageEntries.length === 0) {
+        throw new Error("CBZ has an unsupported format: no image files found");
+      }
+
+      const bookId = generateId("book");
+      const title = file.name.replace(/\.cbz$/i, "") || "Untitled";
+      const coverUrl = imageEntries[0].filename;
+
+      yield {
+        type: "metadata",
+        id: bookId,
+        title,
+        author: "Unknown Author",
+        coverUrl,
+      };
+
+      for (let i = 0; i < imageEntries.length; i++) {
+        const entry = imageEntries[i];
+        yield {
+          type: "chapter",
+          chapter: {
+            id: generateId("ch"),
+            title:
+              entry.filename
+                .split("/")
+                .pop()
+                ?.replace(/\.[^.]+$/, "") || `Page ${i + 1}`,
+            href: entry.filename,
+            order: i,
+          },
+        };
+      }
+
+      let coverData: ArrayBuffer | undefined;
+      const firstEntry = imageEntries[0];
+      try {
+        coverData = await firstEntry.arrayBuffer();
+      } catch {
+        /* cover non-critical */
+      }
+
+      yield { type: "done", coverData };
+    } finally {
+      await zipReader.close();
     }
   }
 
