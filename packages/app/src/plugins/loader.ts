@@ -62,7 +62,7 @@ async function ensureSceneMap(): Promise<void> {
 
   for (const meta of metas) {
     if (!meta.pluginId) continue;
-    const loader = pluginLoaders[`${meta.dir}/index.ts`];
+    const loader = pluginLoaders[`./${meta.dir}/index.ts`];
     if (!loader) continue;
 
     const effectiveEnabled = states?.[meta.pluginId] ?? meta.defaultEnabled ?? true;
