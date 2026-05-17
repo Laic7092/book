@@ -9,12 +9,16 @@ import {
   CONTRAST_OPTIONS,
 } from "./options";
 import { createPreviewIframe, type PreviewIframe } from "./preview-iframe";
-import { getSettingsState } from "./index";
+import { getSettingsState, getFontStore } from "./index";
 import { DEFAULT_SETTINGS } from "./defaults";
+import type { CustomFontFace } from "./types";
 
 const state = getSettingsState();
 if (!state) throw new Error("TypographyPanel: settings plugin not initialized");
 const settings = state.settings;
+
+const fontStore = getFontStore();
+if (!fontStore) throw new Error("TypographyPanel: font store not initialized");
 
 const emit = defineEmits<{
   (e: "close"): void;
@@ -22,6 +26,69 @@ const emit = defineEmits<{
 
 const previewContainerRef = ref<HTMLElement | null>(null);
 let preview: PreviewIframe | null = null;
+
+const fontInputRef = ref<HTMLInputElement | null>(null);
+const uploading = ref(false);
+
+const customFonts = fontStore.items;
+
+function formatFromExt(name: string): string {
+  const ext = name.split(".").pop()?.toLowerCase();
+  if (ext === "woff2") return "woff2";
+  if (ext === "woff") return "woff";
+  if (ext === "ttf") return "truetype";
+  if (ext === "otf") return "opentype";
+  return "truetype";
+}
+
+async function handleFontUpload(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+
+  uploading.value = true;
+  try {
+    const data = await fileToBase64(file);
+    const name = file.name.replace(/\.[^.]+$/, "");
+    const existing = fontStore.items.value.find((f: CustomFontFace) => f.name === name);
+    if (existing) {
+      await fontStore.remove(existing.id);
+    }
+    await fontStore.add({
+      id: `font-${Date.now()}`,
+      name,
+      data,
+      format: formatFromExt(file.name),
+    });
+  } finally {
+    uploading.value = false;
+    input.value = "";
+  }
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function deleteFont(font: CustomFontFace) {
+  await fontStore.remove(font.id);
+  if (settings.value.customFontFamily === font.name) {
+    state.update({ customFontFamily: undefined });
+  }
+}
+
+function selectFont(font: CustomFontFace) {
+  state.update({ customFontFamily: font.name, fontFamily: `"${font.name}", serif` });
+}
+
+function clearFont() {
+  state.update({ customFontFamily: undefined, fontFamily: DEFAULT_SETTINGS.fontFamily });
+}
 
 onMounted(() => {
   const container = previewContainerRef.value;
@@ -40,6 +107,13 @@ watch(
     settings.value.customTypography,
     settings.value.theme,
     settings.value.contrast,
+    settings.value.useCustomColors,
+    settings.value.customBgColor,
+    settings.value.customTextColor,
+    settings.value.customBgImage,
+    settings.value.customBgImageRepeat,
+    settings.value.customBgImageSize,
+    settings.value.customFontFamily,
   ],
   () => {
     preview?.updateStyles(settings.value);
@@ -62,6 +136,13 @@ function resetSettings() {
     textAlign: DEFAULT_SETTINGS.textAlign,
     contrast: DEFAULT_SETTINGS.contrast,
     customTypography: DEFAULT_SETTINGS.customTypography,
+    useCustomColors: DEFAULT_SETTINGS.useCustomColors,
+    customBgColor: DEFAULT_SETTINGS.customBgColor,
+    customTextColor: DEFAULT_SETTINGS.customTextColor,
+    customBgImage: undefined,
+    customBgImageRepeat: DEFAULT_SETTINGS.customBgImageRepeat,
+    customBgImageSize: DEFAULT_SETTINGS.customBgImageSize,
+    customFontFamily: undefined,
   });
 }
 </script>
@@ -109,6 +190,64 @@ function resetSettings() {
               {{ font.label }}
             </button>
           </div>
+        </div>
+
+        <!-- 自定义字体 -->
+        <div class="setting-row">
+          <label class="setting-label">自定义字体</label>
+          <div class="custom-font-list" v-if="customFonts.length > 0">
+            <div
+              v-for="font in customFonts"
+              :key="font.id"
+              :class="['custom-font-item', { active: settings.customFontFamily === font.name }]"
+              @click="selectFont(font)"
+            >
+              <span class="custom-font-name">{{ font.name }}</span>
+              <span class="custom-font-format">{{ font.format }}</span>
+              <div class="custom-font-actions">
+                <button class="font-delete-btn" @click.stop="deleteFont(font)" title="删除字体">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path
+                      d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="font-upload-row">
+            <input
+              ref="fontInputRef"
+              type="file"
+              accept=".ttf,.otf,.woff,.woff2"
+              style="display: none"
+              @change="handleFontUpload"
+            />
+            <button class="font-upload-btn" :disabled="uploading" @click="fontInputRef?.click()">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" />
+              </svg>
+              <span>{{ uploading ? "上传中..." : "上传字体" }}</span>
+            </button>
+            <button v-if="settings.customFontFamily" class="font-clear-btn" @click="clearFont">
+              恢复默认
+            </button>
+          </div>
+          <p class="font-hint">支持 TTF、OTF、WOFF、WOFF2 格式</p>
         </div>
 
         <!-- 行距 -->
@@ -493,6 +632,138 @@ function resetSettings() {
 .contrast-btn.active {
   border-color: var(--accent);
   background: var(--accent-soft);
+}
+
+/* Custom fonts */
+.custom-font-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.custom-font-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--modal-bg);
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.custom-font-item:hover {
+  border-color: var(--accent);
+  background: var(--bg-secondary);
+}
+
+.custom-font-item.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.custom-font-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--modal-text);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.custom-font-format {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--hover-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.custom-font-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.font-delete-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all 150ms ease;
+}
+
+.font-delete-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.font-upload-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.font-upload-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px;
+  border: 1.5px dashed var(--border);
+  border-radius: 8px;
+  background: var(--modal-bg);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--modal-text);
+  transition: all 150ms ease;
+}
+
+.font-upload-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.font-upload-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.font-clear-btn {
+  padding: 10px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--modal-bg);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+  transition: all 150ms ease;
+  white-space: nowrap;
+}
+
+.font-clear-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.font-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin: 6px 0 0;
 }
 
 /* Range input */

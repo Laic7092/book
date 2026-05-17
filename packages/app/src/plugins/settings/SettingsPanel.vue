@@ -9,6 +9,7 @@ import {
 import { getSettingsState } from "./index";
 import { useUIStore } from "../../stores/ui";
 import { themeRegistry } from "../../core/theme-registry";
+import { ref } from "vue";
 
 const state = getSettingsState();
 if (!state) throw new Error("SettingsPanel: settings plugin not initialized");
@@ -21,6 +22,42 @@ function themePreviewBg(themeId: string): string {
 const emit = defineEmits<{
   (e: "close"): void;
 }>();
+
+const bgImageInputRef = ref<HTMLInputElement | null>(null);
+const bgImageUploading = ref(false);
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handleBgImageUpload(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+  if (file.size > MAX_IMAGE_SIZE) {
+    alert("图片大小不能超过 5MB");
+    input.value = "";
+    return;
+  }
+  bgImageUploading.value = true;
+  try {
+    const data = await fileToBase64(file);
+    await state.update({ customBgImage: data });
+  } finally {
+    bgImageUploading.value = false;
+    input.value = "";
+  }
+}
+
+function removeBgImage() {
+  state.update({ customBgImage: undefined });
+}
 </script>
 
 <template>
@@ -49,16 +86,121 @@ const emit = defineEmits<{
 
         <!-- 字号 -->
         <div class="setting-row">
-          <label class="setting-label">字号</label>
+          <label class="setting-label">
+            <span>字号</span>
+            <span class="setting-value" v-if="settings.fontSize == null">使用原始字号</span>
+          </label>
           <div class="size-options">
             <button
               v-for="size in FONT_SIZE_PRESETS"
               :key="size"
               :class="['size-btn', { active: settings.fontSize === size }]"
-              @click="state.update({ fontSize: size })"
+              @click="state.update({ fontSize: settings.fontSize === size ? null : size })"
             >
               {{ size }}
             </button>
+          </div>
+        </div>
+
+        <!-- 自定义颜色 -->
+        <div class="setting-row">
+          <label class="setting-label">自定义颜色</label>
+          <div class="color-custom-row">
+            <label class="color-field">
+              <span class="color-label">背景</span>
+              <span class="color-input-wrap">
+                <input
+                  type="color"
+                  :value="settings.customBgColor || '#ffffff'"
+                  @input="
+                    state.update({
+                      customBgColor: ($event.target as HTMLInputElement).value,
+                      useCustomColors: true,
+                    })
+                  "
+                  class="color-picker"
+                />
+                <span class="color-hex">{{ settings.customBgColor }}</span>
+              </span>
+            </label>
+            <label class="color-field">
+              <span class="color-label">文字</span>
+              <span class="color-input-wrap">
+                <input
+                  type="color"
+                  :value="settings.customTextColor || '#000000'"
+                  @input="
+                    state.update({
+                      customTextColor: ($event.target as HTMLInputElement).value,
+                      useCustomColors: true,
+                    })
+                  "
+                  class="color-picker"
+                />
+                <span class="color-hex">{{ settings.customTextColor }}</span>
+              </span>
+            </label>
+          </div>
+          <button
+            v-if="settings.useCustomColors"
+            class="color-reset-btn"
+            @click="state.update({ useCustomColors: false })"
+          >
+            恢复主题颜色
+          </button>
+        </div>
+
+        <!-- 自定义背景图片 -->
+        <div class="setting-row">
+          <label class="setting-label">背景图片</label>
+          <div class="bg-image-area">
+            <div v-if="settings.customBgImage" class="bg-image-preview-wrap">
+              <div
+                class="bg-image-preview"
+                :style="{ backgroundImage: `url(${settings.customBgImage})` }"
+              ></div>
+              <button class="bg-image-remove" @click="removeBgImage">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div v-else class="bg-image-upload">
+              <input
+                ref="bgImageInputRef"
+                type="file"
+                accept="image/*"
+                style="display: none"
+                @change="handleBgImageUpload"
+              />
+              <button
+                class="bg-image-upload-btn"
+                :disabled="bgImageUploading"
+                @click="bgImageInputRef?.click()"
+              >
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                  <circle cx="8.5" cy="8.5" r="1.5" />
+                  <path d="M21 15l-5-5L5 21" />
+                </svg>
+                <span>{{ bgImageUploading ? "上传中..." : "选择图片" }}</span>
+              </button>
+              <p class="bg-image-hint">支持 JPG、PNG、WebP，最大 5MB</p>
+            </div>
           </div>
         </div>
 
@@ -336,6 +478,173 @@ const emit = defineEmits<{
 
 .typography-btn:hover .arrow-icon {
   transform: translateX(3px);
+}
+
+/* Custom colors */
+.color-custom-row {
+  display: flex;
+  gap: 12px;
+}
+
+.color-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--modal-bg);
+  cursor: pointer;
+  transition: border-color 150ms ease;
+}
+
+.color-field:hover {
+  border-color: var(--accent);
+}
+
+.color-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.color-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.color-picker {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  background: none;
+}
+
+.color-picker::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.color-picker::-webkit-color-swatch {
+  border: none;
+  border-radius: 5px;
+}
+
+.color-hex {
+  font-size: 13px;
+  font-weight: 500;
+  font-feature-settings: "tnum";
+  color: var(--modal-text);
+  font-family: "JetBrains Mono", Consolas, monospace;
+}
+
+.color-reset-btn {
+  width: 100%;
+  padding: 8px;
+  margin-top: 4px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+  transition: all 150ms ease;
+}
+
+.color-reset-btn:hover {
+  border-color: var(--accent);
+  border-style: solid;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* Background image */
+.bg-image-area {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bg-image-preview-wrap {
+  position: relative;
+  width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.bg-image-preview {
+  width: 100%;
+  height: 120px;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.bg-image-remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.5);
+  color: white;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.bg-image-remove:hover {
+  background: rgba(239, 68, 68, 0.8);
+}
+
+.bg-image-upload {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.bg-image-upload-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 24px 16px;
+  border: 1.5px dashed var(--border);
+  border-radius: 8px;
+  background: var(--modal-bg);
+  cursor: pointer;
+  transition: all 150ms ease;
+  color: var(--text-secondary);
+}
+
+.bg-image-upload-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.bg-image-upload-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.bg-image-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin: 0;
 }
 
 /* Animation options */

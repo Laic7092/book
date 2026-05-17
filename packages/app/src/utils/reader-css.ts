@@ -1,25 +1,60 @@
 import type { ReaderSettings } from "../plugins/settings/types";
 import { themeRegistry } from "../core/theme-registry";
 
-export function generateThemeCSS(theme: string, contrast?: string): string {
-  const def = themeRegistry.get(theme);
-  let bg = def.content.background;
-  let text = def.content.text;
+export function generateThemeCSS(
+  theme: string | null,
+  contrast?: string,
+  customColors?: {
+    bg?: string;
+    text?: string;
+    bgImage?: string;
+    bgImageRepeat?: string;
+    bgImageSize?: string;
+  },
+): string {
+  let bg: string;
+  let text: string;
+  let textSecondary: string;
+  let borderSubtle: string;
 
-  if (theme === "dark" && contrast) {
-    if (contrast === "soft") {
-      bg = "#2a2a2a";
-      text = "#d0d0d0";
-    } else if (contrast === "high") {
-      bg = "#000000";
-      text = "#ffffff";
+  if (theme) {
+    const def = themeRegistry.get(theme);
+    bg = def.content.background;
+    text = def.content.text;
+
+    if (theme === "dark" && contrast) {
+      if (contrast === "soft") {
+        bg = "#2a2a2a";
+        text = "#d0d0d0";
+      } else if (contrast === "high") {
+        bg = "#000000";
+        text = "#ffffff";
+      }
     }
+
+    textSecondary =
+      def.content.textSecondary ??
+      (theme === "dark" ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.55)");
+    borderSubtle =
+      def.content.borderSubtle ?? (theme === "dark" ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)");
+  } else {
+    bg = "#fdfcfb";
+    text = "#1f1a17";
+    textSecondary = "rgba(0,0,0,0.55)";
+    borderSubtle = "rgba(0,0,0,0.08)";
   }
 
-  const textSecondary =
-    def.content.textSecondary ?? (theme === "dark" ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.55)");
-  const borderSubtle =
-    def.content.borderSubtle ?? (theme === "dark" ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)");
+  if (customColors?.bg) bg = customColors.bg;
+  if (customColors?.text) text = customColors.text;
+
+  const bgImageCSS = customColors?.bgImage
+    ? `
+      background-image: url("${customColors.bgImage}");
+      background-repeat: ${customColors.bgImageRepeat || "no-repeat"};
+      background-size: ${customColors.bgImageSize || "cover"};
+      background-position: center;
+    `
+    : "";
 
   return `
     :root {
@@ -31,6 +66,7 @@ export function generateThemeCSS(theme: string, contrast?: string): string {
     body {
       background-color: var(--reader-bg);
       color: var(--reader-text);
+      ${bgImageCSS}
     }
   `;
 }
@@ -124,21 +160,25 @@ export function generateBaseCSS(): string {
 export function generateTypographyCSS(settings: ReaderSettings): string {
   const useCustom = settings.customTypography ?? false;
 
+  const fontSizeCSS = settings.fontSize != null ? `font-size: ${settings.fontSize}px;` : "";
+
   if (!useCustom) {
-    return `
-      body.reader-content {
-        font-size: ${settings.fontSize}px;
-      }
-    `;
+    return fontSizeCSS ? `body.reader-content { ${fontSizeCSS} }` : "";
   }
+
+  const rules = [
+    fontSizeCSS,
+    `font-family: ${settings.fontFamily};`,
+    `line-height: ${settings.lineHeight};`,
+    `letter-spacing: ${settings.letterSpacing || 0}em;`,
+    `text-align: ${settings.textAlign || "left"};`,
+  ]
+    .filter(Boolean)
+    .join("\n      ");
 
   return `
     body.reader-content {
-      font-size: ${settings.fontSize}px;
-      font-family: ${settings.fontFamily};
-      line-height: ${settings.lineHeight};
-      letter-spacing: ${settings.letterSpacing || 0}em;
-      text-align: ${settings.textAlign || "left"};
+      ${rules}
     }
 
     body.reader-content p {

@@ -1,7 +1,7 @@
 import type { ReaderSettings } from "./types";
 
 export const DEFAULT_SETTINGS: ReaderSettings = {
-  fontSize: 20,
+  fontSize: null,
   fontFamily: "Literata, Georgia, serif",
   lineHeight: 1.6,
   theme: null,
@@ -13,4 +13,11 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
   readingMode: "pagination",
   paginationAnimation: "fade",
   customTypography: false,
+  useCustomColors: false,
+  customBgColor: "#fdfcfb",
+  customTextColor: "#1f1a17",
+  customBgImage: undefined,
+  customBgImageRepeat: "no-repeat",
+  customBgImageSize: "cover",
+  customFontFamily: undefined,
 };

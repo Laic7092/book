@@ -2,7 +2,7 @@ import { ref, watch } from "vue";
 import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
 import { createEntityStore, type EntityStore } from "../store-factory";
-import type { ReaderSettings } from "./types";
+import type { ReaderSettings, CustomFontFace } from "./types";
 import { DEFAULT_SETTINGS } from "./defaults";
 import { generateThemeCSS, generateBaseCSS, generateTypographyCSS } from "../../utils/reader-css";
 
@@ -12,6 +12,7 @@ type SettingsEntity = { id: string } & ReaderSettings;
 const ENTITY_ID = "reader-settings";
 
 let _store: EntityStore<SettingsEntity> | null = null;
+let _fontStore: EntityStore<CustomFontFace> | null = null;
 const _settings = ref<ReaderSettings>({ ...DEFAULT_SETTINGS });
 
 export function getSettingsState() {
@@ -25,14 +26,74 @@ export function getSettingsState() {
   };
 }
 
+export function getFontStore() {
+  return _fontStore;
+}
+
+export interface CustomColors {
+  bg?: string;
+  text?: string;
+  bgImage?: string;
+  bgImageRepeat?: string;
+  bgImageSize?: string;
+}
+
+export function buildCustomColors(s: {
+  useCustomColors?: boolean;
+  customBgColor?: string;
+  customTextColor?: string;
+  customBgImage?: string;
+  customBgImageRepeat?: string;
+  customBgImageSize?: string;
+}): CustomColors | undefined {
+  if (!s.useCustomColors && !s.customBgImage) return undefined;
+  return {
+    bg: s.useCustomColors ? s.customBgColor : undefined,
+    text: s.useCustomColors ? s.customTextColor : undefined,
+    bgImage: s.customBgImage,
+    bgImageRepeat: s.customBgImageRepeat,
+    bgImageSize: s.customBgImageSize,
+  };
+}
+
+function buildFontFacesCSS(fonts: CustomFontFace[]): string {
+  return fonts
+    .map(
+      (f) => `
+@font-face {
+  font-family: "${f.name}";
+  src: url("${f.data}") format("${f.format}");
+  font-display: swap;
+}`,
+    )
+    .join("\n");
+}
+
+function getActiveCustomFont(
+  fonts: CustomFontFace[],
+  settings: ReaderSettings,
+): CustomFontFace | undefined {
+  if (!settings.customFontFamily) return undefined;
+  return fonts.find((f) => f.name === settings.customFontFamily);
+}
+
 // ── CSS builder ──
 
 const GEAR_ICON =
   '<path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>';
 
-function buildFullCSS(s: ReaderSettings): string {
-  const themeCSS = s.theme ? generateThemeCSS(s.theme, s.contrast) : "";
-  return generateBaseCSS() + themeCSS + generateTypographyCSS(s);
+function buildFullCSS(s: ReaderSettings, fonts?: CustomFontFace[]): string {
+  const customColors = buildCustomColors(s);
+  const themeCSS =
+    s.theme || s.useCustomColors || s.customBgImage
+      ? generateThemeCSS(s.theme, s.contrast, customColors)
+      : "";
+  let fontFacesCSS = "";
+  const activeFont = fonts ? getActiveCustomFont(fonts, s) : undefined;
+  if (activeFont) {
+    fontFacesCSS = buildFontFacesCSS([activeFont]);
+  }
+  return generateBaseCSS() + fontFacesCSS + themeCSS + generateTypographyCSS(s);
 }
 
 // ── Plugin ──
@@ -45,6 +106,9 @@ export const settingsPlugin: Plugin = {
   async setup(ctx, { onTeardown }) {
     const store = createEntityStore<SettingsEntity>(ctx.storage, "setting");
     _store = store;
+
+    const fontStore = createEntityStore<CustomFontFace>(ctx.storage, "font");
+    _fontStore = fontStore;
 
     // Wait for initial cache load from IndexedDB
     if (!store.loaded.value) {
@@ -117,9 +181,14 @@ export const settingsPlugin: Plugin = {
       onClick: () => ctx.ui.openModal("settings"),
     });
 
+    function refreshIframeStyle() {
+      const fonts = [...fontStore.items.value];
+      ctx.ui.injectIframeStyle("typography", buildFullCSS(s.value, fonts));
+    }
+
     const loadSetting = (config: any) => {
       applyTheme(s.value.theme);
-      ctx.ui.injectIframeStyle("typography", buildFullCSS(s.value));
+      refreshIframeStyle();
       const host = ctx.readerSession();
       if (host) host.setPageMargin(getEffectiveMargin());
       if (s.value.readingMode === "vertical") {
@@ -135,10 +204,19 @@ export const settingsPlugin: Plugin = {
 
     // Watch settings changes → drive core
     watch(
-      () => s.value.theme,
+      () =>
+        [
+          s.value.theme,
+          s.value.useCustomColors,
+          s.value.customBgColor,
+          s.value.customTextColor,
+          s.value.customBgImage,
+          s.value.customBgImageRepeat,
+          s.value.customBgImageSize,
+        ] as const,
       () => {
         applyTheme(s.value.theme);
-        ctx.ui.injectIframeStyle("typography", buildFullCSS(s.value));
+        refreshIframeStyle();
       },
     );
 
@@ -173,14 +251,25 @@ export const settingsPlugin: Plugin = {
         s.value.customTypography,
         s.value.margin,
         s.value.contrast,
+        s.value.customFontFamily,
       ],
       () => {
-        ctx.ui.injectIframeStyle("typography", buildFullCSS(s.value));
+        refreshIframeStyle();
       },
+    );
+
+    // Watch font store changes → refresh iframe
+    watch(
+      () => fontStore.items.value,
+      () => {
+        refreshIframeStyle();
+      },
+      { deep: true },
     );
 
     onTeardown(() => {
       _store = null;
+      _fontStore = null;
       try {
         localStorage.removeItem("reader-bg");
       } catch {

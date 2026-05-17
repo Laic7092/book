@@ -1,5 +1,6 @@
 export interface ReaderSettings {
-  fontSize: number;
+  /** null = use EPUB original font size */
+  fontSize: number | null;
   fontFamily: string;
   lineHeight: number;
   /** null = no theme applied — falls back to index.css neutral defaults */
@@ -13,6 +14,24 @@ export interface ReaderSettings {
   paginationAnimation?: "slide" | "flip" | "fade";
   /** Whether to apply custom typography settings (fontFamily, lineHeight, etc.). When false, EPUB original styling is preserved. */
   customTypography?: boolean;
+
+  /** Custom background/text color overrides */
+  useCustomColors?: boolean;
+  customBgColor?: string;
+  customTextColor?: string;
+  /** Custom background image (base64 data URL) */
+  customBgImage?: string;
+  customBgImageRepeat?: "no-repeat" | "repeat" | "repeat-x" | "repeat-y";
+  customBgImageSize?: "cover" | "contain" | "auto";
+  /** Name of a user-uploaded custom font to use */
+  customFontFamily?: string;
+}
+
+export interface CustomFontFace {
+  id: string;
+  name: string;
+  data: string; // base64-encoded font data
+  format: string; // "woff2" | "ttf" | "otf"
 }
 
 /** @deprecated Use ThemeRegistry (src/core/theme-registry.ts) instead. */

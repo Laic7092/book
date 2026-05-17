@@ -1,5 +1,6 @@
 import type { ReaderSettings } from "./types";
 import { generateThemeCSS, generateBaseCSS, generateTypographyCSS } from "../../utils/reader-css";
+import { buildCustomColors } from "./index";
 
 export interface PreviewIframe {
   updateStyles(settings: ReaderSettings): void;
@@ -31,7 +32,11 @@ export function createPreviewIframe(
     };
   }
 
-  const themeCSS = settings.theme ? generateThemeCSS(settings.theme, settings.contrast) : "";
+  const customColors = buildCustomColors(settings);
+  const themeCSS =
+    settings.theme || settings.useCustomColors || settings.customBgImage
+      ? generateThemeCSS(settings.theme, settings.contrast, customColors)
+      : "";
   const baseCSS = generateBaseCSS();
   const typographyCSS = generateTypographyCSS(settings);
 
@@ -60,9 +65,11 @@ export function createPreviewIframe(
       const themeStyle = doc.getElementById("theme-style");
       const typographyStyle = doc.getElementById("typography-style");
       if (themeStyle) {
-        themeStyle.textContent = newSettings.theme
-          ? generateThemeCSS(newSettings.theme, newSettings.contrast)
-          : "";
+        const customColors = buildCustomColors(newSettings);
+        themeStyle.textContent =
+          newSettings.theme || newSettings.useCustomColors || newSettings.customBgImage
+            ? generateThemeCSS(newSettings.theme, newSettings.contrast, customColors)
+            : "";
       }
       if (typographyStyle) {
         typographyStyle.textContent = generateTypographyCSS(newSettings);
