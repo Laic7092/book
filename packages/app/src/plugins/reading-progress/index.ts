@@ -4,7 +4,8 @@ import { PLUGIN_BRAND } from "../types";
 interface ProgressData {
   chapterId: string;
   chapterIndex: number;
-  pageIndex: number;
+  pageIndex?: number;
+  scrollProgress?: number;
 }
 
 const PROGRESS_PREFIX = "readingProgress";
@@ -31,20 +32,38 @@ export const readingProgressPlugin: Plugin = {
       const s = h.getState();
       const chapter = s.chapters[s.currentChapterIndex];
       if (!chapter) return;
-      await ctx.storage.put(progressKey(bookId), {
+      const data: ProgressData = {
         chapterId: chapter.id,
         chapterIndex: s.currentChapterIndex,
-        pageIndex: s.page.current,
-      });
+      };
+      if (s.mode === "scroll") {
+        data.scrollProgress = s.scroll.progress;
+      } else {
+        data.pageIndex = s.page.current;
+      }
+      await ctx.storage.put(progressKey(bookId), data);
     }
 
     ctx.hooks.filter("reader:init-config", async (config) => {
       const data = await ctx.storage.get<ProgressData>(progressKey(config.bookId));
       if (!data) return config;
+      if (config.mode === "scroll" && data.scrollProgress !== undefined) {
+        return {
+          ...config,
+          chapterIndex: data.chapterIndex,
+          initialScroll: { progress: data.scrollProgress },
+        };
+      }
+      if (data.pageIndex !== undefined) {
+        return {
+          ...config,
+          chapterIndex: data.chapterIndex,
+          initialPage: { ...config.initialPage, pendingTarget: data.pageIndex },
+        };
+      }
       return {
         ...config,
         chapterIndex: data.chapterIndex,
-        initialPage: { ...config.initialPage, pendingTarget: data.pageIndex },
       };
     });
   },

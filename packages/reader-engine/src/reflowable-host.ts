@@ -22,10 +22,16 @@ export class ReflowableHost extends Engine {
   private container: HTMLElement;
   private navigateToCfi: ((cfi: string, chapterId: string) => Promise<void>) | undefined;
   private clickHandlerRef: ((e: MouseEvent) => void) | null = null;
+  private scrollHandlerRef: ((e: Event) => void) | null = null;
+  private rafId: number | null = null;
   private transformContent: ReflowableHostOptions["transformContent"];
   private bookFormat = "";
   private resourceUrls = new Map<string, string>();
   private injectedResources = new Map<string, ResourceInfo>();
+
+  private loadedChapterOrder: string[] = [];
+  private loadingNext = false;
+  private loadingPrev = false;
 
   constructor(options: ReflowableHostOptions) {
     super(options);
@@ -51,6 +57,9 @@ export class ReflowableHost extends Engine {
   ): void {
     this.bookFormat = format;
     super.init(bookId, chapters, chapterIndex, mode, initialPage, initialScroll);
+    this.loadedChapterOrder = [...this.state.scroll.loadedChapters];
+    this.loadingNext = false;
+    this.loadingPrev = false;
   }
 
   nextPage(): void {
@@ -155,11 +164,13 @@ export class ReflowableHost extends Engine {
     if (this.clickHandlerRef) {
       this.iframeDoc.removeEventListener("click", this.clickHandlerRef);
     }
+    this.teardownScrollHandler();
     clearResources(this.iframeDoc, this.injectedResources);
     for (const [, blobUrl] of this.resourceUrls) {
       URL.revokeObjectURL(blobUrl);
     }
     this.resourceUrls.clear();
+    this.loadedChapterOrder.length = 0;
     this.iframe.remove();
   }
 
@@ -170,18 +181,33 @@ export class ReflowableHost extends Engine {
         break;
       case "MODE_CHANGED":
         this.iframeDoc.documentElement.dataset.mode = effect.mode;
+        if (effect.mode === "scroll") {
+          this.setupScrollHandler();
+        } else {
+          this.teardownScrollHandler();
+        }
         break;
       default:
         await this.runGenericEffect(effect);
     }
   }
 
-  protected async fetchAndLoadChapter(bookId: string, chapterId: string): Promise<void> {
-    clearResources(this.iframeDoc, this.injectedResources);
-    for (const [, blobUrl] of this.resourceUrls) {
-      URL.revokeObjectURL(blobUrl);
+  protected override async fetchAndLoadChapter(bookId: string, chapterId: string): Promise<void> {
+    await this.loadChapter(bookId, chapterId, "replace");
+  }
+
+  private async loadChapter(
+    bookId: string,
+    chapterId: string,
+    mode: "replace" | "append" | "prepend",
+  ): Promise<void> {
+    if (mode === "replace") {
+      clearResources(this.iframeDoc, this.injectedResources);
+      for (const [, blobUrl] of this.resourceUrls) {
+        URL.revokeObjectURL(blobUrl);
+      }
+      this.resourceUrls.clear();
     }
-    this.resourceUrls.clear();
 
     const { html, rawData } = await this.fetchChapter!(bookId, chapterId);
     if (!html) {
@@ -204,18 +230,163 @@ export class ReflowableHost extends Engine {
       processed = await this.transformContent(processed, bookId, chapterId);
     }
 
-    this.dispatch({ type: "CHAPTER_LOADED", chapterId });
+    // Pagination mode — only replace is valid
+    if (this.state.mode === "pagination") {
+      this.iframeDoc.body.innerHTML = processed;
+      this.dispatch({ type: "CHAPTER_LOADED", chapterId });
 
-    this.iframeDoc.body.innerHTML = processed;
+      requestAnimationFrame(() => {
+        if (!this.iframeDoc.body) return;
+        const contentWidth = this.iframeDoc.body.scrollWidth;
+        const iframeWidth = this.iframeDoc.documentElement.clientWidth;
+        const step = Math.max(iframeWidth, 1);
+        const total = Math.max(1, Math.ceil(contentWidth / step));
+        this.dispatch({ type: "PAGE_COUNT_UPDATED", total });
+      });
+      return;
+    }
 
-    requestAnimationFrame(() => {
-      if (!this.iframeDoc.body) return;
-      const contentWidth = this.iframeDoc.body.scrollWidth;
-      const iframeWidth = this.iframeDoc.documentElement.clientWidth;
-      const step = Math.max(iframeWidth, 1);
-      const total = Math.max(1, Math.ceil(contentWidth / step));
-      this.dispatch({ type: "PAGE_COUNT_UPDATED", total });
+    // Scroll mode
+    if (mode === "replace") {
+      this.iframeDoc.body.innerHTML = `<div class="scroll-chapter" data-chapter-id="${chapterId}">${processed}</div>`;
+      this.loadedChapterOrder = [chapterId];
+      this.dispatch({ type: "CHAPTER_LOADED", chapterId, position: "replace" });
+
+      requestAnimationFrame(() => {
+        this.restoreScrollPosition();
+        this.dispatch({ type: "PAGE_COUNT_UPDATED", total: 1 });
+        this.handleScroll();
+      });
+      return;
+    }
+
+    // Append or prepend
+    const container = this.iframeDoc.createElement("div");
+    container.className = "scroll-chapter";
+    container.dataset.chapterId = chapterId;
+    container.innerHTML = processed;
+
+    if (mode === "append") {
+      this.iframeDoc.body.appendChild(container);
+      if (!this.loadedChapterOrder.includes(chapterId)) {
+        this.loadedChapterOrder.push(chapterId);
+      }
+    } else {
+      const body = this.iframeDoc.body;
+      const oldScrollTop = this.iframeDoc.documentElement.scrollTop;
+      body.insertBefore(container, body.firstChild);
+      if (!this.loadedChapterOrder.includes(chapterId)) {
+        this.loadedChapterOrder.unshift(chapterId);
+      }
+      requestAnimationFrame(() => {
+        this.iframeDoc.documentElement.scrollTop = oldScrollTop + container.offsetHeight;
+      });
+    }
+    this.dispatch({ type: "CHAPTER_LOADED", chapterId, position: mode });
+  }
+
+  private async loadAdjacent(direction: "next" | "prev"): Promise<void> {
+    if (this.loadedChapterOrder.length === 0) return;
+
+    const edgeId =
+      direction === "next"
+        ? this.loadedChapterOrder[this.loadedChapterOrder.length - 1]
+        : this.loadedChapterOrder[0];
+    const edgeIdx = this.state.chapters.findIndex((c) => c.id === edgeId);
+    if (edgeIdx < 0) return;
+
+    const targetIdx = direction === "next" ? edgeIdx + 1 : edgeIdx - 1;
+    const target = this.state.chapters[targetIdx];
+    if (!target || this.loadedChapterOrder.includes(target.id)) return;
+
+    const mode = direction === "next" ? "append" : "prepend";
+    if (direction === "next") this.loadingNext = true;
+    else this.loadingPrev = true;
+
+    try {
+      await this.loadChapter(this.state.bookId, target.id, mode);
+    } catch {
+      // Errors are already dispatched as CHAPTER_FAILED inside loadChapter
+    } finally {
+      if (direction === "next") this.loadingNext = false;
+      else this.loadingPrev = false;
+    }
+  }
+
+  private setupScrollHandler(): void {
+    if (this.scrollHandlerRef) return;
+    this.scrollHandlerRef = () => {
+      if (this.rafId !== null) return;
+      this.rafId = requestAnimationFrame(() => {
+        this.rafId = null;
+        this.handleScroll();
+      });
+    };
+    this.iframeDoc.defaultView?.addEventListener("scroll", this.scrollHandlerRef, {
+      passive: true,
     });
+  }
+
+  private teardownScrollHandler(): void {
+    if (this.scrollHandlerRef) {
+      this.iframeDoc.defaultView?.removeEventListener("scroll", this.scrollHandlerRef);
+      this.scrollHandlerRef = null;
+    }
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
+  }
+
+  private handleScroll(): void {
+    const doc = this.iframeDoc;
+    const html = doc.documentElement;
+    const scrollTop = html.scrollTop || 0;
+    const scrollHeight = html.scrollHeight || 0;
+    const clientHeight = html.clientHeight || 0;
+    const maxScroll = Math.max(scrollHeight - clientHeight, 1);
+    const progress = Math.min(1, Math.max(0, scrollTop / maxScroll));
+
+    let visibleChapterId: string | undefined;
+    const chapters = doc.body.querySelectorAll<HTMLElement>("[data-chapter-id]");
+    for (const ch of chapters) {
+      const rect = ch.getBoundingClientRect();
+      if (rect.bottom >= 0 && rect.top <= clientHeight) {
+        visibleChapterId = ch.dataset.chapterId;
+        break;
+      }
+    }
+
+    this.dispatch({ type: "SCROLL_PROGRESS", bookProgress: progress, visibleChapterId });
+
+    if (this.state.mode !== "scroll" || this.state.status !== "ready") return;
+
+    // Auto-load adjacent chapters based on loaded DOM boundaries
+    const nearEnd = scrollHeight > 0 && (scrollTop + clientHeight) / scrollHeight >= 0.85;
+    const atTop = scrollTop <= 5;
+
+    if (nearEnd && !this.loadingNext) {
+      void this.loadAdjacent("next");
+    }
+
+    if (atTop && !this.loadingPrev) {
+      void this.loadAdjacent("prev");
+    }
+  }
+
+  /** Restore scroll position after content load in scroll mode */
+  private restoreScrollPosition(): void {
+    if (this.state.mode !== "scroll") return;
+    const progress = this.state.scroll.progress;
+    if (progress <= 0) return;
+    const doc = this.iframeDoc;
+    const html = doc.documentElement;
+    const scrollHeight = html.scrollHeight;
+    const clientHeight = html.clientHeight;
+    const maxScroll = scrollHeight - clientHeight;
+    if (maxScroll > 0) {
+      html.scrollTop = progress * maxScroll;
+    }
   }
 
   private createIframe(): void {
