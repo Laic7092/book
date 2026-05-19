@@ -18,7 +18,6 @@ export interface PageState {
 
 export interface ScrollState {
   progress: number;
-  loadedChapters: string[];
 }
 
 export interface ReaderState {
@@ -30,8 +29,6 @@ export interface ReaderState {
 
   page: PageState;
   scroll: ScrollState;
-
-  error: string | null;
 }
 
 export type ReaderAction =
@@ -76,8 +73,7 @@ export function createInitialState(): ReaderState {
     mode: "pagination",
     status: "idle",
     page: { current: 0, total: 0, pendingTarget: null },
-    scroll: { progress: 0, loadedChapters: [] },
-    error: null,
+    scroll: { progress: 0 },
   };
 }
 
@@ -127,10 +123,7 @@ function initReducer(
 ): { state: ReaderState; effects: ReaderEffect[] } {
   const chapterId = action.chapters[action.chapterIndex]?.id;
   if (!chapterId || action.chapters.length === 0) {
-    return {
-      state: { ...state, error: "No chapters in book" },
-      effects: [],
-    };
+    return { state, effects: [] };
   }
 
   const next: ReaderState = {
@@ -143,15 +136,9 @@ function initReducer(
     page: { current: 0, total: 0, pendingTarget: null, ...action.initialPage },
     scroll: {
       progress: 0,
-      loadedChapters: [],
       ...action.initialScroll,
     },
-    error: null,
   };
-
-  const loaded = [...next.scroll.loadedChapters];
-  if (!loaded.includes(chapterId)) loaded.push(chapterId);
-  next.scroll.loadedChapters = loaded;
 
   const effects: ReaderEffect[] = [
     { type: "FETCH_CHAPTER", bookId: action.bookId, chapterId },
@@ -167,21 +154,15 @@ function chapterLoadedReducer(
 ): { state: ReaderState; effects: ReaderEffect[] } {
   const chapterIdx = findChapterIndex(state.chapters, action.chapterId);
   if (chapterIdx < 0) {
-    return { state: { ...state, error: `Chapter not found: ${action.chapterId}` }, effects: [] };
+    return { state, effects: [] };
   }
 
   const position = action.position ?? "replace";
 
-  // Adjacent load (append/prepend) — don't change current chapter, just track
+  // Adjacent load (append/prepend) — don't change current chapter
   if (position === "append" || position === "prepend") {
-    const loaded = state.scroll.loadedChapters.filter((id) => id !== action.chapterId);
-    if (position === "append") {
-      loaded.push(action.chapterId);
-    } else {
-      loaded.unshift(action.chapterId);
-    }
     return {
-      state: { ...state, scroll: { ...state.scroll, loadedChapters: loaded } },
+      state,
       effects: [{ type: "CONTENT_DID_LOAD", chapterId: action.chapterId }],
     };
   }
@@ -192,12 +173,8 @@ function chapterLoadedReducer(
   const next: ReaderState = {
     ...state,
     currentChapterIndex: chapterIdx,
-    page: {
-      ...state.page,
-      current: clampPage(state.page.pendingTarget, state.page.total || 1),
-      total: state.page.total,
-    },
-    error: null,
+    page: state.page,
+    status: state.mode === "scroll" ? "ready" : state.status,
   };
 
   const effects: ReaderEffect[] = [];
@@ -213,15 +190,16 @@ function chapterLoadedReducer(
 
 function chapterFailedReducer(
   state: ReaderState,
-  action: Extract<ReaderAction, { type: "CHAPTER_FAILED" }>,
+  _action: Extract<ReaderAction, { type: "CHAPTER_FAILED" }>,
 ): { state: ReaderState; effects: ReaderEffect[] } {
-  return { state: { ...state, status: "ready", error: action.error }, effects: [] };
+  return { state: { ...state, status: "ready" }, effects: [] };
 }
 
 function pageCountUpdatedReducer(
   state: ReaderState,
   action: Extract<ReaderAction, { type: "PAGE_COUNT_UPDATED" }>,
 ): { state: ReaderState; effects: ReaderEffect[] } {
+  if (state.mode !== "pagination") return { state, effects: [] };
   const newTotal = Math.max(1, action.total);
 
   const pendingTarget = state.page.pendingTarget;
@@ -351,10 +329,7 @@ function goToChapterReducer(
     status: "loading",
     currentChapterIndex: idx,
     page: { ...state.page, current: 0, total: 0, pendingTarget: action.targetPage ?? null },
-    scroll: {
-      ...state.scroll,
-      loadedChapters: [action.chapterId],
-    },
+    scroll: state.scroll,
   };
 
   const effects: ReaderEffect[] = [
@@ -401,10 +376,7 @@ function setModeReducer(
     ...state,
     mode: action.mode,
     page: { current: 0, total: 0, pendingTarget: null },
-    scroll: {
-      progress: 0,
-      loadedChapters: chapterId ? [chapterId] : [],
-    },
+    scroll: { progress: 0 },
     status: "loading",
   };
 

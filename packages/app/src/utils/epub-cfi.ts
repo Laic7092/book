@@ -521,7 +521,14 @@ export function resolveCfiRange(
 // ─── Navigation ────────────────────────────────────────────────────────────
 
 function paginateToElement(element: Element): void {
-  element.scrollIntoView({ behavior: "smooth", block: "center" });
+  const doc = element.ownerDocument?.documentElement;
+  if (!doc) return;
+  const top =
+    element.getBoundingClientRect().top +
+    doc.scrollTop -
+    doc.clientHeight / 2 +
+    (element instanceof HTMLElement ? element.offsetHeight / 2 : 0);
+  doc.scrollTop = top;
 }
 
 /**

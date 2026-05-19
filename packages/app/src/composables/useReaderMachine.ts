@@ -321,7 +321,8 @@ export function useReaderMachine(
     } else {
       const element = resolveCfiToElement(cfi, doc.body);
       if (element) {
-        element.scrollIntoView({ behavior: "smooth", block: "start" });
+        const top = element.getBoundingClientRect().top + doc.documentElement.scrollTop;
+        doc.documentElement.scrollTop = top;
       }
     }
   }

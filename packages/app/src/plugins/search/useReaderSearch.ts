@@ -199,7 +199,12 @@ export function useReaderSearch(getSession: () => ReaderSession | null) {
         const page = findPageFromMark(doc, mark, state.page.total);
         session.dispatch({ type: "GO_TO_PAGE", page });
       } else {
-        mark.scrollIntoView({ behavior: "smooth", block: "center" });
+        const top =
+          mark.getBoundingClientRect().top +
+          doc.documentElement.scrollTop -
+          doc.documentElement.clientHeight / 2 +
+          mark.clientHeight / 2;
+        doc.documentElement.scrollTop = top;
       }
     }
 

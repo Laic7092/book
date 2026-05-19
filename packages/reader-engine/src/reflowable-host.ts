@@ -57,7 +57,7 @@ export class ReflowableHost extends Engine {
   ): void {
     this.bookFormat = format;
     super.init(bookId, chapters, chapterIndex, mode, initialPage, initialScroll);
-    this.loadedChapterOrder = [...this.state.scroll.loadedChapters];
+    this.loadedChapterOrder = chapters[chapterIndex] ? [chapters[chapterIndex].id] : [];
     this.loadingNext = false;
     this.loadingPrev = false;
   }
@@ -126,7 +126,8 @@ export class ReflowableHost extends Engine {
               this.dispatch({ type: "GO_TO_PAGE", page: Math.floor(offset / step) });
             }
           } else {
-            el.scrollIntoView({ behavior: "smooth", block: "start" });
+            const top = el.getBoundingClientRect().top + this.iframeDoc.documentElement.scrollTop;
+            this.iframeDoc.documentElement.scrollTop = top;
           }
         }
       }
@@ -153,7 +154,8 @@ export class ReflowableHost extends Engine {
             this.dispatch({ type: "GO_TO_PAGE", page: Math.floor(offset / step) });
           }
         } else {
-          el.scrollIntoView({ behavior: "smooth", block: "start" });
+          const top = el.getBoundingClientRect().top + this.iframeDoc.documentElement.scrollTop;
+          this.iframeDoc.documentElement.scrollTop = top;
         }
       }
     }
@@ -254,7 +256,6 @@ export class ReflowableHost extends Engine {
 
       requestAnimationFrame(() => {
         this.restoreScrollPosition();
-        this.dispatch({ type: "PAGE_COUNT_UPDATED", total: 1 });
         this.handleScroll();
       });
       return;
