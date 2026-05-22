@@ -8,7 +8,7 @@ export interface Chapter {
 }
 
 /** Sentinel value indicating "go to the last page" when used as pendingTarget */
-export const PENDING_TARGET_LAST_PAGE = -1;
+const PENDING_TARGET_LAST_PAGE = -1;
 
 export interface PageState {
   current: number;
@@ -43,7 +43,7 @@ export type ReaderAction =
     }
   | { type: "CHAPTER_LOADED"; chapterId: string; position?: "replace" | "append" | "prepend" }
   | { type: "CHAPTER_FAILED"; chapterId: string; error: string }
-  | { type: "PAGE_COUNT_UPDATED"; total: number }
+  | { type: "PAGE_COUNT_UPDATED"; chapterId: string; total: number }
   | { type: "NEXT_PAGE" }
   | { type: "PREV_PAGE" }
   | { type: "GO_TO_CHAPTER"; chapterId: string; targetPage?: number }
@@ -161,13 +161,18 @@ function chapterLoadedReducer(
 
   // Adjacent load (append/prepend) — don't change current chapter
   if (position === "append" || position === "prepend") {
+    if (state.mode !== "scroll") return { state, effects: [] };
     return {
       state,
       effects: [{ type: "CONTENT_DID_LOAD", chapterId: action.chapterId }],
     };
   }
 
-  // Replace mode
+  // Replace mode — ignore stale responses for chapters we've navigated away from
+  if (action.chapterId !== getChapterId(state)) {
+    return { state, effects: [] };
+  }
+
   const previousChapterId = getChapterId(state);
 
   const next: ReaderState = {
@@ -200,6 +205,7 @@ function pageCountUpdatedReducer(
   action: Extract<ReaderAction, { type: "PAGE_COUNT_UPDATED" }>,
 ): { state: ReaderState; effects: ReaderEffect[] } {
   if (state.mode !== "pagination") return { state, effects: [] };
+  if (action.chapterId !== getChapterId(state)) return { state, effects: [] };
   const newTotal = Math.max(1, action.total);
 
   const pendingTarget = state.page.pendingTarget;
@@ -329,7 +335,7 @@ function goToChapterReducer(
     status: "loading",
     currentChapterIndex: idx,
     page: { ...state.page, current: 0, total: 0, pendingTarget: action.targetPage ?? null },
-    scroll: state.scroll,
+    scroll: { progress: 0 },
   };
 
   const effects: ReaderEffect[] = [
@@ -393,6 +399,8 @@ function scrollProgressReducer(
   state: ReaderState,
   action: Extract<ReaderAction, { type: "SCROLL_PROGRESS" }>,
 ): { state: ReaderState; effects: ReaderEffect[] } {
+  if (state.status === "loading") return { state, effects: [] };
+
   const next: ReaderState = {
     ...state,
     scroll: { ...state.scroll, progress: action.bookProgress },

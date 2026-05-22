@@ -8,9 +8,4 @@ export type {
   ReducerResult,
   ReaderMachine,
 } from "./machine";
-export {
-  createInitialState,
-  createReaderMachine,
-  reducer,
-  PENDING_TARGET_LAST_PAGE,
-} from "./machine";
+export { createInitialState, createReaderMachine, reducer } from "./machine";

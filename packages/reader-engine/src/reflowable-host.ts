@@ -32,6 +32,7 @@ export class ReflowableHost extends Engine {
   private loadedChapterOrder: string[] = [];
   private loadingNext = false;
   private loadingPrev = false;
+  private justSwitched = false;
 
   constructor(options: ReflowableHostOptions) {
     super(options);
@@ -237,13 +238,14 @@ export class ReflowableHost extends Engine {
       this.iframeDoc.body.innerHTML = processed;
       this.dispatch({ type: "CHAPTER_LOADED", chapterId });
 
+      const loadingChapterId = chapterId;
       requestAnimationFrame(() => {
         if (!this.iframeDoc.body) return;
         const contentWidth = this.iframeDoc.body.scrollWidth;
         const iframeWidth = this.iframeDoc.documentElement.clientWidth;
         const step = Math.max(iframeWidth, 1);
         const total = Math.max(1, Math.ceil(contentWidth / step));
-        this.dispatch({ type: "PAGE_COUNT_UPDATED", total });
+        this.dispatch({ type: "PAGE_COUNT_UPDATED", chapterId: loadingChapterId, total });
       });
       return;
     }
@@ -251,12 +253,14 @@ export class ReflowableHost extends Engine {
     // Scroll mode
     if (mode === "replace") {
       this.iframeDoc.body.innerHTML = `<div class="scroll-chapter" data-chapter-id="${chapterId}">${processed}</div>`;
+      this.iframeDoc.documentElement.scrollTop = 0;
       this.loadedChapterOrder = [chapterId];
+      this.justSwitched = true;
       this.dispatch({ type: "CHAPTER_LOADED", chapterId, position: "replace" });
 
       requestAnimationFrame(() => {
         this.restoreScrollPosition();
-        this.handleScroll();
+        this.syncScrollPosition();
       });
       return;
     }
@@ -358,9 +362,15 @@ export class ReflowableHost extends Engine {
       }
     }
 
+    if (this.state.mode !== "scroll" || this.state.status !== "ready") return;
+
     this.dispatch({ type: "SCROLL_PROGRESS", bookProgress: progress, visibleChapterId });
 
-    if (this.state.mode !== "scroll" || this.state.status !== "ready") return;
+    // Suppress adjacent loading on the first scroll after a chapter switch
+    if (this.justSwitched) {
+      this.justSwitched = false;
+      return;
+    }
 
     // Auto-load adjacent chapters based on loaded DOM boundaries
     const nearEnd = scrollHeight > 0 && (scrollTop + clientHeight) / scrollHeight >= 0.85;
@@ -373,6 +383,30 @@ export class ReflowableHost extends Engine {
     if (atTop && !this.loadingPrev) {
       void this.loadAdjacent("prev");
     }
+  }
+
+  /** Dispatch current scroll position — no adjacent loading */
+  private syncScrollPosition(): void {
+    if (this.state.mode !== "scroll" || this.state.status !== "ready") return;
+    const doc = this.iframeDoc;
+    const html = doc.documentElement;
+    const scrollTop = html.scrollTop || 0;
+    const scrollHeight = html.scrollHeight || 0;
+    const clientHeight = html.clientHeight || 0;
+    const maxScroll = Math.max(scrollHeight - clientHeight, 1);
+    const progress = Math.min(1, Math.max(0, scrollTop / maxScroll));
+
+    let visibleChapterId: string | undefined;
+    const chapters = doc.body.querySelectorAll<HTMLElement>("[data-chapter-id]");
+    for (const ch of chapters) {
+      const rect = ch.getBoundingClientRect();
+      if (rect.bottom >= 0 && rect.top <= clientHeight) {
+        visibleChapterId = ch.dataset.chapterId;
+        break;
+      }
+    }
+
+    this.dispatch({ type: "SCROLL_PROGRESS", bookProgress: progress, visibleChapterId });
   }
 
   /** Restore scroll position after content load in scroll mode */

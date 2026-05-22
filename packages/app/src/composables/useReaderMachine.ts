@@ -174,7 +174,10 @@ export function useReaderMachine(
   function handleColumnLayout(data: { contentWidth: number; iframeWidth: number }) {
     const step = Math.max(data.iframeWidth, 1);
     const total = Math.max(1, Math.ceil(data.contentWidth / step));
-    host?.dispatch({ type: "PAGE_COUNT_UPDATED", total });
+    const chapterId = state.value.chapters[state.value.currentChapterIndex]?.id;
+    if (chapterId) {
+      host?.dispatch({ type: "PAGE_COUNT_UPDATED", chapterId, total });
+    }
   }
 
   function handleInternalLinkClick(href: string) {

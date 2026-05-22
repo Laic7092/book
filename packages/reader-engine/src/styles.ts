@@ -36,14 +36,4 @@ export const PAGINATION_CSS = `
     max-width: 100%;
     overflow-x: auto;
   }
-  html[data-mode="scroll"] {
-    overflow-y: auto;
-  }
-  html[data-mode="scroll"] body.reader-content {
-    touch-action: pan-y;
-    margin: var(--page-margin, 24px);
-  }
-  html[data-mode="scroll"] .scroll-chapter {
-    padding-bottom: 4em;
-  }
 `;

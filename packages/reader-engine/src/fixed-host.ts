@@ -55,7 +55,10 @@ export class FixedHost extends Engine {
 
     if (this.renderer) {
       this.renderer.onPageChange = (_page, total) => {
-        this.dispatch({ type: "PAGE_COUNT_UPDATED", total });
+        const chapterId = this.state.chapters[this.state.currentChapterIndex]?.id;
+        if (chapterId) {
+          this.dispatch({ type: "PAGE_COUNT_UPDATED", chapterId, total });
+        }
       };
     }
   }
@@ -184,7 +187,7 @@ export class FixedHost extends Engine {
     if (target) {
       const pageCount = target.getPageCount();
       if (pageCount > 0) {
-        this.dispatch({ type: "PAGE_COUNT_UPDATED", total: pageCount });
+        this.dispatch({ type: "PAGE_COUNT_UPDATED", chapterId, total: pageCount });
       }
     }
   }

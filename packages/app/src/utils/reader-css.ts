@@ -150,10 +150,11 @@ export function generateBaseCSS(): string {
     }
     html[data-mode="scroll"] body.reader-content {
       touch-action: pan-y;
-      margin: var(--page-margin, 24px);
+      margin: 0 var(--page-margin, 24px);
     }
-    html[data-mode="scroll"] .scroll-chapter:not(:first-child) {
-      margin-top: 4em;
+    html[data-mode="scroll"] .scroll-chapter {
+      min-height: 100vh;
+      padding-bottom: 1em;
     }
   `;
 }
