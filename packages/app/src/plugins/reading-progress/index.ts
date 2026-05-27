@@ -20,10 +20,19 @@ export const readingProgressPlugin: Plugin = {
   name: "Reading Progress",
   version: "1.0.0",
   setup(ctx) {
-    ctx.events.on("page:changed", ({ bookId }) => void save(bookId));
-    ctx.events.on("chapter:changed", ({ bookId }) => void save(bookId));
+    let periodicTimer: ReturnType<typeof setInterval> | null = null;
+
+    ctx.events.on("page:changed", ({ bookId }) => {
+      void save(bookId);
+      stopPeriodicSave();
+    });
+    ctx.events.on("chapter:changed", ({ bookId }) => {
+      void save(bookId);
+      startPeriodicSave(bookId);
+    });
     ctx.events.on("reader:unmounted", ({ bookId }) => {
       void save(bookId);
+      stopPeriodicSave();
     });
 
     async function save(bookId: string) {
@@ -42,6 +51,22 @@ export const readingProgressPlugin: Plugin = {
         data.pageIndex = s.page.current;
       }
       await ctx.storage.put(progressKey(bookId), data);
+    }
+
+    function startPeriodicSave(bookId: string) {
+      stopPeriodicSave();
+      periodicTimer = setInterval(() => {
+        const h = ctx.readerSession();
+        if (!h || h.getState().mode !== "scroll") return;
+        void save(bookId);
+      }, 5000);
+    }
+
+    function stopPeriodicSave() {
+      if (periodicTimer !== null) {
+        clearInterval(periodicTimer);
+        periodicTimer = null;
+      }
     }
 
     ctx.hooks.filter("reader:init-config", async (config) => {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import type { ReaderSession } from "@book/reader-engine";
 import { setAutoAdvancing, setOnUserPageChange } from "./index";
 import { currentSession } from "../../stores/reader-session";
 
@@ -24,11 +25,7 @@ function nextPreset() {
   intervalSec.value = PRESETS[(idx + 1) % PRESETS.length];
 }
 
-function tick() {
-  lastTick = Date.now();
-  progress.value = 0;
-  const s = currentSession.value;
-  if (!s) return;
+function tickPagination(s: ReaderSession) {
   const prevPage = s.getState().page.current;
   setAutoAdvancing(true);
   s.dispatch({ type: "NEXT_PAGE" });
@@ -45,16 +42,37 @@ function tick() {
   });
 }
 
-function start() {
-  if (raf !== null) return;
+function scrollLoop() {
+  if (!isPlaying.value) return;
+  const now = Date.now();
+  const dt = now - lastTick;
+  lastTick = now;
+
   const s = currentSession.value;
-  if (!s) return;
-  isPlaying.value = true;
-  lastTick = Date.now();
-  progress.value = 0;
-  tick();
-  timer = window.setInterval(tick, interval.value);
-  raf = requestAnimationFrame(updateProgress);
+  if (!s) return stop();
+
+  const doc = s.getDocument();
+  if (!doc) return stop();
+  const html = doc.documentElement;
+  if (!html) return stop();
+
+  const { scrollHeight, clientHeight, scrollTop } = html;
+  const maxScroll = scrollHeight - clientHeight;
+
+  if (maxScroll <= 0 || scrollTop >= maxScroll - 1) {
+    stop();
+    return;
+  }
+
+  const speed = (clientHeight * 0.85) / interval.value;
+  const target = Math.min(scrollTop + speed * dt, maxScroll);
+  html.scrollTop = target;
+
+  s.dispatch({ type: "SCROLL_PROGRESS", bookProgress: target / maxScroll });
+
+  progress.value = ((now % interval.value) / interval.value) * 100;
+
+  raf = requestAnimationFrame(scrollLoop);
 }
 
 function updateProgress() {
@@ -62,7 +80,24 @@ function updateProgress() {
   const now = Date.now();
   const elapsed = now - lastTick;
   progress.value = Math.min(100, (elapsed / interval.value) * 100);
-  requestAnimationFrame(updateProgress);
+  raf = requestAnimationFrame(updateProgress);
+}
+
+function start() {
+  if (raf !== null) return;
+  const s = currentSession.value;
+  if (!s) return;
+  isPlaying.value = true;
+  lastTick = Date.now();
+  progress.value = 0;
+
+  if (s.getState().mode === "scroll") {
+    raf = requestAnimationFrame(scrollLoop);
+  } else {
+    tickPagination(s);
+    timer = window.setInterval(() => tickPagination(s), interval.value);
+    raf = requestAnimationFrame(updateProgress);
+  }
 }
 
 function stop() {
