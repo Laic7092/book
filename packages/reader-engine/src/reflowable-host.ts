@@ -29,11 +29,6 @@ export class ReflowableHost extends Engine {
   private resourceUrls = new Map<string, string>();
   private injectedResources = new Map<string, ResourceInfo>();
 
-  private loadedChapterOrder: string[] = [];
-  private loadingNext = false;
-  private loadingPrev = false;
-  private justSwitched = false;
-
   constructor(options: ReflowableHostOptions) {
     super(options);
     this.container = options.container;
@@ -58,9 +53,6 @@ export class ReflowableHost extends Engine {
   ): void {
     this.bookFormat = format;
     super.init(bookId, chapters, chapterIndex, mode, initialPage, initialScroll);
-    this.loadedChapterOrder = chapters[chapterIndex] ? [chapters[chapterIndex].id] : [];
-    this.loadingNext = false;
-    this.loadingPrev = false;
   }
 
   nextPage(): void {
@@ -173,7 +165,6 @@ export class ReflowableHost extends Engine {
       URL.revokeObjectURL(blobUrl);
     }
     this.resourceUrls.clear();
-    this.loadedChapterOrder.length = 0;
     this.iframe.remove();
   }
 
@@ -196,21 +187,15 @@ export class ReflowableHost extends Engine {
   }
 
   protected override async fetchAndLoadChapter(bookId: string, chapterId: string): Promise<void> {
-    await this.loadChapter(bookId, chapterId, "replace");
+    await this.loadChapter(bookId, chapterId);
   }
 
-  private async loadChapter(
-    bookId: string,
-    chapterId: string,
-    mode: "replace" | "append" | "prepend",
-  ): Promise<void> {
-    if (mode === "replace") {
-      clearResources(this.iframeDoc, this.injectedResources);
-      for (const [, blobUrl] of this.resourceUrls) {
-        URL.revokeObjectURL(blobUrl);
-      }
-      this.resourceUrls.clear();
+  private async loadChapter(bookId: string, chapterId: string): Promise<void> {
+    clearResources(this.iframeDoc, this.injectedResources);
+    for (const [, blobUrl] of this.resourceUrls) {
+      URL.revokeObjectURL(blobUrl);
     }
+    this.resourceUrls.clear();
 
     const { html, rawData } = await this.fetchChapter!(bookId, chapterId);
     if (!html) {
@@ -233,7 +218,6 @@ export class ReflowableHost extends Engine {
       processed = await this.transformContent(processed, bookId, chapterId);
     }
 
-    // Pagination mode — only replace is valid
     if (this.state.mode === "pagination") {
       this.iframeDoc.body.innerHTML = processed;
       this.dispatch({ type: "CHAPTER_LOADED", chapterId });
@@ -250,72 +234,15 @@ export class ReflowableHost extends Engine {
       return;
     }
 
-    // Scroll mode
-    if (mode === "replace") {
-      this.iframeDoc.body.innerHTML = `<div class="scroll-chapter" data-chapter-id="${chapterId}">${processed}</div>`;
-      this.iframeDoc.documentElement.scrollTop = 0;
-      this.loadedChapterOrder = [chapterId];
-      this.justSwitched = true;
-      this.dispatch({ type: "CHAPTER_LOADED", chapterId, position: "replace" });
+    // Scroll mode: replace current content
+    this.iframeDoc.body.innerHTML = `<div class="scroll-chapter" data-chapter-id="${chapterId}">${processed}</div>`;
+    this.iframeDoc.documentElement.scrollTop = 0;
+    this.dispatch({ type: "CHAPTER_LOADED", chapterId });
 
-      requestAnimationFrame(() => {
-        this.restoreScrollPosition();
-        this.syncScrollPosition();
-      });
-      return;
-    }
-
-    // Append or prepend
-    const container = this.iframeDoc.createElement("div");
-    container.className = "scroll-chapter";
-    container.dataset.chapterId = chapterId;
-    container.innerHTML = processed;
-
-    if (mode === "append") {
-      this.iframeDoc.body.appendChild(container);
-      if (!this.loadedChapterOrder.includes(chapterId)) {
-        this.loadedChapterOrder.push(chapterId);
-      }
-    } else {
-      const body = this.iframeDoc.body;
-      const oldScrollTop = this.iframeDoc.documentElement.scrollTop;
-      body.insertBefore(container, body.firstChild);
-      if (!this.loadedChapterOrder.includes(chapterId)) {
-        this.loadedChapterOrder.unshift(chapterId);
-      }
-      requestAnimationFrame(() => {
-        this.iframeDoc.documentElement.scrollTop = oldScrollTop + container.offsetHeight;
-      });
-    }
-    this.dispatch({ type: "CHAPTER_LOADED", chapterId, position: mode });
-  }
-
-  private async loadAdjacent(direction: "next" | "prev"): Promise<void> {
-    if (this.loadedChapterOrder.length === 0) return;
-
-    const edgeId =
-      direction === "next"
-        ? this.loadedChapterOrder[this.loadedChapterOrder.length - 1]
-        : this.loadedChapterOrder[0];
-    const edgeIdx = this.state.chapters.findIndex((c) => c.id === edgeId);
-    if (edgeIdx < 0) return;
-
-    const targetIdx = direction === "next" ? edgeIdx + 1 : edgeIdx - 1;
-    const target = this.state.chapters[targetIdx];
-    if (!target || this.loadedChapterOrder.includes(target.id)) return;
-
-    const mode = direction === "next" ? "append" : "prepend";
-    if (direction === "next") this.loadingNext = true;
-    else this.loadingPrev = true;
-
-    try {
-      await this.loadChapter(this.state.bookId, target.id, mode);
-    } catch {
-      // Errors are already dispatched as CHAPTER_FAILED inside loadChapter
-    } finally {
-      if (direction === "next") this.loadingNext = false;
-      else this.loadingPrev = false;
-    }
+    requestAnimationFrame(() => {
+      this.restoreScrollPosition();
+      this.syncScrollPosition();
+    });
   }
 
   private setupScrollHandler(): void {
@@ -352,6 +279,7 @@ export class ReflowableHost extends Engine {
     const maxScroll = Math.max(scrollHeight - clientHeight, 1);
     const progress = Math.min(1, Math.max(0, scrollTop / maxScroll));
 
+    // Detect visible chapter from DOM (scroll-mode concern, not machine concern)
     let visibleChapterId: string | undefined;
     const chapters = doc.body.querySelectorAll<HTMLElement>("[data-chapter-id]");
     for (const ch of chapters) {
@@ -364,61 +292,30 @@ export class ReflowableHost extends Engine {
 
     if (this.state.mode !== "scroll" || this.state.status !== "ready") return;
 
-    this.dispatch({ type: "SCROLL_PROGRESS", bookProgress: progress, visibleChapterId });
+    this.dispatch({ type: "SCROLL_PROGRESS", bookProgress: progress });
 
-    // Suppress adjacent loading on the first scroll after a chapter switch
-    if (this.justSwitched) {
-      this.justSwitched = false;
-      return;
-    }
-
-    // Auto-load adjacent chapters based on loaded DOM boundaries
-    const nearEnd = scrollHeight > 0 && (scrollTop + clientHeight) / scrollHeight >= 0.85;
-    const atTop = scrollTop <= 5;
-
-    if (nearEnd && !this.loadingNext) {
-      void this.loadAdjacent("next");
-    }
-
-    if (atTop && !this.loadingPrev) {
-      void this.loadAdjacent("prev");
+    // Notify machine when visible chapter changes (without triggering a fetch)
+    if (visibleChapterId) {
+      const currentId = this.state.chapters[this.state.currentChapterIndex]?.id;
+      if (visibleChapterId !== currentId) {
+        this.dispatch({ type: "SET_CURRENT_CHAPTER", chapterId: visibleChapterId });
+      }
     }
   }
 
-  /** Dispatch current scroll position — no adjacent loading */
+  /** Dispatch current scroll position after content load */
   private syncScrollPosition(): void {
-    if (this.state.mode !== "scroll" || this.state.status !== "ready") return;
-    const doc = this.iframeDoc;
-    const html = doc.documentElement;
-    const scrollTop = html.scrollTop || 0;
-    const scrollHeight = html.scrollHeight || 0;
-    const clientHeight = html.clientHeight || 0;
-    const maxScroll = Math.max(scrollHeight - clientHeight, 1);
-    const progress = Math.min(1, Math.max(0, scrollTop / maxScroll));
-
-    let visibleChapterId: string | undefined;
-    const chapters = doc.body.querySelectorAll<HTMLElement>("[data-chapter-id]");
-    for (const ch of chapters) {
-      const rect = ch.getBoundingClientRect();
-      if (rect.bottom >= 0 && rect.top <= clientHeight) {
-        visibleChapterId = ch.dataset.chapterId;
-        break;
-      }
-    }
-
-    this.dispatch({ type: "SCROLL_PROGRESS", bookProgress: progress, visibleChapterId });
+    this.handleScroll();
   }
 
   /** Restore scroll position after content load in scroll mode */
   private restoreScrollPosition(): void {
     if (this.state.mode !== "scroll") return;
-    const progress = this.state.scroll.progress;
+    const progress = this.state.scrollProgress;
     if (progress <= 0) return;
     const doc = this.iframeDoc;
     const html = doc.documentElement;
-    const scrollHeight = html.scrollHeight;
-    const clientHeight = html.clientHeight;
-    const maxScroll = scrollHeight - clientHeight;
+    const maxScroll = html.scrollHeight - html.clientHeight;
     if (maxScroll > 0) {
       html.scrollTop = progress * maxScroll;
     }

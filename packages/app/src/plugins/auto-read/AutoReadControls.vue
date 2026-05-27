@@ -32,8 +32,8 @@ function tick() {
   const prevPage = s.getState().page.current;
   setAutoAdvancing(true);
   s.dispatch({ type: "NEXT_PAGE" });
-  setAutoAdvancing(false);
   requestAnimationFrame(() => {
+    setAutoAdvancing(false);
     const newState = s.getState();
     if (newState.status === "loading") return;
     if (

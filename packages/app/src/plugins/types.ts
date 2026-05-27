@@ -43,7 +43,7 @@ export interface InitConfig {
   chapterIndex: number;
   mode: "pagination" | "scroll";
   initialPage?: Partial<import("@book/reader-core").PageState>;
-  initialScroll?: Partial<import("@book/reader-core").ScrollState>;
+  initialScroll?: Partial<{ progress: number }>;
 }
 
 /** Maps hook names to their payload types. */

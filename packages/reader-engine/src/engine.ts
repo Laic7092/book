@@ -26,7 +26,7 @@ export interface EngineOptions {
 
 export abstract class Engine {
   protected machine = createReaderMachine();
-  protected state: ReaderState;
+  state: ReaderState;
   private unsub: () => void;
   private onReady: (() => void) | undefined;
   protected onEffect: ((effect: ReaderEffect) => void | Promise<void>) | undefined;

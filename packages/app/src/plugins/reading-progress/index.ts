@@ -37,7 +37,7 @@ export const readingProgressPlugin: Plugin = {
         chapterIndex: s.currentChapterIndex,
       };
       if (s.mode === "scroll") {
-        data.scrollProgress = s.scroll.progress;
+        data.scrollProgress = s.scrollProgress;
       } else {
         data.pageIndex = s.page.current;
       }
