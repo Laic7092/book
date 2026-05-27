@@ -28,6 +28,11 @@ export class ReflowableHost extends Engine {
   private bookFormat = "";
   private resourceUrls = new Map<string, string>();
   private injectedResources = new Map<string, ResourceInfo>();
+  private scrollObserver: IntersectionObserver | null = null;
+  private sentinelSeen = new WeakMap<Element, true>();
+  private loadedChapterIds = new Set<string>();
+  private autoLoading = false;
+  private hasScrolled = false;
 
   constructor(options: ReflowableHostOptions) {
     super(options);
@@ -160,6 +165,7 @@ export class ReflowableHost extends Engine {
       this.iframeDoc.removeEventListener("click", this.clickHandlerRef);
     }
     this.teardownScrollHandler();
+    this.teardownScrollSentinels();
     clearResources(this.iframeDoc, this.injectedResources);
     for (const [, blobUrl] of this.resourceUrls) {
       URL.revokeObjectURL(blobUrl);
@@ -191,6 +197,7 @@ export class ReflowableHost extends Engine {
   }
 
   private async loadChapter(bookId: string, chapterId: string): Promise<void> {
+    this.teardownScrollSentinels();
     clearResources(this.iframeDoc, this.injectedResources);
     for (const [, blobUrl] of this.resourceUrls) {
       URL.revokeObjectURL(blobUrl);
@@ -234,7 +241,10 @@ export class ReflowableHost extends Engine {
       return;
     }
 
-    // Scroll mode: replace current content
+    // Scroll mode: start fresh with this chapter
+    this.loadedChapterIds.clear();
+    this.loadedChapterIds.add(chapterId);
+    this.hasScrolled = false;
     this.iframeDoc.body.innerHTML = `<div class="scroll-chapter" data-chapter-id="${chapterId}">${processed}</div>`;
     this.iframeDoc.documentElement.scrollTop = 0;
     this.dispatch({ type: "CHAPTER_LOADED", chapterId });
@@ -242,6 +252,7 @@ export class ReflowableHost extends Engine {
     requestAnimationFrame(() => {
       this.restoreScrollPosition();
       this.syncScrollPosition();
+      this.setupScrollSentinels();
     });
   }
 
@@ -301,6 +312,18 @@ export class ReflowableHost extends Engine {
         this.dispatch({ type: "SET_CURRENT_CHAPTER", chapterId: visibleChapterId });
       }
     }
+
+    // Track first real scroll to distinguish initial position from manual scroll-back-to-top
+    if (!this.hasScrolled) {
+      if (scrollTop > 0) this.hasScrolled = true;
+    } else if (scrollTop <= 0) {
+      let minIdx = Infinity;
+      for (const id of this.loadedChapterIds) {
+        const i = this.state.chapters.findIndex((c) => c.id === id);
+        if (i >= 0 && i < minIdx) minIdx = i;
+      }
+      if (minIdx > 0) void this.autoLoadChapter("prev");
+    }
   }
 
   /** Dispatch current scroll position after content load */
@@ -353,5 +376,110 @@ export class ReflowableHost extends Engine {
       onClick?.(e);
     };
     this.iframeDoc.addEventListener("click", this.clickHandlerRef);
+  }
+
+  private async autoLoadChapter(dir: "prev" | "next"): Promise<void> {
+    if (this.autoLoading) return;
+    this.autoLoading = true;
+
+    try {
+      const chapters = this.state.chapters;
+      let targetIdx = -1;
+      for (const id of this.loadedChapterIds) {
+        const i = chapters.findIndex((c) => c.id === id);
+        if (i < 0) continue;
+        if (dir === "next" && i > targetIdx) targetIdx = i;
+        if (dir === "prev" && (targetIdx < 0 || i < targetIdx)) targetIdx = i;
+      }
+      targetIdx = dir === "next" ? targetIdx + 1 : targetIdx - 1;
+      if (targetIdx < 0 || targetIdx >= chapters.length) return;
+
+      const chapter = chapters[targetIdx];
+      if (this.loadedChapterIds.has(chapter.id)) return;
+
+      const result = await this.fetchChapter!(this.state.bookId, chapter.id);
+      if (!result?.html) return;
+
+      let processed = result.html;
+      const parser = getParserForFormat(this.bookFormat);
+      if (parser && parser.extractResource) {
+        const resolved = await resolveChapterResources(
+          result.html,
+          result.rawData,
+          parser,
+          this.resourceUrls,
+        );
+        if (resolved.resources.length > 0) {
+          injectResources(this.iframeDoc, resolved.resources, this.injectedResources);
+        }
+        processed = resolved.html;
+      }
+      if (this.transformContent) {
+        processed = await this.transformContent(processed, this.state.bookId, chapter.id);
+      }
+
+      const wrapper = this.iframeDoc.createElement("div");
+      wrapper.className = "scroll-chapter";
+      wrapper.dataset.chapterId = chapter.id;
+      wrapper.innerHTML = processed;
+
+      if (dir === "next") {
+        this.iframeDoc.body.append(wrapper);
+      } else {
+        const prevHeight = this.iframeDoc.body.scrollHeight;
+        this.iframeDoc.body.prepend(wrapper);
+        this.iframeDoc.documentElement.scrollTop += this.iframeDoc.body.scrollHeight - prevHeight;
+      }
+
+      this.loadedChapterIds.add(chapter.id);
+    } finally {
+      this.autoLoading = false;
+      this.setupScrollSentinels();
+    }
+  }
+
+  private setupScrollSentinels(): void {
+    this.teardownScrollSentinels();
+
+    const chapters = this.state.chapters;
+    if (!this.loadedChapterIds.size) return;
+
+    let maxIdx = -Infinity;
+    for (const id of this.loadedChapterIds) {
+      const i = chapters.findIndex((c) => c.id === id);
+      if (i >= 0 && i > maxIdx) maxIdx = i;
+    }
+
+    if (maxIdx >= chapters.length - 1) return;
+
+    const el = this.iframeDoc.createElement("div");
+    el.dataset.dir = "next";
+    el.style.cssText = "height:1px;width:1px;opacity:0;pointer-events:none;";
+    this.iframeDoc.body.append(el);
+
+    this.scrollObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (this.sentinelSeen.has(entry.target)) {
+            if (entry.isIntersecting) {
+              void this.autoLoadChapter("next");
+            }
+          } else {
+            this.sentinelSeen.set(entry.target, true);
+          }
+        }
+      },
+      { threshold: 0 },
+    );
+
+    this.scrollObserver.observe(el);
+  }
+
+  private teardownScrollSentinels(): void {
+    if (this.scrollObserver) {
+      this.scrollObserver.disconnect();
+      this.scrollObserver = null;
+    }
+    this.iframeDoc.querySelectorAll("[data-dir]").forEach((el) => el.remove());
   }
 }
