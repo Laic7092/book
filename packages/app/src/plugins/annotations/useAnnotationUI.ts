@@ -57,7 +57,14 @@ export function useAnnotationUI() {
         const VIEW_EDGE = 24; // 距视口边缘的安全距离
         const GAP = 24 + 45; // 与选区的垂直间距
 
-        const rect = info?.rawRect;
+        if (!info) {
+          showToolbar.value = false;
+          showNoteInput.value = false;
+          showPopover.value = false;
+          return;
+        }
+
+        const rect = info.rawRect;
         if (!rect) return;
 
         const { top, bottom, left, right } = rect;
@@ -81,12 +88,6 @@ export function useAnnotationUI() {
         // ---- 水平定位：与选区居中对齐，仅受 VIEW_EDGE 约束 ----
         let barLeft = (left + right) / 2 - BAR_WIDTH / 2;
         barLeft = Math.max(VIEW_EDGE, Math.min(barLeft, viewWidth - BAR_WIDTH - VIEW_EDGE));
-
-        if (!info) {
-          showToolbar.value = false;
-          showNoteInput.value = false;
-          return;
-        }
         const sel = doc.getSelection();
         if (!sel || sel.isCollapsed) return;
         const range = sel.getRangeAt(0);
