@@ -378,7 +378,7 @@ function removeBgImage() {
   right: -2px;
   font-size: 10px;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
   width: 14px;
   height: 14px;
   border-radius: 50%;
@@ -409,7 +409,7 @@ function removeBgImage() {
 .size-btn.active {
   border-color: var(--accent);
   background: var(--accent);
-  color: white;
+  color: var(--accent-text);
 }
 
 .mode-btn {

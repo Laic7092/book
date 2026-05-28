@@ -89,13 +89,13 @@ const uiStore = useUIStore();
 }
 
 .confirm-danger {
-  background: #dc2626;
+  background: var(--color-danger);
   color: #fff;
-  border-color: #dc2626;
+  border-color: var(--color-danger);
 }
 
 .confirm-danger:hover {
-  background: #b91c1c !important;
-  border-color: #b91c1c;
+  background: var(--color-danger-hover) !important;
+  border-color: var(--color-danger-hover);
 }
 </style>

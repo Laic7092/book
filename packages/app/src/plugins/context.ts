@@ -231,6 +231,7 @@ function resetThemeVars() {
     "--border-subtle",
     "--hover-bg",
     "--accent",
+    "--accent-text",
     "--accent-soft",
     "--accent-muted",
     "--accent-hover",
@@ -262,6 +263,7 @@ function applyCssTheme(theme: string) {
   root.style.setProperty("--border-subtle", c.borderSubtle);
   root.style.setProperty("--hover-bg", c.hoverBg);
   root.style.setProperty("--accent", c.accent);
+  root.style.setProperty("--accent-text", c.accentText);
   root.style.setProperty("--accent-soft", c.accentSoft);
   root.style.setProperty("--modal-bg", c.modalBg);
   root.style.setProperty("--modal-text", c.modalText);

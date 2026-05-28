@@ -266,8 +266,8 @@ function formatDate(timestamp: number): string {
 }
 
 .delete-btn:hover {
-  background: #fef2f2;
-  color: #dc2626;
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
 }
 
 .empty-state {

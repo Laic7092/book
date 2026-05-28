@@ -142,7 +142,7 @@ function setRef(el: HTMLElement | null, chapterId: string) {
 
 .toc-item.active {
   background: var(--accent);
-  color: #ffffff;
+  color: var(--accent-text);
   font-weight: 500;
 }
 

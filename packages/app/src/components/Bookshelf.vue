@@ -1073,10 +1073,10 @@ onMounted(() => {
   height: 22px;
   padding: 0 7px;
   background: var(--accent);
-  color: #fff;
-  border-radius: 11px;
-  font-size: 11px;
-  font-weight: 600;
+  color: var(--accent-text);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
   font-family: var(--font-ui);
 }
 
@@ -1164,8 +1164,8 @@ onMounted(() => {
   gap: 6px;
   padding: 8px 14px;
   background: var(--accent);
-  color: #fff;
-  border-radius: 9px;
+  color: var(--accent-text);
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-weight: 550;
   font-size: 13px;
@@ -1694,8 +1694,8 @@ onMounted(() => {
 }
 
 .btn-delete:hover {
-  background: #fef2f2;
-  color: #dc2626;
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
   box-shadow: 0 3px 10px rgba(220, 38, 38, 0.18);
 }
 
@@ -1910,7 +1910,7 @@ onMounted(() => {
 
 .folder-chip.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
   border-color: var(--accent);
 }
 
@@ -2116,11 +2116,11 @@ onMounted(() => {
 }
 
 .ctx-danger {
-  color: #dc2626;
+  color: var(--color-danger);
 }
 
 .ctx-danger:hover {
-  background: #fef2f2;
+  background: var(--color-danger-soft);
 }
 
 /* ═══════════════════════════════════════════════

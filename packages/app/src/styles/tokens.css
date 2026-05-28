@@ -1,0 +1,833 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Design Tokens — Single source of truth for the entire app.
+   Light + Dark themes. All component styles reference these variables.
+
+   Aesthetic: "Warm Library" — refined, tactile, paper-and-leather.
+   Reading at dusk by lamplight, the quiet hush of a private study.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Light Theme (default) ─────────────────────────────────────── */
+:root {
+  /* Colors: Background */
+  --reader-bg: #f5f5f4;
+  --bg-elevated: #fafaf9;
+  --bg-secondary: #e7e5e4;
+  --bg-tertiary: #dcd9d4;
+  --header-bg: rgba(245, 245, 244, 0.88);
+
+  /* Colors: Text */
+  --reader-text: #1c1917;
+  --text-secondary: #78716c;
+  --text-tertiary: #a8a29e;
+
+  /* Colors: Borders */
+  --border: #d6d3d1;
+  --border-subtle: rgba(28, 25, 23, 0.08);
+
+  /* Colors: Interactive */
+  --hover-bg: #e7e5e4;
+  --active-bg: #d6d3d1;
+
+  /* Colors: Accent (warm stone gray-brown) */
+  --accent: #57534e;
+  --accent-soft: rgba(87, 83, 78, 0.08);
+  --accent-muted: rgba(87, 83, 78, 0.15);
+  --accent-hover: #44403c;
+  --accent-text: #ffffff;
+
+  /* Colors: Modal */
+  --modal-bg: #f5f5f4;
+  --modal-text: #1c1917;
+  --progress-track: #d6d3d1;
+
+  /* Colors: Semantic */
+  --color-success: #16a34a;
+  --color-success-soft: rgba(22, 163, 74, 0.08);
+  --color-danger: #dc2626;
+  --color-danger-soft: rgba(220, 38, 38, 0.08);
+  --color-danger-hover: #b91c1c;
+  --color-warning: #d97706;
+  --color-warning-soft: rgba(217, 119, 6, 0.08);
+
+  /* Shadows */
+  --shadow-xs: 0 1px 2px rgba(31, 26, 23, 0.04);
+  --shadow-sm: 0 2px 8px rgba(31, 26, 23, 0.06);
+  --shadow-md: 0 4px 16px rgba(31, 26, 23, 0.08);
+  --shadow-lg: 0 8px 32px rgba(31, 26, 23, 0.1);
+  --shadow-xl: 0 16px 64px rgba(31, 26, 23, 0.12);
+  --shadow-inner: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  --shadow-dark-sm: 0 2px 8px rgba(0, 0, 0, 0.25);
+  --shadow-dark-md: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --shadow-dark-lg: 0 8px 32px rgba(0, 0, 0, 0.45);
+  --shadow-card-hover:
+    0 4px 16px rgba(0, 0, 0, 0.12), 0 12px 28px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+
+  /* Z-Index Scale */
+  --z-content: 0;
+  --z-overlay: 100;
+  --z-chrome: 200;
+  --z-modal: 1000;
+  --z-toast: 3000;
+  --z-tooltip: 4000;
+
+  /* Typography */
+  --font-ui: "Instrument Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: "Cormorant", Georgia, serif;
+  --font-reading: "Literata", Georgia, serif;
+  --font-mono: "JetBrains Mono", "SF Mono", Consolas, monospace;
+
+  /* Font Sizes */
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 28px;
+
+  /* Font Weights */
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* Line Heights */
+  --leading-tight: 1.25;
+  --leading-base: 1.5;
+  --leading-relaxed: 1.65;
+
+  /* Spacing Scale (4px base) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-14: 56px;
+  --space-16: 64px;
+
+  /* Border Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* Transitions */
+  --transition-fast: 120ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: 280ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 480ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-spring: 520ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  --transition-page: 350ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-modal: 450ms cubic-bezier(0.32, 0.72, 0, 1);
+  --transition-menu: 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ── Theme Integration ──────────────────────────────────────────── */
+/*
+ * Theme colors (all --reader-*, --accent*, --border*, --bg-*, --modal-*,
+ * --text-secondary, --hover-bg, --progress-track, --header-bg) are managed
+ * by the JS theme system (context.ts → applyCssTheme).
+ *
+ * The :root block above provides FALLBACK defaults used before a theme is
+ * loaded. Once the settings plugin initializes, it calls applyCssTheme()
+ * which sets these variables as inline styles on <html>, overriding the
+ * CSS fallbacks.
+ *
+ * DO NOT add [data-theme] or @media-based theme overrides here — the JS
+ * theme system is the single source of truth for theme colors.
+ */
+
+/* ═══════════════════════════════════════════════════════════════════
+   Base Element Styles
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Box Sizing ────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* ── Focus Styles ──────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ── Selection ─────────────────────────────────────────────────── */
+::selection {
+  background-color: var(--accent-muted);
+  color: var(--reader-text);
+}
+
+/* ── Scrollbar (hidden by default — reading app aesthetic) ─────── */
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+::-webkit-scrollbar-thumb {
+  width: 0;
+  height: 0;
+}
+
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+/* ── Native-like Touch Behavior ────────────────────────────────── */
+html,
+body {
+  -webkit-overflow-scrolling: touch;
+}
+
+button,
+a,
+[role="button"] {
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform var(--transition-fast),
+    opacity var(--transition-fast);
+}
+
+button:active,
+a:active,
+[role="button"]:active {
+  transform: scale(0.97);
+  opacity: 0.85;
+}
+
+input,
+textarea,
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  font: inherit;
+}
+
+* {
+  touch-action: manipulation;
+}
+
+/* Prevent image dragging (native app feel) */
+img {
+  -webkit-user-drag: none;
+  user-drag: none;
+}
+
+/* ── Page Transitions ──────────────────────────────────────────── */
+.page-enter-active,
+.page-leave-active {
+  transition: all var(--transition-page);
+}
+
+.page-enter-active {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+}
+
+.page-leave-active {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+}
+
+.page-enter-from {
+  opacity: 0;
+  transform: translateX(-24px);
+}
+
+.page-leave-to {
+  opacity: 0;
+  transform: translateX(80px);
+}
+
+/* ── Reader Shell ──────────────────────────────────────────────── */
+.reader-loading {
+  height: 100%;
+  background: var(--reader-bg);
+}
+
+.app.transitioning {
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Keyframe Animations
+   ═══════════════════════════════════════════════════════════════════ */
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes scaleOut {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes floatSymbol {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Utility Classes
+   ═══════════════════════════════════════════════════════════════════ */
+
+.animate-fade-in {
+  animation: fadeIn var(--transition-base) ease-out;
+}
+.animate-fade-in-up {
+  animation: fadeInUp var(--transition-slow) ease-out;
+}
+.animate-fade-in-down {
+  animation: fadeInDown var(--transition-base) ease-out;
+}
+.animate-scale-in {
+  animation: scaleIn var(--transition-spring) ease-out;
+}
+
+/* ── Skeleton loader ───────────────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-secondary) 0%,
+    var(--bg-tertiary) 50%,
+    var(--bg-secondary) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: var(--radius-md);
+}
+
+/* ── Transitions (Vue <Transition> compatible) ─────────────────── */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity var(--transition-base);
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Shared Component Patterns
+   These are NOT components — they're reusable CSS patterns that
+   components can compose via class. Keeps styling DRY and consistent.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Button: Primary (filled accent) ───────────────────────────── */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background: var(--accent);
+  color: var(--accent-text);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-weight: var(--weight-medium);
+  font-size: var(--text-sm);
+  font-family: var(--font-ui);
+  line-height: 1;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+.btn-primary:hover {
+  filter: brightness(1.12);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px var(--accent-soft);
+}
+.btn-primary:active {
+  transform: scale(0.97) translateY(0);
+}
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ── Button: Secondary (outlined) ──────────────────────────────── */
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--reader-text);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-family: var(--font-ui);
+  font-weight: var(--weight-medium);
+  transition: all var(--transition-fast);
+}
+.btn-secondary:hover {
+  border-color: var(--accent);
+  background: var(--hover-bg);
+}
+.btn-secondary:active {
+  transform: scale(0.97);
+}
+.btn-secondary:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ── Button: Icon (square ghost button) ────────────────────────── */
+.btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.btn-icon:hover {
+  background: var(--hover-bg);
+  border-color: var(--border);
+  color: var(--reader-text);
+}
+.btn-icon:active {
+  transform: scale(0.94);
+}
+.btn-icon.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ── Button: Danger ────────────────────────────────────────────── */
+.btn-danger {
+  background: var(--color-danger);
+  color: #fff;
+  border: none;
+}
+.btn-danger:hover {
+  background: var(--color-danger-hover);
+}
+
+/* ── Input ─────────────────────────────────────────────────────── */
+.input {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  color: var(--reader-text);
+  font-size: var(--text-md);
+  font-family: var(--font-ui);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+.input::placeholder {
+  color: var(--text-secondary);
+}
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* ── Chip / Pill ───────────────────────────────────────────────── */
+.chip {
+  flex-shrink: 0;
+  padding: 5px var(--space-3);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  font-family: var(--font-ui);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+.chip:hover {
+  border-color: var(--accent);
+  color: var(--reader-text);
+}
+.chip.active {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+
+/* ── Card (hover-elevate pattern) ──────────────────────────────── */
+.card {
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  transition:
+    transform var(--transition-base),
+    box-shadow var(--transition-base),
+    border-color var(--transition-base);
+}
+.card:hover {
+  border-color: var(--border);
+  box-shadow: var(--shadow-md);
+}
+
+/* ── Empty State ───────────────────────────────────────────────── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-16) var(--space-5);
+  text-align: center;
+  color: var(--text-secondary);
+  gap: var(--space-2);
+  animation: fadeInUp 0.7s ease-out;
+}
+.empty-state svg {
+  opacity: 0.4;
+  margin-bottom: var(--space-3);
+}
+.empty-state p {
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  margin: 0;
+  color: var(--reader-text);
+}
+.empty-state span {
+  font-size: var(--text-sm);
+  opacity: 0.7;
+}
+
+/* ── Popover / Dropdown Menu ───────────────────────────────────── */
+.popover {
+  position: fixed;
+  min-width: 180px;
+  padding: var(--space-1);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: var(--z-modal);
+}
+.popover-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--reader-text);
+  font-size: var(--text-sm);
+  font-family: var(--font-ui);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  text-align: left;
+}
+.popover-item:hover {
+  background: var(--bg-secondary);
+}
+.popover-item svg:first-child {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+.popover-divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: var(--space-1) var(--space-2);
+}
+.popover-label {
+  padding: var(--space-1) var(--space-3) 2px;
+  font-size: 10px;
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-family: var(--font-ui);
+}
+
+/* ── Modal: Bottom Sheet ───────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: var(--z-chrome);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: fadeIn 300ms ease;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  touch-action: none;
+}
+.modal-sheet {
+  background: var(--modal-bg);
+  color: var(--modal-text);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  width: 100%;
+  max-width: 560px;
+  height: 85%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: slideUp var(--transition-modal);
+  box-shadow: 0 -12px 48px rgba(0, 0, 0, 0.25);
+  border-top: 1px solid var(--border-subtle);
+  margin: 0 auto;
+  touch-action: pan-y;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+.modal-sheet.closing {
+  animation: slideDown 300ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+
+/* ── Modal Content Layout ──────────────────────────────────────── */
+.modal-content-inner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  min-height: 0;
+}
+.modal-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  overscroll-behavior-y: contain;
+}
+.modal-body.scroll-body {
+  scrollbar-width: thin;
+}
+
+/* ── Modal Header ──────────────────────────────────────────────── */
+.modal-header {
+  flex-shrink: 0;
+  background: var(--modal-bg);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.modal-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-4) var(--space-5);
+}
+.modal-header h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-medium);
+  color: var(--modal-text);
+}
+
+/* ── Toast ─────────────────────────────────────────────────────── */
+.toast-base {
+  position: fixed;
+  top: max(16px, env(safe-area-inset-top, 16px));
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: rgba(31, 26, 23, 0.92);
+  color: #f7f5f2;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.18),
+    0 2px 8px rgba(0, 0, 0, 0.1);
+  font-family: var(--font-ui);
+  z-index: var(--z-toast);
+  backdrop-filter: blur(16px) saturate(180%);
+  max-width: min(360px, calc(100vw - 32px));
+  pointer-events: none;
+}
+.toast-base.toast-error {
+  background: rgba(180, 30, 30, 0.9);
+  box-shadow: 0 8px 32px rgba(180, 30, 30, 0.2);
+}
+
+/* ── Confirm Dialog ────────────────────────────────────────────── */
+.confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal);
+  animation: fadeIn 0.25s ease-out;
+  backdrop-filter: blur(6px);
+}
+.confirm-dialog {
+  background: var(--reader-bg);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  max-width: 340px;
+  width: 90%;
+  animation: scaleIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-xl);
+}
+.confirm-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: var(--weight-medium);
+  margin: 0 0 var(--space-2);
+  color: var(--reader-text);
+}
+.confirm-message {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  margin: 0 0 var(--space-5);
+  line-height: var(--leading-base);
+}
+.confirm-actions {
+  display: flex;
+  gap: var(--space-3);
+}
+
+/* ── Badge ─────────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 7px;
+  background: var(--accent);
+  color: var(--accent-text);
+  border-radius: var(--radius-full);
+  font-size: 10px;
+  font-weight: var(--weight-semibold);
+  font-family: var(--font-ui);
+  line-height: 1;
+}

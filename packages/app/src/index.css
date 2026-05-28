@@ -1,26 +1,9 @@
-:root {
-  --reader-bg: #f5f5f4;
-  --reader-text: #1c1917;
-  --text-secondary: #78716c;
-  --header-bg: rgba(245, 245, 244, 0.9);
-  --border: #d6d3d1;
-  --border-subtle: rgba(28, 25, 23, 0.08);
-  --hover-bg: #e7e5e4;
-  --accent: #57534e;
-  --accent-soft: rgba(87, 83, 78, 0.08);
-  --accent-muted: rgba(87, 83, 78, 0.15);
-  --accent-hover: #44403c;
-  --modal-bg: #f5f5f4;
-  --modal-text: #1c1917;
-  --progress-track: #d6d3d1;
-  --bg-elevated: #fafaf9;
-  --bg-secondary: #e7e5e4;
-  --bg-tertiary: #dcd9d4;
-}
+/* ═══════════════════════════════════════════════════════════════════
+   Responsive Media Element Styles
+   Design tokens and base element styles live in styles/tokens.css
+   ═══════════════════════════════════════════════════════════════════ */
 
-/* ===== Responsive media element styles ===== */
-
-/* Images - responsive with aspect ratio preservation */
+/* ── Images ────────────────────────────────────────────────────── */
 img {
   max-width: 100%;
   height: auto;
@@ -28,29 +11,27 @@ img {
   object-fit: contain;
 }
 
-/* SVG elements - responsive with aspect ratio preservation */
+/* ── SVG ───────────────────────────────────────────────────────── */
 svg {
   max-width: 100%;
   height: auto;
   display: block;
 }
 
-/* SVG internal image elements */
 svg image {
   max-width: 100%;
   height: auto;
-  display: inline; /* SVG image elements should stay inline */
+  display: inline;
   margin: 0;
 }
 
-/* Figure container - center and limit width */
+/* ── Figure / Caption ──────────────────────────────────────────── */
 figure {
   max-width: 100%;
   margin: 1em auto;
   text-align: center;
 }
 
-/* Figure caption styling */
 figcaption {
   font-size: 0.9em;
   color: var(--text-secondary);
@@ -58,64 +39,14 @@ figcaption {
   text-align: center;
 }
 
-/* Video elements - responsive */
+/* ── Video / Audio ─────────────────────────────────────────────── */
 video {
   max-width: 100%;
   height: auto;
   display: block;
 }
 
-/* Audio elements - responsive */
 audio {
   max-width: 100%;
   display: block;
-}
-
-/* ===== Native-like experience ===== */
-
-/* 禁止拖拽图片 */
-img {
-  -webkit-user-drag: none;
-  user-drag: none;
-}
-
-/* 触摸反馈 - 原生感 */
-button,
-a,
-[role="button"] {
-  -webkit-tap-highlight-color: transparent;
-  transition:
-    transform var(--transition-fast),
-    opacity var(--transition-fast);
-}
-
-button:active,
-a:active,
-[role="button"]:active {
-  transform: scale(0.97);
-  opacity: 0.85;
-}
-
-/* 平滑滚动 - iOS 风格 */
-* {
-  -webkit-overflow-scrolling: touch;
-}
-
-/* 禁止弹性滚动边界效果（可选） */
-/* html, body {
-  overscroll-behavior: none;
-} */
-
-/* 表单元素原生样式优化 */
-input,
-textarea,
-select {
-  -webkit-appearance: none;
-  appearance: none;
-  font: inherit;
-}
-
-/* 禁止双击缩放 */
-* {
-  touch-action: manipulation;
 }

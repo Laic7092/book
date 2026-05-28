@@ -20,6 +20,7 @@ export interface ChromeTheme {
   borderSubtle: string;
   hoverBg: string;
   accent: string;
+  accentText: string;
   accentSoft: string;
   accentMuted: string;
   accentHover: string;
@@ -92,6 +93,7 @@ const BUILTIN_THEMES: ThemeDefinition[] = [
       borderSubtle: "rgba(90, 82, 72, 0.08)",
       hoverBg: "#f5f3ef",
       accent: "#8b2e3a",
+      accentText: "#ffffff",
       accentSoft: "rgba(139, 46, 58, 0.08)",
       modalBg: "#fdfcfb",
       modalText: "#1f1a17",
@@ -119,6 +121,7 @@ const BUILTIN_THEMES: ThemeDefinition[] = [
       borderSubtle: "rgba(232, 228, 222, 0.06)",
       hoverBg: "#2a2622",
       accent: "#c45d6a",
+      accentText: "#ffffff",
       accentSoft: "rgba(196, 93, 106, 0.12)",
       modalBg: "#221f1c",
       modalText: "#e8e4de",
@@ -146,6 +149,7 @@ const BUILTIN_THEMES: ThemeDefinition[] = [
       borderSubtle: "rgba(61, 53, 42, 0.08)",
       hoverBg: "#ebe5d5",
       accent: "#8b5a3a",
+      accentText: "#ffffff",
       accentSoft: "rgba(139, 90, 58, 0.1)",
       modalBg: "#f5f0e6",
       modalText: "#3d352a",

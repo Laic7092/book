@@ -143,9 +143,9 @@ function highlightMatch(context: string): string {
   justify-content: center;
   padding: 10px 14px;
   border: none;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
   cursor: pointer;
   transition: background var(--transition-fast);
 }
