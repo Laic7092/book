@@ -32,7 +32,7 @@ function tickPagination(s: ReaderSession) {
   requestAnimationFrame(() => {
     setAutoAdvancing(false);
     const newState = s.getState();
-    if (newState.status === "loading") return;
+    if (newState.status !== "ready") return;
     if (
       newState.page.current === prevPage &&
       newState.currentChapterIndex >= newState.chapters.length - 1

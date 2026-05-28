@@ -64,8 +64,8 @@ export async function saveZipFromFile(bookId: string, file: File, fileSize: numb
       await writable.write(file);
       await writable.close();
       return;
-    } catch {
-      // OPFS write failed, fall through to IDB
+    } catch (err) {
+      console.warn(`[raw-data] OPFS write failed for "${bookId}", falling back to IndexedDB:`, err);
     }
   }
   const data = await file.arrayBuffer();
@@ -83,8 +83,8 @@ export async function saveZip(bookId: string, data: ArrayBuffer, fileSize: numbe
       await writable.write(data);
       await writable.close();
       return;
-    } catch {
-      // OPFS write failed, fall through to IDB
+    } catch (err) {
+      console.warn(`[raw-data] OPFS write failed for "${bookId}", falling back to IndexedDB:`, err);
     }
   }
   await dbPut(STORES.ZIPS, { bookId, data, fileSize } satisfies StoredZip);
@@ -102,7 +102,7 @@ export async function getZip(bookId: string): Promise<ArrayBuffer | undefined> {
       const file = await handle.getFile();
       data = await file.arrayBuffer();
     } catch {
-      // OPFS read failed or file doesn't exist, fall through to IDB
+      // File may not exist in OPFS, fall through to IndexedDB
     }
   }
   if (!data) {

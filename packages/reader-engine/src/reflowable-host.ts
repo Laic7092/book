@@ -9,6 +9,13 @@ import {
   type ResourceInfo,
 } from "./resources";
 
+const INTERACTIVE_SELECTOR =
+  "button, input, textarea, select, details, summary, [contenteditable], [contenteditable=true]";
+
+function isInteractiveElement(el: Element): boolean {
+  return el.closest(INTERACTIVE_SELECTOR) !== null;
+}
+
 export interface ReflowableHostOptions extends EngineOptions {
   container: HTMLElement;
   onClick?: (e: MouseEvent) => void;
@@ -33,6 +40,7 @@ export class ReflowableHost extends Engine {
   private loadedChapterIds = new Set<string>();
   private autoLoading = false;
   private hasScrolled = false;
+  private columnObserver: ResizeObserver | null = null;
 
   constructor(options: ReflowableHostOptions) {
     super(options);
@@ -166,6 +174,7 @@ export class ReflowableHost extends Engine {
     }
     this.teardownScrollHandler();
     this.teardownScrollSentinels();
+    this.teardownColumnObserver();
     clearResources(this.iframeDoc, this.injectedResources);
     for (const [, blobUrl] of this.resourceUrls) {
       URL.revokeObjectURL(blobUrl);
@@ -231,12 +240,8 @@ export class ReflowableHost extends Engine {
 
       const loadingChapterId = chapterId;
       requestAnimationFrame(() => {
-        if (!this.iframeDoc.body) return;
-        const contentWidth = this.iframeDoc.body.scrollWidth;
-        const iframeWidth = this.iframeDoc.documentElement.clientWidth;
-        const step = Math.max(iframeWidth, 1);
-        const total = Math.max(1, Math.ceil(contentWidth / step));
-        this.dispatch({ type: "PAGE_COUNT_UPDATED", chapterId: loadingChapterId, total });
+        this.measureColumns(loadingChapterId);
+        this.setupColumnObserver(loadingChapterId);
       });
       return;
     }
@@ -344,6 +349,32 @@ export class ReflowableHost extends Engine {
     }
   }
 
+  private measureColumns(chapterId: string): void {
+    const doc = this.iframeDoc;
+    if (!doc?.body) return;
+    const contentWidth = doc.body.scrollWidth;
+    const iframeWidth = doc.documentElement.clientWidth;
+    const step = Math.max(iframeWidth, 1);
+    const total = Math.max(1, Math.ceil(contentWidth / step));
+    this.dispatch({ type: "PAGE_COUNT_UPDATED", chapterId, total });
+  }
+
+  private setupColumnObserver(chapterId: string): void {
+    this.teardownColumnObserver();
+    if (this.state.mode !== "pagination") return;
+    this.columnObserver = new ResizeObserver(() => {
+      this.measureColumns(chapterId);
+    });
+    this.columnObserver.observe(this.iframeDoc.body);
+  }
+
+  private teardownColumnObserver(): void {
+    if (this.columnObserver) {
+      this.columnObserver.disconnect();
+      this.columnObserver = null;
+    }
+  }
+
   private createIframe(): void {
     this.iframe = document.createElement("iframe");
     this.iframe.style.cssText = "width:100%;height:100%;border:none";
@@ -367,12 +398,17 @@ export class ReflowableHost extends Engine {
 
   private setupClickHandler(onClick: ((e: MouseEvent) => void) | undefined): void {
     this.clickHandlerRef = (e: MouseEvent) => {
-      const link = (e.target as Element)?.closest?.("a[href]");
+      const target = e.target as Element | null;
+      if (!target) return;
+
+      const link = target.closest("a[href]");
       if (link) {
         e.preventDefault();
         this.handleInternalLink(link.getAttribute("href")!);
         return;
       }
+
+      if (isInteractiveElement(target)) return;
       onClick?.(e);
     };
     this.iframeDoc.addEventListener("click", this.clickHandlerRef);

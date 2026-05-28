@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, defineAsyncComponent } from "vue";
+import { ref, computed, onUnmounted, defineAsyncComponent } from "vue";
 import { useUIStore } from "../stores/ui";
 import { useReaderMachine } from "../composables/useReaderMachine";
 import ReaderChrome from "./reader/ReaderChrome.vue";
@@ -40,50 +40,8 @@ function closeModal() {
   uiStore.closeModal();
 }
 
-let resizeObserver: ResizeObserver | null = null;
-let mutationObserver: MutationObserver | null = null;
-let columnMeasureTimer: ReturnType<typeof setTimeout> | null = null;
-
-function measureColumns() {
-  if (!engine.isPaginationMode.value) return;
-  if (columnMeasureTimer) clearTimeout(columnMeasureTimer);
-  columnMeasureTimer = setTimeout(() => {
-    const doc = engine.getDocument?.();
-    if (!doc?.body) return;
-    requestAnimationFrame(() => {
-      const contentWidth = doc.body.scrollWidth || 0;
-      const iframeWidth = doc.documentElement.clientWidth || 0;
-      if (iframeWidth > 0) {
-        engine.handleColumnLayout({ contentWidth, iframeWidth });
-      }
-    });
-  }, 150);
-}
-
-function setupObservers() {
-  const doc = engine.getDocument?.();
-  if (!doc?.body) return;
-
-  resizeObserver = new ResizeObserver(() => {
-    if (engine.isPaginationMode.value) measureColumns();
-  });
-  resizeObserver.observe(doc.body);
-
-  mutationObserver = new MutationObserver(() => {
-    if (engine.isPaginationMode.value) measureColumns();
-  });
-  mutationObserver.observe(doc.body, { childList: true });
-}
-
-onMounted(() => {
-  setupObservers();
-});
-
 onUnmounted(() => {
   uiStore.setControls(false);
-  resizeObserver?.disconnect();
-  mutationObserver?.disconnect();
-  if (columnMeasureTimer) clearTimeout(columnMeasureTimer);
 });
 
 const overlayVisible = computed(() => engine.isReady.value);

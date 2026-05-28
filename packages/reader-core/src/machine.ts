@@ -20,10 +20,11 @@ export interface ReaderState {
   chapters: Chapter[];
   currentChapterIndex: number;
   mode: "pagination" | "scroll";
-  status: "idle" | "loading" | "ready";
+  status: "idle" | "loading" | "ready" | "error";
 
   page: PageState;
   scrollProgress: number;
+  lastError: string | null;
 }
 
 export type ReaderAction =
@@ -66,6 +67,7 @@ export function createInitialState(): ReaderState {
     status: "idle",
     page: { current: 0, total: 0, pendingTarget: null },
     scrollProgress: 0,
+    lastError: null,
   };
 }
 
@@ -104,6 +106,7 @@ function initReducer(
     status: "loading",
     page: { current: 0, total: 0, pendingTarget: null, ...action.initialPage },
     scrollProgress: action.initialScroll?.progress ?? 0,
+    lastError: null,
   };
 
   return {
@@ -155,9 +158,12 @@ function chapterLoadedReducer(
 
 function chapterFailedReducer(
   state: ReaderState,
-  _action: Extract<ReaderAction, { type: "CHAPTER_FAILED" }>,
+  action: Extract<ReaderAction, { type: "CHAPTER_FAILED" }>,
 ): { state: ReaderState; effects: ReaderEffect[] } {
-  return { state: { ...state, status: "ready" }, effects: [] };
+  return {
+    state: { ...state, status: "error", lastError: action.error },
+    effects: [],
+  };
 }
 
 function pageCountUpdatedReducer(
@@ -203,6 +209,7 @@ function nextPageReducer(state: ReaderState): { state: ReaderState; effects: Rea
   const { current, total } = state.page;
 
   if (current < total - 1) {
+    if (state.status !== "ready") return { state, effects: [] };
     const newPage = current + 1;
     const next: ReaderState = { ...state, page: { ...state.page, current: newPage } };
     const effects: ReaderEffect[] = [{ type: "PAGE_POSITION_CHANGED", page: newPage }];
@@ -222,6 +229,7 @@ function nextPageReducer(state: ReaderState): { state: ReaderState; effects: Rea
     status: "loading",
     currentChapterIndex: nextIdx,
     page: { ...state.page, current: 0, total: 0, pendingTarget: null },
+    lastError: null,
   };
   return {
     state: next,
@@ -233,6 +241,7 @@ function prevPageReducer(state: ReaderState): { state: ReaderState; effects: Rea
   if (state.mode !== "pagination" || state.status === "loading") return { state, effects: [] };
 
   if (state.page.current > 0) {
+    if (state.status !== "ready") return { state, effects: [] };
     const newPage = state.page.current - 1;
     const next: ReaderState = { ...state, page: { ...state.page, current: newPage } };
     const effects: ReaderEffect[] = [{ type: "PAGE_POSITION_CHANGED", page: newPage }];
@@ -257,6 +266,7 @@ function prevPageReducer(state: ReaderState): { state: ReaderState; effects: Rea
     status: "loading",
     currentChapterIndex: prevIdx,
     page: { ...state.page, current: 0, total: 0, pendingTarget: PENDING_TARGET_LAST_PAGE },
+    lastError: null,
   };
   return {
     state: next,
@@ -277,6 +287,7 @@ function goToChapterReducer(
     currentChapterIndex: idx,
     page: { ...state.page, current: 0, total: 0, pendingTarget: action.targetPage ?? null },
     scrollProgress: 0,
+    lastError: null,
   };
 
   return {
@@ -289,7 +300,7 @@ function goToPageReducer(
   state: ReaderState,
   action: Extract<ReaderAction, { type: "GO_TO_PAGE" }>,
 ): { state: ReaderState; effects: ReaderEffect[] } {
-  if (state.mode !== "pagination") return { state, effects: [] };
+  if (state.mode !== "pagination" || state.status !== "ready") return { state, effects: [] };
   const page = clampPage(action.page, state.page.total);
 
   const next: ReaderState = { ...state, page: { ...state.page, current: page } };
@@ -314,6 +325,7 @@ function setModeReducer(
     page: { current: 0, total: 0, pendingTarget: null },
     scrollProgress: 0,
     status: "loading",
+    lastError: null,
   };
 
   const effects: ReaderEffect[] = [
@@ -329,7 +341,7 @@ function scrollProgressReducer(
   state: ReaderState,
   action: Extract<ReaderAction, { type: "SCROLL_PROGRESS" }>,
 ): { state: ReaderState; effects: ReaderEffect[] } {
-  if (state.status === "loading") return { state, effects: [] };
+  if (state.status !== "ready") return { state, effects: [] };
   return {
     state: { ...state, scrollProgress: action.bookProgress },
     effects: [],
