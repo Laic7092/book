@@ -106,10 +106,13 @@ export function useReaderMachine(
   const currentPage = computed(() => state.value.page.current);
   const totalPages = computed(() => state.value.page.total);
   const isTransitioning = computed(() => state.value.status === "loading");
+  const hasError = computed(() => state.value.status === "error");
+  const errorMessage = computed(() => (hasError.value ? state.value.lastError : null));
 
   const chapterLoading = computed(() => {
     if (isRestoring.value) return true;
     if (isTransitioning.value) return true;
+    if (hasError.value) return false;
     return false;
   });
 
@@ -152,6 +155,10 @@ export function useReaderMachine(
       });
     }
     isHistoryNav.value = false;
+  }
+
+  function retry() {
+    host?.retry();
   }
 
   function handleHistoryForward() {
@@ -338,6 +345,9 @@ export function useReaderMachine(
     headerActions,
     canGoBack,
     canGoForward,
+    hasError,
+    errorMessage,
+    retry,
     handleSelectChapter,
     nextPage,
     prevPage,

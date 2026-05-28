@@ -19,6 +19,7 @@ export {
   getFormatForExtension,
 } from "./registry";
 export { generateId, getFileMetadata, readAsText, readAsArrayBuffer, parseXML } from "./base";
+export { getParseWorker, ParseWorkerClient } from "./parse-worker/client";
 
 // ── Built-in parsers (registered eagerly at import time) ──
 

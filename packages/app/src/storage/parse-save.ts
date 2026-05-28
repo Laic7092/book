@@ -1,4 +1,4 @@
-import { getParserForFileAuto } from "@book/parser-core";
+import { getParserForFileAuto, getParseWorker } from "@book/parser-core";
 import { mapParserResult } from "../core/types";
 import { assertValidBookFile } from "../utils/validation";
 import { getMimeTypeFromExtension } from "../utils/constants";
@@ -26,7 +26,8 @@ export async function parseAndSaveBook(
     return parseAndSaveBookStreaming(file, parser, contentHash);
   }
 
-  const result = await parser.parse(file);
+  // Try worker first; DOMParser-dependent formats fall back to main thread
+  const result = await getParseWorker().parse(file, parser);
   const parsedBook = mapParserResult(result, parser.format, file.size, contentHash);
   await booksStore.saveBook(parsedBook, parser);
 

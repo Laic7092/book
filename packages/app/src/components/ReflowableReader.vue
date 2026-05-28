@@ -3,6 +3,7 @@ import { ref, computed, onUnmounted, defineAsyncComponent } from "vue";
 import { useUIStore } from "../stores/ui";
 import { useReaderMachine } from "../composables/useReaderMachine";
 import ReaderChrome from "./reader/ReaderChrome.vue";
+import ReaderErrorOverlay from "./reader/ReaderErrorOverlay.vue";
 
 const ModalWrapper = defineAsyncComponent(() => import("./modals/ModalWrapper.vue"));
 import type { Book } from "../core/types";
@@ -60,6 +61,13 @@ defineExpose({ getDocument: () => engine.getDocument?.() ?? null });
       v-for="(comp, name) in engine.overlayComponents.value"
       :key="name"
       :is="comp"
+    />
+
+    <ReaderErrorOverlay
+      v-if="engine.hasError.value"
+      :message="engine.errorMessage.value"
+      @retry="engine.retry"
+      @close="handleClose"
     />
 
     <ReaderChrome
