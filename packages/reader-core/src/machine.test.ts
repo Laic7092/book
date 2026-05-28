@@ -513,32 +513,37 @@ describe("GO_TO_PAGE", () => {
 // ── SET_MODE ──
 
 describe("SET_MODE", () => {
-  test("switches from pagination to scroll", () => {
+  test("switches from pagination to scroll without refetching", () => {
     const state = readyState();
     const result = dispatch(state, { type: "SET_MODE", mode: "scroll" });
 
     expect(result.state.mode).toBe("scroll");
-    expect(result.state.status).toBe("loading");
-    expect(result.state.lastError).toBeNull();
+    expect(result.state.status).toBe("ready"); // stays ready — no refetch needed
     expect(result.effects).toContainEqual({ type: "MODE_CHANGED", mode: "scroll" });
-    expect(result.effects).toContainEqual({
-      type: "FETCH_CHAPTER",
-      bookId: "book1",
-      chapterId: "ch1",
-    });
+    expect(result.effects).not.toContainEqual(expect.objectContaining({ type: "FETCH_CHAPTER" }));
   });
 
-  test("switches from scroll to pagination", () => {
+  test("switches from scroll to pagination without refetching", () => {
     const state = readyState({ mode: "scroll" });
     const result = dispatch(state, { type: "SET_MODE", mode: "pagination" });
 
     expect(result.state.mode).toBe("pagination");
+    expect(result.state.status).toBe("ready");
     expect(result.effects).toContainEqual({ type: "MODE_CHANGED", mode: "paginated" });
+    expect(result.effects).not.toContainEqual(expect.objectContaining({ type: "FETCH_CHAPTER" }));
   });
 
   test("no-ops when already in target mode", () => {
     const state = readyState();
     const result = dispatch(state, { type: "SET_MODE", mode: "pagination" });
+
+    expect(result.state).toBe(state);
+    expect(result.effects).toEqual([]);
+  });
+
+  test("no-ops when not ready (error)", () => {
+    const state = readyState({ status: "error", lastError: "fail" });
+    const result = dispatch(state, { type: "SET_MODE", mode: "scroll" });
 
     expect(result.state).toBe(state);
     expect(result.effects).toEqual([]);
@@ -743,13 +748,25 @@ describe("full lifecycle", () => {
     expect(result.state.currentChapterIndex).toBe(1);
   });
 
-  test("error recovery: FAILED → SET_MODE", () => {
+  test("error recovery: FAILED → RETRY", () => {
     const state = readyState({ status: "error", lastError: "Boom" });
 
-    const result = dispatch(state, { type: "SET_MODE", mode: "scroll" });
+    const result = dispatch(state, { type: "RETRY" });
     expect(result.state.status).toBe("loading");
     expect(result.state.lastError).toBeNull();
-    expect(result.state.mode).toBe("scroll");
+    expect(result.effects).toContainEqual({
+      type: "FETCH_CHAPTER",
+      bookId: "book1",
+      chapterId: "ch1",
+    });
+  });
+
+  test("RETRY no-ops when not in error", () => {
+    const state = readyState();
+    const result = dispatch(state, { type: "RETRY" });
+
+    expect(result.state).toBe(state);
+    expect(result.effects).toEqual([]);
   });
 
   test("prevPage across chapter resolves to last page via PENDING_TARGET_LAST_PAGE", () => {

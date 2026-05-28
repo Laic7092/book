@@ -20,7 +20,7 @@ import type { Chapter } from "../core/types";
 
 export type { ReaderState, ReaderAction, ReaderEffect };
 
-function translateEffect(effect: ReaderEffect, bookId: string): void {
+export function translateEffect(effect: ReaderEffect, bookId: string): void {
   switch (effect.type) {
     case "CHAPTER_DID_CHANGE":
       void pluginEvents.emit("chapter:changed", {

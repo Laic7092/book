@@ -41,6 +41,8 @@ export class ReflowableHost extends Engine {
   private autoLoading = false;
   private hasScrolled = false;
   private columnObserver: ResizeObserver | null = null;
+  private lastChapterHtml = "";
+  private lastChapterId = "";
 
   constructor(options: ReflowableHostOptions) {
     super(options);
@@ -74,6 +76,10 @@ export class ReflowableHost extends Engine {
 
   prevPage(): void {
     this.dispatch({ type: "PREV_PAGE" });
+  }
+
+  retry(): void {
+    this.dispatch({ type: "RETRY" });
   }
 
   goToChapter(chapterId: string): void {
@@ -190,6 +196,9 @@ export class ReflowableHost extends Engine {
         break;
       case "MODE_CHANGED":
         this.iframeDoc.documentElement.dataset.mode = effect.mode;
+        if (this.lastChapterHtml) {
+          this.restructureForMode(effect.mode, this.lastChapterId);
+        }
         if (effect.mode === "scroll") {
           this.setupScrollHandler();
         } else {
@@ -254,6 +263,8 @@ export class ReflowableHost extends Engine {
     }
 
     const processed = await this.processChapterContent(html, rawData, bookId, chapterId);
+    this.lastChapterHtml = processed;
+    this.lastChapterId = chapterId;
 
     if (this.state.mode === "pagination") {
       this.iframeDoc.body.innerHTML = processed;
@@ -393,6 +404,38 @@ export class ReflowableHost extends Engine {
     if (this.columnObserver) {
       this.columnObserver.disconnect();
       this.columnObserver = null;
+    }
+  }
+
+  private restructureForMode(mode: "paginated" | "scroll", chapterId: string): void {
+    if (mode === "scroll") {
+      this.loadedChapterIds.clear();
+      this.loadedChapterIds.add(chapterId);
+      this.hasScrolled = false;
+      this.iframeDoc.body.innerHTML = `<div class="scroll-chapter" data-chapter-id="${chapterId}">${this.lastChapterHtml}</div>`;
+      this.iframeDoc.documentElement.scrollTop = 0;
+      if (this.state.status === "ready") {
+        requestAnimationFrame(() => {
+          this.restoreScrollPosition();
+          this.syncScrollPosition();
+          this.setupScrollSentinels();
+        });
+      }
+    } else {
+      this.teardownScrollSentinels();
+      this.iframeDoc.body.innerHTML = this.lastChapterHtml;
+      if (this.state.status === "ready") {
+        requestAnimationFrame(() => {
+          this.measureColumns(chapterId);
+          this.setupColumnObserver(chapterId);
+        });
+      } else {
+        this.dispatch({ type: "CHAPTER_LOADED", chapterId });
+        requestAnimationFrame(() => {
+          this.measureColumns(chapterId);
+          this.setupColumnObserver(chapterId);
+        });
+      }
     }
   }
 

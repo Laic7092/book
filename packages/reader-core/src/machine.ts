@@ -47,6 +47,7 @@ export type ReaderAction =
   | { type: "SET_MODE"; mode: "pagination" | "scroll" }
   | { type: "SCROLL_PROGRESS"; bookProgress: number }
   | { type: "SET_CURRENT_CHAPTER"; chapterId: string }
+  | { type: "RETRY" }
   | { type: "TEARDOWN" };
 
 export type ReaderEffect =
@@ -317,24 +318,21 @@ function setModeReducer(
   action: Extract<ReaderAction, { type: "SET_MODE" }>,
 ): { state: ReaderState; effects: ReaderEffect[] } {
   if (state.mode === action.mode) return { state, effects: [] };
+  if (state.status !== "ready") return { state, effects: [] };
 
-  const chapterId = getChapterId(state);
   const next: ReaderState = {
     ...state,
     mode: action.mode,
     page: { current: 0, total: 0, pendingTarget: null },
     scrollProgress: 0,
-    status: "loading",
-    lastError: null,
   };
 
-  const effects: ReaderEffect[] = [
-    { type: "MODE_CHANGED", mode: action.mode === "pagination" ? "paginated" : "scroll" },
-  ];
-  if (chapterId) {
-    effects.push({ type: "FETCH_CHAPTER", bookId: state.bookId, chapterId });
-  }
-  return { state: next, effects };
+  return {
+    state: next,
+    effects: [
+      { type: "MODE_CHANGED", mode: action.mode === "pagination" ? "paginated" : "scroll" },
+    ],
+  };
 }
 
 function scrollProgressReducer(
@@ -363,6 +361,25 @@ function setCurrentChapterReducer(
     effects: [
       { type: "CHAPTER_DID_CHANGE", chapterId: action.chapterId, previousChapterId: prevChapterId },
     ],
+  };
+}
+
+function retryReducer(state: ReaderState): { state: ReaderState; effects: ReaderEffect[] } {
+  if (state.status !== "error") return { state, effects: [] };
+
+  const chapterId = getChapterId(state);
+  if (!chapterId) return { state, effects: [] };
+
+  const next: ReaderState = {
+    ...state,
+    status: "loading",
+    page: { ...state.page, current: 0, total: 0, pendingTarget: null },
+    lastError: null,
+  };
+
+  return {
+    state: next,
+    effects: [{ type: "FETCH_CHAPTER", bookId: state.bookId, chapterId }],
   };
 }
 
@@ -399,6 +416,8 @@ export function reducer(state: ReaderState, action: ReaderAction) {
       return scrollProgressReducer(state, action);
     case "SET_CURRENT_CHAPTER":
       return setCurrentChapterReducer(state, action);
+    case "RETRY":
+      return retryReducer(state);
     case "TEARDOWN":
       return teardownReducer(state);
   }

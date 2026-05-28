@@ -15,6 +15,7 @@ import { pluginEvents, pluginHooks } from "../plugins/context";
 import type { InitConfig } from "../plugins/types";
 import { PdfRenderer } from "@book/parser-core/pdf-renderer";
 import type { PdfOutlineItem } from "@book/parser-core";
+import { translateEffect } from "../composables/useReaderMachine";
 
 const props = defineProps<{ book: Book }>();
 
@@ -251,36 +252,9 @@ onMounted(async () => {
       void loadOutline();
     },
     onEffect: async (effect) => {
-      switch (effect.type) {
-        case "CHAPTER_DID_CHANGE":
-          void pluginEvents.emit("chapter:changed", {
-            bookId: props.book.id,
-            chapterId: effect.chapterId,
-            previousChapterId: effect.previousChapterId ?? undefined,
-          });
-          break;
-        case "PAGE_DID_CHANGE":
-          void pluginEvents.emit("page:changed", {
-            bookId: props.book.id,
-            chapterId: effect.chapterId,
-            page: effect.page,
-            totalPages: effect.totalPages,
-          });
-          break;
-        case "CONTENT_DID_LOAD":
-          void pluginEvents.emit("content:loaded", {
-            bookId: props.book.id,
-            chapterId: effect.chapterId,
-          });
-          if (outlineItems.value.length === 0) {
-            void loadOutline();
-          }
-          break;
-        case "READER_UNMOUNTED":
-          void pluginEvents.emit("reader:unmounted", {
-            bookId: effect.bookId,
-          });
-          break;
+      translateEffect(effect, props.book.id);
+      if (effect.type === "CONTENT_DID_LOAD" && outlineItems.value.length === 0) {
+        void loadOutline();
       }
     },
   });
