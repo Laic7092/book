@@ -29,6 +29,8 @@ export const PAGINATION_CSS = `
     height: calc(100dvh - 2 * var(--page-margin, 24px));
     overflow: visible;
     transform: translateX(calc(-1 * var(--current-page, 0) * 100dvw));
+    content-visibility: auto;
+    contain-intrinsic-size: auto 100dvh;
   }
   html[data-mode="paginated"] body.reader-content pre,
   html[data-mode="paginated"] body.reader-content table,

@@ -21,6 +21,7 @@ export interface EngineOptions {
   fetchChapter?: (
     bookId: string,
     chapterId: string,
+    signal?: AbortSignal,
   ) => Promise<{ html: string | undefined; rawData?: ArrayBuffer }>;
 }
 
@@ -31,6 +32,7 @@ export abstract class Engine {
   private onReady: (() => void) | undefined;
   protected onEffect: ((effect: ReaderEffect) => void | Promise<void>) | undefined;
   protected fetchChapter: EngineOptions["fetchChapter"];
+  private fetchAbortController: AbortController | null = null;
 
   constructor(options: EngineOptions) {
     this.onReady = options.onReady;
@@ -42,6 +44,13 @@ export abstract class Engine {
       this.afterState(s);
       options.onStateChange?.(s);
     });
+  }
+
+  /** Returns a fresh AbortSignal, aborting any previous in-flight fetch. */
+  protected nextFetchSignal(): AbortSignal {
+    this.fetchAbortController?.abort();
+    this.fetchAbortController = new AbortController();
+    return this.fetchAbortController.signal;
   }
 
   init(
@@ -89,6 +98,7 @@ export abstract class Engine {
   }
 
   destroy(): void {
+    this.fetchAbortController?.abort();
     this.dispatch({ type: "TEARDOWN" });
     this.unsub();
   }
@@ -116,7 +126,16 @@ export abstract class Engine {
   }
 
   protected async fetchAndLoadChapter(bookId: string, chapterId: string): Promise<void> {
-    const result = await this.fetchChapter!(bookId, chapterId);
+    const signal = this.nextFetchSignal();
+    let result: { html: string | undefined; rawData?: ArrayBuffer } | undefined;
+    try {
+      result = await this.fetchChapter!(bookId, chapterId, signal);
+    } catch {
+      if (signal.aborted) return;
+      this.dispatch({ type: "CHAPTER_FAILED", chapterId, error: "Fetch failed" });
+      return;
+    }
+    if (signal.aborted) return;
     if (!result?.html) {
       this.dispatch({ type: "CHAPTER_FAILED", chapterId, error: "Content not found" });
       return;

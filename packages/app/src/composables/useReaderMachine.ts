@@ -240,7 +240,7 @@ export function useReaderMachine(
         }
       },
       navigateToCfi: (cfi, chapterId) => navigateToCfiLocation(cfi, chapterId),
-      fetchChapter: async (bookId, chapterId) => {
+      fetchChapter: async (bookId, chapterId, _signal) => {
         const html = await booksStore.getChapterContent(bookId, chapterId);
         const { getZip } = await import("../storage/raw-data");
         const rawData = await getZip(bookId);

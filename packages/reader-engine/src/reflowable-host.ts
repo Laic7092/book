@@ -205,20 +205,12 @@ export class ReflowableHost extends Engine {
     await this.loadChapter(bookId, chapterId);
   }
 
-  private async loadChapter(bookId: string, chapterId: string): Promise<void> {
-    this.teardownScrollSentinels();
-    clearResources(this.iframeDoc, this.injectedResources);
-    for (const [, blobUrl] of this.resourceUrls) {
-      URL.revokeObjectURL(blobUrl);
-    }
-    this.resourceUrls.clear();
-
-    const { html, rawData } = await this.fetchChapter!(bookId, chapterId);
-    if (!html) {
-      this.dispatch({ type: "CHAPTER_FAILED", chapterId, error: "Content not found" });
-      return;
-    }
-
+  private async processChapterContent(
+    html: string,
+    rawData: ArrayBuffer | undefined,
+    bookId: string,
+    chapterId: string,
+  ): Promise<string> {
     let processed = html;
 
     const parser = getParserForFormat(this.bookFormat);
@@ -233,6 +225,35 @@ export class ReflowableHost extends Engine {
     if (this.transformContent) {
       processed = await this.transformContent(processed, bookId, chapterId);
     }
+
+    return processed;
+  }
+
+  private async loadChapter(bookId: string, chapterId: string): Promise<void> {
+    this.teardownScrollSentinels();
+    clearResources(this.iframeDoc, this.injectedResources);
+    for (const [, blobUrl] of this.resourceUrls) {
+      URL.revokeObjectURL(blobUrl);
+    }
+    this.resourceUrls.clear();
+
+    const signal = this.nextFetchSignal();
+    let result: { html: string | undefined; rawData?: ArrayBuffer } | undefined;
+    try {
+      result = await this.fetchChapter!(bookId, chapterId, signal);
+    } catch {
+      if (signal.aborted) return;
+      this.dispatch({ type: "CHAPTER_FAILED", chapterId, error: "Fetch failed" });
+      return;
+    }
+    if (signal.aborted) return;
+    const { html, rawData } = result;
+    if (!html) {
+      this.dispatch({ type: "CHAPTER_FAILED", chapterId, error: "Content not found" });
+      return;
+    }
+
+    const processed = await this.processChapterContent(html, rawData, bookId, chapterId);
 
     if (this.state.mode === "pagination") {
       this.iframeDoc.body.innerHTML = processed;
@@ -433,26 +454,21 @@ export class ReflowableHost extends Engine {
       const chapter = chapters[targetIdx];
       if (this.loadedChapterIds.has(chapter.id)) return;
 
-      const result = await this.fetchChapter!(this.state.bookId, chapter.id);
-      if (!result?.html) return;
+      const signal = this.nextFetchSignal();
+      let result: { html: string | undefined; rawData?: ArrayBuffer } | undefined;
+      try {
+        result = await this.fetchChapter!(this.state.bookId, chapter.id, signal);
+      } catch {
+        return;
+      }
+      if (signal.aborted || !result?.html) return;
 
-      let processed = result.html;
-      const parser = getParserForFormat(this.bookFormat);
-      if (parser && parser.extractResource) {
-        const resolved = await resolveChapterResources(
-          result.html,
-          result.rawData,
-          parser,
-          this.resourceUrls,
-        );
-        if (resolved.resources.length > 0) {
-          injectResources(this.iframeDoc, resolved.resources, this.injectedResources);
-        }
-        processed = resolved.html;
-      }
-      if (this.transformContent) {
-        processed = await this.transformContent(processed, this.state.bookId, chapter.id);
-      }
+      const processed = await this.processChapterContent(
+        result.html,
+        result.rawData,
+        this.state.bookId,
+        chapter.id,
+      );
 
       const wrapper = this.iframeDoc.createElement("div");
       wrapper.className = "scroll-chapter";

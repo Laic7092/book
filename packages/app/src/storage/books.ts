@@ -7,6 +7,8 @@ import { getParserForFormat, generateId } from "@book/parser-core";
 import { saveZip, getZip, deleteZip as deleteRawZip } from "./raw-data";
 import { getMimeTypeFromExtension } from "../utils/constants";
 
+const MAX_STORED_BOOKS = 20;
+
 const PLUGIN_ID = "_covers";
 
 interface CoverEntry {
@@ -43,6 +45,41 @@ export async function deleteCoverBlob(bookId: string): Promise<void> {
 
 /** In-flight dedup: prevents concurrent extraction of the same chapter */
 const extractionInProgress = new Map<string, Promise<string>>();
+
+/**
+ * Evict chapter content for the least-recently-read books, keeping the most
+ * recent MAX_STORED_BOOKS. Book metadata and raw zip data are preserved so
+ * chapters can be lazily re-extracted when the book is re-opened.
+ */
+async function evictChapters(): Promise<void> {
+  const books = await getAllBooks();
+  if (books.length <= MAX_STORED_BOOKS) return;
+
+  const toEvict = books.slice(MAX_STORED_BOOKS);
+  await dbTransaction([STORES.CHAPTERS], "readwrite", async (stores) => {
+    const chaptersStore = stores.get(STORES.CHAPTERS)!;
+    for (const book of toEvict) {
+      const index = chaptersStore.index("bookId");
+      await new Promise<void>((resolve, reject) => {
+        const req = index.openCursor(IDBKeyRange.only(book.id));
+        req.onsuccess = () => {
+          const cursor = req.result;
+          if (cursor) {
+            const record = cursor.value as StoredChapter;
+            if (record.content) {
+              record.content = "";
+              cursor.update(record);
+            }
+            cursor.continue();
+          } else {
+            resolve();
+          }
+        };
+        req.onerror = () => reject(req.error);
+      });
+    }
+  });
+}
 
 /**
  * Save a parsed book to the database
@@ -86,6 +123,9 @@ export async function saveBook(parsedBook: ParsedBook, parser: BookParser): Prom
       // Non-critical: bookshelf will fall back to gradient cover
     }
   }
+
+  // Prune chapter content for least-recently-read books beyond the limit
+  void evictChapters();
 }
 
 /**

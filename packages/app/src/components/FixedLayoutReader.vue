@@ -235,7 +235,7 @@ onMounted(async () => {
   const h = new FixedHost({
     surface: renderer ? undefined : (cbzSurfaceRef.value as unknown as FixedLayoutSurface),
     renderer,
-    fetchChapter: async (bookId, _chapterId) => {
+    fetchChapter: async (bookId, _chapterId, _signal) => {
       const { getZip } = await import("../storage/raw-data");
       const rawData = (await getZip(bookId)) ?? undefined;
       return { html: undefined, rawData };
