@@ -43,6 +43,15 @@ export function translateEffect(effect: ReaderEffect, bookId: string): void {
         chapterId: effect.chapterId,
       });
       break;
+    case "MODE_CHANGED":
+      void pluginEvents.emit("mode:changed", { bookId, mode: effect.mode });
+      break;
+    case "SCROLL_PROGRESS_UPDATED":
+      void pluginEvents.emit("scroll:progress", {
+        bookId,
+        progress: effect.progress,
+      });
+      break;
     case "READER_UNMOUNTED":
       void pluginEvents.emit("reader:unmounted", {
         bookId: effect.bookId,
@@ -264,8 +273,13 @@ export function useReaderMachine(
 
   onUnmounted(() => {
     host?.destroy();
-    currentSession.value = null;
     navStack.reset();
+    // host.destroy() emits READER_UNMOUNTED asynchronously (microtask); the
+    // plugin's exit save reads the session. Drop the reference afterwards so
+    // the final save is not silently skipped.
+    queueMicrotask(() => {
+      currentSession.value = null;
+    });
   });
 
   // ── CFI navigation ──

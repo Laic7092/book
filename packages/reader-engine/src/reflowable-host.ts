@@ -8,6 +8,7 @@ import {
   clearResources,
   type ResourceInfo,
 } from "./resources";
+import { computeChapterScrollProgress } from "./scroll-progress";
 
 const INTERACTIVE_SELECTOR =
   "button, input, textarea, select, details, summary, [contenteditable], [contenteditable=true]";
@@ -39,8 +40,9 @@ export class ReflowableHost extends Engine {
   private sentinelSeen = new WeakMap<Element, true>();
   private loadedChapterIds = new Set<string>();
   private autoLoading = false;
-  private hasScrolled = false;
   private columnObserver: ResizeObserver | null = null;
+  private calibrationObserver: ResizeObserver | null = null;
+  private lastCalibratedTop = 0;
   private lastChapterHtml = "";
   private lastChapterId = "";
 
@@ -181,6 +183,7 @@ export class ReflowableHost extends Engine {
     this.teardownScrollHandler();
     this.teardownScrollSentinels();
     this.teardownColumnObserver();
+    this.teardownScrollCalibration();
     clearResources(this.iframeDoc, this.injectedResources);
     for (const [, blobUrl] of this.resourceUrls) {
       URL.revokeObjectURL(blobUrl);
@@ -195,9 +198,17 @@ export class ReflowableHost extends Engine {
         this.iframeDoc.documentElement.style.setProperty("--current-page", String(effect.page));
         break;
       case "MODE_CHANGED":
-        this.iframeDoc.documentElement.dataset.mode = effect.mode;
-        if (this.lastChapterHtml) {
-          this.restructureForMode(effect.mode, this.lastChapterId);
+        // Only rebuild when switching modes on already-rendered content
+        // (SET_MODE mid-session). A fresh iframe has no data-mode yet (the
+        // createIframe default was removed), so an INIT-driven MODE_CHANGED
+        // just sets the attribute and the scroll handler — the content was
+        // built in the right mode by loadChapter and must not be rebuilt.
+        {
+          const prev = this.iframeDoc.documentElement.dataset.mode;
+          this.iframeDoc.documentElement.dataset.mode = effect.mode;
+          if (this.lastChapterHtml && prev && prev !== effect.mode) {
+            this.restructureForMode(effect.mode, this.lastChapterId);
+          }
         }
         if (effect.mode === "scroll") {
           this.setupScrollHandler();
@@ -240,6 +251,7 @@ export class ReflowableHost extends Engine {
 
   private async loadChapter(bookId: string, chapterId: string): Promise<void> {
     this.teardownScrollSentinels();
+    this.teardownScrollCalibration();
     clearResources(this.iframeDoc, this.injectedResources);
     for (const [, blobUrl] of this.resourceUrls) {
       URL.revokeObjectURL(blobUrl);
@@ -281,7 +293,6 @@ export class ReflowableHost extends Engine {
     // Scroll mode: start fresh with this chapter
     this.loadedChapterIds.clear();
     this.loadedChapterIds.add(chapterId);
-    this.hasScrolled = false;
     this.iframeDoc.body.innerHTML = `<div class="scroll-chapter" data-chapter-id="${chapterId}">${processed}</div>`;
     this.iframeDoc.documentElement.scrollTop = 0;
     this.dispatch({ type: "CHAPTER_LOADED", chapterId });
@@ -290,6 +301,7 @@ export class ReflowableHost extends Engine {
       this.restoreScrollPosition();
       this.syncScrollPosition();
       this.setupScrollSentinels();
+      this.startScrollCalibration();
     });
   }
 
@@ -319,41 +331,37 @@ export class ReflowableHost extends Engine {
   }
 
   private handleScroll(): void {
+    // Guard first: progress computation depends on scroll-mode DOM ([data-chapter-id]),
+    // and the pagination branch must not pay for it either.
+    if (this.state.mode !== "scroll" || this.state.status !== "ready") return;
+
     const doc = this.iframeDoc;
     const html = doc.documentElement;
     const scrollTop = html.scrollTop || 0;
-    const scrollHeight = html.scrollHeight || 0;
     const clientHeight = html.clientHeight || 0;
-    const maxScroll = Math.max(scrollHeight - clientHeight, 1);
-    const progress = Math.min(1, Math.max(0, scrollTop / maxScroll));
 
-    // Detect visible chapter from DOM (scroll-mode concern, not machine concern)
-    let visibleChapterId: string | undefined;
-    const chapters = doc.body.querySelectorAll<HTMLElement>("[data-chapter-id]");
-    for (const ch of chapters) {
-      const rect = ch.getBoundingClientRect();
-      if (rect.bottom >= 0 && rect.top <= clientHeight) {
-        visibleChapterId = ch.dataset.chapterId;
-        break;
-      }
-    }
-
-    if (this.state.mode !== "scroll" || this.state.status !== "ready") return;
+    const { chapterId, progress } = computeChapterScrollProgress(
+      doc.body.querySelectorAll<HTMLElement>("[data-chapter-id]"),
+      scrollTop,
+      clientHeight,
+      html.scrollHeight || 0,
+    );
 
     this.dispatch({ type: "SCROLL_PROGRESS", bookProgress: progress });
 
     // Notify machine when visible chapter changes (without triggering a fetch)
-    if (visibleChapterId) {
+    if (chapterId) {
       const currentId = this.state.chapters[this.state.currentChapterIndex]?.id;
-      if (visibleChapterId !== currentId) {
-        this.dispatch({ type: "SET_CURRENT_CHAPTER", chapterId: visibleChapterId });
+      if (chapterId !== currentId) {
+        this.dispatch({ type: "SET_CURRENT_CHAPTER", chapterId });
       }
     }
 
-    // Track first real scroll to distinguish initial position from manual scroll-back-to-top
-    if (!this.hasScrolled) {
-      if (scrollTop > 0) this.hasScrolled = true;
-    } else if (scrollTop <= 0) {
+    // At the very top: bring the previous chapter in so it is reachable by
+    // scrolling up. After loadChapter the doc starts at scrollTop 0, so this
+    // also chains the previous chapter onto a freshly opened one. autoLoading
+    // and the loadedChapterIds min-index check guard against duplicate work.
+    if (scrollTop <= 0) {
       let minIdx = Infinity;
       for (const id of this.loadedChapterIds) {
         const i = this.state.chapters.findIndex((c) => c.id === id);
@@ -375,9 +383,69 @@ export class ReflowableHost extends Engine {
     if (progress <= 0) return;
     const doc = this.iframeDoc;
     const html = doc.documentElement;
-    const maxScroll = html.scrollHeight - html.clientHeight;
+    // Keep the same coordinate system as computeChapterScrollProgress:
+    // in-chapter scrollTop is -rect.top and the denominator is
+    // wrapper.scrollHeight - clientHeight. A chapter whose first block (e.g.
+    // h1) carries a top margin collapses it through the wrapper into the
+    // document: the wrapper sits `offset` px below the document top, and that
+    // offset is counted in html.scrollHeight but not in wrapper.scrollHeight.
+    // Restoring against html dimensions alone would lose
+    // `offset * (1 - progress)` on every re-entry, so the in-chapter anchor
+    // drifts upward.
+    const wrapper = doc.body.querySelector<HTMLElement>("[data-chapter-id]");
+    if (!wrapper) return;
+    // Document coordinate: viewport top + scrollTop. Reading rect.top alone is
+    // only valid at scrollTop 0 — restoreScrollPosition can run again after
+    // the first restore (MODE_CHANGED → restructureForMode), by which time the
+    // wrapper top is far above the viewport and rect.top is negative.
+    const offset = wrapper.getBoundingClientRect().top + html.scrollTop;
+    const maxScroll = wrapper.scrollHeight - html.clientHeight;
     if (maxScroll > 0) {
-      html.scrollTop = progress * maxScroll;
+      html.scrollTop = progress * maxScroll + offset;
+      this.lastCalibratedTop = html.scrollTop;
+    }
+  }
+
+  /**
+   * Re-apply the restored in-chapter progress while the content settles.
+   * At restore time fonts, images and the settings CSS may not have applied
+   * yet, so the measured height differs from what was saved. A ResizeObserver
+   * on the body catches those height changes; as long as the user has not
+   * scrolled away from the restored position, recompute scrollTop from the
+   * saved progress. The first user scroll stops the calibration.
+   */
+  private startScrollCalibration(): void {
+    this.teardownScrollCalibration();
+    if (this.state.mode !== "scroll") return;
+    const progress = this.state.scrollProgress;
+    if (progress <= 0) return;
+    this.calibrationObserver = new ResizeObserver(() => {
+      if (this.state.mode !== "scroll" || this.state.status !== "ready") return;
+      const html = this.iframeDoc.documentElement;
+      const wrapper = this.iframeDoc.body.querySelector<HTMLElement>("[data-chapter-id]");
+      if (!wrapper) return;
+      // Same document-coordinate offset as restoreScrollPosition: the wrapper
+      // is usually scrolled above the viewport by the time this fires, so
+      // rect.top alone would be negative and collapse the target to ~0.
+      const offset = wrapper.getBoundingClientRect().top + html.scrollTop;
+      const max = wrapper.scrollHeight - html.clientHeight;
+      if (max <= 0) return;
+      // User has scrolled away from the restored position → stop calibrating.
+      if (Math.abs(html.scrollTop - this.lastCalibratedTop) > 1) {
+        this.teardownScrollCalibration();
+        return;
+      }
+      const target = this.state.scrollProgress * max + offset;
+      html.scrollTop = target;
+      this.lastCalibratedTop = target;
+    });
+    this.calibrationObserver.observe(this.iframeDoc.body);
+  }
+
+  private teardownScrollCalibration(): void {
+    if (this.calibrationObserver) {
+      this.calibrationObserver.disconnect();
+      this.calibrationObserver = null;
     }
   }
 
@@ -411,7 +479,6 @@ export class ReflowableHost extends Engine {
     if (mode === "scroll") {
       this.loadedChapterIds.clear();
       this.loadedChapterIds.add(chapterId);
-      this.hasScrolled = false;
       this.iframeDoc.body.innerHTML = `<div class="scroll-chapter" data-chapter-id="${chapterId}">${this.lastChapterHtml}</div>`;
       this.iframeDoc.documentElement.scrollTop = 0;
       if (this.state.status === "ready") {
@@ -419,10 +486,12 @@ export class ReflowableHost extends Engine {
           this.restoreScrollPosition();
           this.syncScrollPosition();
           this.setupScrollSentinels();
+          this.startScrollCalibration();
         });
       }
     } else {
       this.teardownScrollSentinels();
+      this.teardownScrollCalibration();
       this.iframeDoc.body.innerHTML = this.lastChapterHtml;
       if (this.state.status === "ready") {
         requestAnimationFrame(() => {
@@ -447,7 +516,7 @@ export class ReflowableHost extends Engine {
     const doc = this.iframe.contentDocument!;
     doc.open();
     doc.write(`<!DOCTYPE html>
-<html data-mode="paginated">
+<html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">

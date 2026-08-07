@@ -19,23 +19,78 @@ export const readingProgressPlugin: Plugin = {
   id: "reading-progress",
   name: "Reading Progress",
   version: "1.0.0",
-  setup(ctx) {
-    let periodicTimer: ReturnType<typeof setInterval> | null = null;
+  async setup(ctx, { onTeardown }) {
+    let saveTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastSavedAt = 0;
+
+    /**
+     * Debounce: persist shortly after scrolling stops, never while idle.
+     * A throttle floor keeps an uninterrupted scroll from deferring the save
+     * forever — a crash or task-kill mid-scroll would otherwise lose the whole
+     * run instead of at most a few seconds of it.
+     */
+    function scheduleSave(bookId: string) {
+      if (saveTimer !== null) clearTimeout(saveTimer);
+      const now = performance.now();
+      if (now - lastSavedAt >= 5000) {
+        lastSavedAt = now;
+        void save(bookId);
+      }
+      saveTimer = setTimeout(() => {
+        saveTimer = null;
+        void save(bookId);
+      }, 800);
+    }
+
+    function flushSave() {
+      if (saveTimer !== null) {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+      }
+    }
 
     ctx.events.on("page:changed", ({ bookId }) => {
       void save(bookId);
-      stopPeriodicSave();
     });
     ctx.events.on("chapter:changed", ({ bookId }) => {
       void save(bookId);
-      startPeriodicSave(bookId);
+    });
+    // Scrolling emits per frame; debounce keeps IndexedDB writes to one
+    // after the scroll settles instead of polling every N seconds.
+    ctx.events.on("scroll:progress", ({ bookId }) => {
+      scheduleSave(bookId);
+    });
+    // Re-entering scroll mode records the restored position immediately.
+    ctx.events.on("mode:changed", ({ bookId, mode }) => {
+      if (mode === "scroll") void save(bookId);
     });
     ctx.events.on("reader:unmounted", ({ bookId }) => {
+      flushSave();
       void save(bookId);
-      stopPeriodicSave();
+    });
+
+    // Fallback for refresh / tab switch / lock screen, where Vue's unmount
+    // never runs.
+    function onHidden() {
+      const h = ctx.readerSession();
+      if (!h || h.getState().mode !== "scroll") return;
+      flushSave();
+      void save(h.getState().bookId);
+    }
+    function onVisibilityChange() {
+      if (document.visibilityState === "hidden") onHidden();
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("pagehide", onHidden);
+
+    onTeardown(() => {
+      flushSave();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("pagehide", onHidden);
     });
 
     async function save(bookId: string) {
+      lastSavedAt = performance.now();
       const h = ctx.readerSession();
       if (!h) return;
       const s = h.getState();
@@ -46,6 +101,7 @@ export const readingProgressPlugin: Plugin = {
         chapterIndex: s.currentChapterIndex,
       };
       if (s.mode === "scroll") {
+        // In-chapter progress (0..1); restored against the single-chapter document.
         data.scrollProgress = s.scrollProgress;
       } else {
         data.pageIndex = s.page.current;
@@ -53,28 +109,18 @@ export const readingProgressPlugin: Plugin = {
       await ctx.storage.put(progressKey(bookId), data);
     }
 
-    function startPeriodicSave(bookId: string) {
-      stopPeriodicSave();
-      periodicTimer = setInterval(() => {
-        const h = ctx.readerSession();
-        if (!h || h.getState().mode !== "scroll") return;
-        void save(bookId);
-      }, 5000);
-    }
-
-    function stopPeriodicSave() {
-      if (periodicTimer !== null) {
-        clearInterval(periodicTimer);
-        periodicTimer = null;
-      }
-    }
-
     ctx.hooks.filter("reader:init-config", async (config) => {
       const data = await ctx.storage.get<ProgressData>(progressKey(config.bookId));
       if (!data) return config;
-      if (config.mode === "scroll" && data.scrollProgress !== undefined) {
+      if (data.scrollProgress !== undefined) {
+        // Saved from scroll mode: open in scroll mode so the in-chapter
+        // anchor restores against the single-chapter document. The init
+        // mode defaults to "pagination" (driven by the machine, not by
+        // settings), so without this override scroll progress is never
+        // restored.
         return {
           ...config,
+          mode: "scroll",
           chapterIndex: data.chapterIndex,
           initialScroll: { progress: data.scrollProgress },
         };

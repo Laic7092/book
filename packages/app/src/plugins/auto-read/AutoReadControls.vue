@@ -66,9 +66,10 @@ function scrollLoop() {
 
   const speed = (clientHeight * 0.85) / interval.value;
   const target = Math.min(scrollTop + speed * dt, maxScroll);
+  // Setting scrollTop fires a scroll event; the host's handleScroll reports
+  // the in-chapter progress. Dispatching a whole-document ratio here would
+  // clobber the in-chapter anchor and get persisted by reading-progress.
   html.scrollTop = target;
-
-  s.dispatch({ type: "SCROLL_PROGRESS", bookProgress: target / maxScroll });
 
   progress.value = ((now % interval.value) / interval.value) * 100;
 

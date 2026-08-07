@@ -466,6 +466,24 @@ describe("GO_TO_CHAPTER", () => {
     expect(result.state.lastError).toBeNull();
   });
 
+  test("emits CHAPTER_DID_CHANGE when switching to a different chapter", () => {
+    const state = readyState();
+    const result = dispatch(state, { type: "GO_TO_CHAPTER", chapterId: "ch2" });
+
+    expect(result.effects).toContainEqual({
+      type: "CHAPTER_DID_CHANGE",
+      chapterId: "ch2",
+      previousChapterId: "ch1",
+    });
+  });
+
+  test("no CHAPTER_DID_CHANGE when re-loading the current chapter", () => {
+    const state = readyState({ currentChapterIndex: 0 });
+    const result = dispatch(state, { type: "GO_TO_CHAPTER", chapterId: "ch1" });
+
+    expect(result.effects.some((e) => e.type === "CHAPTER_DID_CHANGE")).toBe(false);
+  });
+
   test("no-ops for unknown chapter", () => {
     const state = readyState();
     const result = dispatch(state, { type: "GO_TO_CHAPTER", chapterId: "unknown" });
@@ -558,7 +576,7 @@ describe("SCROLL_PROGRESS", () => {
     const result = dispatch(state, { type: "SCROLL_PROGRESS", bookProgress: 0.75 });
 
     expect(result.state.scrollProgress).toBe(0.75);
-    expect(result.effects).toEqual([]);
+    expect(result.effects).toEqual([{ type: "SCROLL_PROGRESS_UPDATED", progress: 0.75 }]);
   });
 
   test("ignored when loading", () => {

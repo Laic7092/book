@@ -23,6 +23,7 @@ export interface ReaderState {
   status: "idle" | "loading" | "ready" | "error";
 
   page: PageState;
+  /** In scroll mode: progress within the current chapter (0..1), not whole-book. */
   scrollProgress: number;
   lastError: string | null;
 }
@@ -52,6 +53,7 @@ export type ReaderAction =
 
 export type ReaderEffect =
   | { type: "FETCH_CHAPTER"; bookId: string; chapterId: string }
+  | { type: "SCROLL_PROGRESS_UPDATED"; progress: number }
   | { type: "PAGE_POSITION_CHANGED"; page: number }
   | { type: "MODE_CHANGED"; mode: "paginated" | "scroll" }
   | { type: "CHAPTER_DID_CHANGE"; chapterId: string; previousChapterId: string | null }
@@ -282,6 +284,7 @@ function goToChapterReducer(
   const idx = findChapterIndex(state.chapters, action.chapterId);
   if (idx < 0) return { state, effects: [] };
 
+  const prevChapterId = getChapterId(state);
   const next: ReaderState = {
     ...state,
     status: "loading",
@@ -291,10 +294,21 @@ function goToChapterReducer(
     lastError: null,
   };
 
-  return {
-    state: next,
-    effects: [{ type: "FETCH_CHAPTER", bookId: state.bookId, chapterId: action.chapterId }],
-  };
+  // Notify chapter change immediately (plugins save progress on chapter:changed;
+  // the later CHAPTER_LOADED can't tell the chapter actually changed, since
+  // currentChapterIndex was already updated here).
+  const effects: ReaderEffect[] = [
+    { type: "FETCH_CHAPTER", bookId: state.bookId, chapterId: action.chapterId },
+  ];
+  if (prevChapterId && prevChapterId !== action.chapterId) {
+    effects.push({
+      type: "CHAPTER_DID_CHANGE",
+      chapterId: action.chapterId,
+      previousChapterId: prevChapterId,
+    });
+  }
+
+  return { state: next, effects };
 }
 
 function goToPageReducer(
@@ -342,7 +356,8 @@ function scrollProgressReducer(
   if (state.status !== "ready") return { state, effects: [] };
   return {
     state: { ...state, scrollProgress: action.bookProgress },
-    effects: [],
+    // Notify so plugins can debounce-persist; no polling needed.
+    effects: [{ type: "SCROLL_PROGRESS_UPDATED", progress: action.bookProgress }],
   };
 }
 
