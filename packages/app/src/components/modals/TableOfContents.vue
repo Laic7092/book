@@ -79,7 +79,9 @@ function setRef(el: HTMLElement | null, chapterId: string) {
   <div class="modal-content-inner">
     <ModalHeader title="Contents" @close="emit('close')" />
     <div ref="tocListRef" class="modal-body scroll-body">
-      <div v-if="chapters.length === 0" class="no-chapters">No chapters available</div>
+      <div v-if="!Array.isArray(chapters) || chapters.length === 0" class="no-chapters">
+        No chapters available
+      </div>
       <ul v-else class="toc-list">
         <li v-for="(ch, index) in visibleChapters" :key="ch.id">
           <button
