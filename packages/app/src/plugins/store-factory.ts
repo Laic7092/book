@@ -110,7 +110,9 @@ export function createEntityStore<T extends { id: string }>(
     async add(item: T): Promise<void> {
       const key = storageKey(name, getKey(item));
       await storage.put(key, item, Date.now());
-      _cache.push(item);
+      const idx = _cache.findIndex((i) => getKey(i) === getKey(item));
+      if (idx >= 0) _cache[idx] = item;
+      else _cache.push(item);
       sync();
     },
 
