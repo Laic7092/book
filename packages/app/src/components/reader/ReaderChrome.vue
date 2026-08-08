@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, nextTick } from "vue";
 import { useUIStore } from "../../stores/ui";
+import Popover from "../Popover.vue";
 import {
   getHeaderActions,
   getFooterActions,
@@ -103,27 +104,25 @@ async function openModal(modal: string) {
   </header>
 
   <footer class="reader-footer" :class="{ visible: uiStore.effectiveShowControls }">
-    <Transition name="menu">
-      <div v-if="showMenu" class="menu-popover" @click.stop>
-        <button
-          v-for="a in menuActions"
-          :key="a.id"
-          class="menu-item"
-          @click.stop="openModal(a.modal!)"
-        >
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-            v-html="a.icon"
-          />
-          <span>{{ a.label }}</span>
-        </button>
-      </div>
-    </Transition>
+    <Popover :open="showMenu" style="min-width: 160px" @close="closeMenu">
+      <button
+        v-for="a in menuActions"
+        :key="a.id"
+        class="menu-item"
+        @click.stop="openModal(a.modal!)"
+      >
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          v-html="a.icon"
+        />
+        <span>{{ a.label }}</span>
+      </button>
+    </Popover>
 
     <div class="footer-sections">
       <div class="actions-section">
@@ -416,20 +415,15 @@ async function openModal(modal: string) {
   line-height: 1.2;
 }
 
-.menu-popover {
+:deep(.popover) {
   position: absolute;
   bottom: 100%;
   left: 12px;
   margin-bottom: 8px;
-  background: var(--bg-elevated, var(--reader-bg));
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
   padding: 4px;
   min-width: 160px;
-  box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.12),
-    0 2px 8px rgba(0, 0, 0, 0.08);
-  z-index: 10;
+  background: var(--bg-elevated, var(--reader-bg));
+  border-color: var(--border-subtle);
 }
 
 .menu-item {
@@ -487,24 +481,6 @@ async function openModal(modal: string) {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
-}
-
-.menu-enter-active {
-  transition: all 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.menu-leave-active {
-  transition: all 150ms ease;
-}
-
-.menu-enter-from {
-  opacity: 0;
-  transform: translateY(8px) scale(0.95);
-}
-
-.menu-leave-to {
-  opacity: 0;
-  transform: translateY(4px) scale(0.98);
 }
 
 .slide-fade-enter-active {

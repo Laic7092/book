@@ -7,6 +7,10 @@ import { formatBookToast } from "../utils/constants";
 import { validateBookFile } from "../utils/validation";
 import type { Book } from "../core/types";
 
+import BookCard from "./BookCard.vue";
+import BookListItem from "./BookListItem.vue";
+import Popover from "./Popover.vue";
+
 const ModalWrapper = defineAsyncComponent(() => import("./modals/ModalWrapper.vue"));
 const ToastNotification = defineAsyncComponent(() => import("./ToastNotification.vue"));
 const ConfirmDialog = defineAsyncComponent(() => import("./ConfirmDialog.vue"));
@@ -136,14 +140,14 @@ function onDocumentClick() {
 const sortBy = ref<"recent" | "title-asc" | "title-desc" | "author-asc" | "added">("recent");
 const showMenu = ref(false);
 const menuBtnRef = ref<HTMLElement | null>(null);
-const menuPos = ref({ top: 0, right: 0 });
+const menuPos = ref({ x: 0, y: 0 });
 
 function toggleMenu() {
   if (!showMenu.value && menuBtnRef.value) {
     const rect = menuBtnRef.value.getBoundingClientRect();
     menuPos.value = {
-      top: rect.bottom + 6,
-      right: window.innerWidth - rect.right,
+      x: rect.right,
+      y: rect.bottom + 6,
     };
   }
   showMenu.value = !showMenu.value;
@@ -395,129 +399,21 @@ onUnmounted(() => {
                 <circle cx="12" cy="19" r="1.5" fill="currentColor" />
               </svg>
             </button>
-            <transition name="menu-pop">
-              <div
-                v-if="showMenu"
-                class="menu-popover"
-                :style="{ top: menuPos.top + 'px', right: menuPos.right + 'px' }"
-                @click.stop
-              >
-                <div class="menu-section">
-                  <div class="menu-label">View</div>
-                  <button
-                    class="menu-item"
-                    :class="{ checked: viewMode === 'card' }"
-                    @click="
-                      viewMode = 'card';
-                      closeMenu();
-                    "
-                  >
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                    >
-                      <rect x="3" y="3" width="7" height="7" rx="1" />
-                      <rect x="14" y="3" width="7" height="7" rx="1" />
-                      <rect x="3" y="14" width="7" height="7" rx="1" />
-                      <rect x="14" y="14" width="7" height="7" rx="1" />
-                    </svg>
-                    <span>Grid</span>
-                    <svg
-                      v-if="viewMode === 'card'"
-                      class="check-icon"
-                      width="13"
-                      height="13"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2.5"
-                      stroke-linecap="round"
-                    >
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                  </button>
-                  <button
-                    class="menu-item"
-                    :class="{ checked: viewMode === 'list' }"
-                    @click="
-                      viewMode = 'list';
-                      closeMenu();
-                    "
-                  >
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                    >
-                      <line x1="8" y1="6" x2="21" y2="6" />
-                      <line x1="8" y1="12" x2="21" y2="12" />
-                      <line x1="8" y1="18" x2="21" y2="18" />
-                      <circle cx="4" cy="6" r="1" fill="currentColor" />
-                      <circle cx="4" cy="12" r="1" fill="currentColor" />
-                      <circle cx="4" cy="18" r="1" fill="currentColor" />
-                    </svg>
-                    <span>List</span>
-                    <svg
-                      v-if="viewMode === 'list'"
-                      class="check-icon"
-                      width="13"
-                      height="13"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2.5"
-                      stroke-linecap="round"
-                    >
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                  </button>
-                </div>
-                <div class="menu-divider"></div>
-                <div class="menu-section">
-                  <div class="menu-label">Sort by</div>
-                  <button
-                    v-for="opt in sortOptions"
-                    :key="opt.value"
-                    class="menu-item"
-                    :class="{ checked: sortBy === opt.value }"
-                    @click="
-                      sortBy = opt.value;
-                      closeMenu();
-                    "
-                  >
-                    <span>{{ opt.label }}</span>
-                    <svg
-                      v-if="sortBy === opt.value"
-                      class="check-icon"
-                      width="13"
-                      height="13"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2.5"
-                      stroke-linecap="round"
-                    >
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                  </button>
-                </div>
-                <div v-if="bookshelfMenuActions.length" class="menu-divider"></div>
+            <Popover
+              :open="showMenu"
+              :x="menuPos.x"
+              :y="menuPos.y"
+              placement="bottom-right"
+              style="min-width: 200px"
+              @close="closeMenu"
+            >
+              <div class="menu-section">
+                <div class="menu-label">View</div>
                 <button
-                  v-for="action in bookshelfMenuActions"
-                  :key="action.id"
                   class="menu-item"
+                  :class="{ checked: viewMode === 'card' }"
                   @click="
-                    if (action.modal) uiStore.activeModal = action.modal;
-                    else action.onClick?.();
+                    viewMode = 'card';
                     closeMenu();
                   "
                 >
@@ -527,36 +423,144 @@ onUnmounted(() => {
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linecap="round"
-                    v-html="action.icon"
-                  ></svg>
-                  <span>{{ action.label }}</span>
-                </button>
-                <div class="menu-divider"></div>
-                <button
-                  class="menu-item"
-                  @click="
-                    uiStore.activeModal = 'plugins';
-                    closeMenu();
-                  "
-                >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.5"
+                    stroke-width="2"
                     stroke-linecap="round"
                   >
-                    <rect x="2" y="6" width="20" height="12" rx="2" />
-                    <circle cx="12" cy="12" r="2" fill="currentColor" />
+                    <rect x="3" y="3" width="7" height="7" rx="1" />
+                    <rect x="14" y="3" width="7" height="7" rx="1" />
+                    <rect x="3" y="14" width="7" height="7" rx="1" />
+                    <rect x="14" y="14" width="7" height="7" rx="1" />
                   </svg>
-                  <span>Plugins</span>
+                  <span>Grid</span>
+                  <svg
+                    v-if="viewMode === 'card'"
+                    class="check-icon"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                </button>
+                <button
+                  class="menu-item"
+                  :class="{ checked: viewMode === 'list' }"
+                  @click="
+                    viewMode = 'list';
+                    closeMenu();
+                  "
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                  >
+                    <line x1="8" y1="6" x2="21" y2="6" />
+                    <line x1="8" y1="12" x2="21" y2="12" />
+                    <line x1="8" y1="18" x2="21" y2="18" />
+                    <circle cx="4" cy="6" r="1" fill="currentColor" />
+                    <circle cx="4" cy="12" r="1" fill="currentColor" />
+                    <circle cx="4" cy="18" r="1" fill="currentColor" />
+                  </svg>
+                  <span>List</span>
+                  <svg
+                    v-if="viewMode === 'list'"
+                    class="check-icon"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
                 </button>
               </div>
-            </transition>
+              <div class="menu-divider"></div>
+              <div class="menu-section">
+                <div class="menu-label">Sort by</div>
+                <button
+                  v-for="opt in sortOptions"
+                  :key="opt.value"
+                  class="menu-item"
+                  :class="{ checked: sortBy === opt.value }"
+                  @click="
+                    sortBy = opt.value;
+                    closeMenu();
+                  "
+                >
+                  <span>{{ opt.label }}</span>
+                  <svg
+                    v-if="sortBy === opt.value"
+                    class="check-icon"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                </button>
+              </div>
+              <div v-if="bookshelfMenuActions.length" class="menu-divider"></div>
+              <button
+                v-for="action in bookshelfMenuActions"
+                :key="action.id"
+                class="menu-item"
+                @click="
+                  if (action.modal) uiStore.activeModal = action.modal;
+                  else action.onClick?.();
+                  closeMenu();
+                "
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  v-html="action.icon"
+                ></svg>
+                <span>{{ action.label }}</span>
+              </button>
+              <div class="menu-divider"></div>
+              <button
+                class="menu-item"
+                @click="
+                  uiStore.activeModal = 'plugins';
+                  closeMenu();
+                "
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                >
+                  <rect x="2" y="6" width="20" height="12" rx="2" />
+                  <circle cx="12" cy="12" r="2" fill="currentColor" />
+                </svg>
+                <span>Plugins</span>
+              </button>
+            </Popover>
           </div>
         </div>
       </div>
@@ -695,209 +699,53 @@ onUnmounted(() => {
               <span class="shelf-count">{{ group.books.length }}</span>
             </div>
             <div class="book-grid">
-              <div
+              <BookCard
                 v-for="(book, idx) in group.books"
                 :key="book.id"
-                class="book-card"
-                :style="{ animationDelay: `${idx * 0.03}s` }"
-                @click="selectBook(book)"
-                tabindex="0"
-                @keydown.enter="selectBook(book)"
-                role="button"
-                :aria-label="`Open ${book.title} by ${book.author || 'Unknown author'}`"
-              >
-                <div class="book-cover" :style="{ background: bookGradients.get(book.id) }">
-                  <img
-                    v-if="coverUrls.get(book.id)"
-                    :src="coverUrls.get(book.id)"
-                    :alt="`Cover of ${book.title}`"
-                    class="cover-image"
-                  />
-                  <span v-else class="cover-initial" aria-hidden="true">{{
-                    bookInitials.get(book.id)
-                  }}</span>
-                </div>
-                <button
-                  class="btn-folder"
-                  @click="toggleFolderDropdown(book.id, $event)"
-                  title="Move to folder"
-                  aria-label="Move to folder"
-                  tabindex="0"
-                >
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                  >
-                    <path
-                      d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2v11z"
-                    />
-                  </svg>
-                </button>
-                <button
-                  class="btn-delete"
-                  @click="confirmDelete(book.id, $event)"
-                  title="Delete book"
-                  aria-label="Delete book"
-                  tabindex="0"
-                >
-                  <svg
-                    width="13"
-                    height="13"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                  >
-                    <path d="M18 6L6 18M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
+                :book="book"
+                :cover-url="coverUrls.get(book.id)"
+                :gradient="bookGradients.get(book.id)!"
+                :initial="bookInitials.get(book.id)!"
+                :delay-ms="idx * 30"
+                @open="selectBook(book)"
+                @delete="confirmDelete(book.id, $event)"
+                @move-folder="toggleFolderDropdown(book.id, $event)"
+              />
             </div>
           </div>
         </template>
 
         <!-- Ungridded shelf when not alpha-sorted -->
         <div v-else class="book-grid">
-          <div
+          <BookCard
             v-for="(book, idx) in sortedBooks"
             :key="book.id"
-            class="book-card"
-            :style="{ animationDelay: `${idx * 0.03}s` }"
-            @click="selectBook(book)"
-            tabindex="0"
-            @keydown.enter="selectBook(book)"
-            role="button"
-            :aria-label="`Open ${book.title} by ${book.author || 'Unknown author'}`"
-          >
-            <div class="book-cover" :style="{ background: bookGradients.get(book.id) }">
-              <img
-                v-if="coverUrls.get(book.id)"
-                :src="coverUrls.get(book.id)"
-                :alt="`Cover of ${book.title}`"
-                class="cover-image"
-              />
-              <span v-else class="cover-initial" aria-hidden="true">{{
-                bookInitials.get(book.id)
-              }}</span>
-            </div>
-            <button
-              class="btn-folder"
-              @click="toggleFolderDropdown(book.id, $event)"
-              title="Move to folder"
-              aria-label="Move to folder"
-              tabindex="0"
-            >
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <path
-                  d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2v11z"
-                />
-              </svg>
-            </button>
-            <button
-              class="btn-delete"
-              @click="confirmDelete(book.id, $event)"
-              title="Delete book"
-              aria-label="Delete book"
-              tabindex="0"
-            >
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-              >
-                <path d="M18 6L6 18M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
+            :book="book"
+            :cover-url="coverUrls.get(book.id)"
+            :gradient="bookGradients.get(book.id)!"
+            :initial="bookInitials.get(book.id)!"
+            :delay-ms="idx * 30"
+            @open="selectBook(book)"
+            @delete="confirmDelete(book.id, $event)"
+            @move-folder="toggleFolderDropdown(book.id, $event)"
+          />
         </div>
       </template>
 
       <!-- List View -->
       <div v-else-if="sortedBooks.length > 0 && viewMode === 'list'" class="book-list">
-        <div
+        <BookListItem
           v-for="book in sortedBooks"
           :key="book.id"
-          class="book-list-item"
-          @click="selectBook(book)"
-          tabindex="0"
-          @keydown.enter="selectBook(book)"
-          role="button"
-          :aria-label="`Open ${book.title} by ${book.author || 'Unknown author'}`"
-        >
-          <div class="list-cover" :style="{ background: bookGradients.get(book.id) }">
-            <img
-              v-if="coverUrls.get(book.id)"
-              :src="coverUrls.get(book.id)"
-              :alt="`Cover of ${book.title}`"
-              class="list-cover-img"
-            />
-            <span v-else class="list-cover-initial" aria-hidden="true">{{
-              bookInitials.get(book.id)
-            }}</span>
-          </div>
-          <div class="list-info">
-            <h3 class="list-title">{{ book.title }}</h3>
-            <div class="list-details">
-              <p class="list-author">{{ book.author || "Unknown author" }}</p>
-              <span v-if="book.folderId" class="list-folder-tag">{{
-                bookshelfStore.folders.find((f) => f.id === book.folderId)?.name
-              }}</span>
-            </div>
-          </div>
-          <button
-            class="btn-folder btn-folder-list"
-            @click="toggleFolderDropdown(book.id, $event)"
-            title="Move to folder"
-            aria-label="Move to folder"
-            tabindex="0"
-          >
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2v11z" />
-            </svg>
-          </button>
-          <button
-            class="btn-delete"
-            @click="confirmDelete(book.id, $event)"
-            title="Delete book"
-            aria-label="Delete book"
-            tabindex="0"
-          >
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-            >
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
+          :book="book"
+          :cover-url="coverUrls.get(book.id)"
+          :gradient="bookGradients.get(book.id)!"
+          :initial="bookInitials.get(book.id)!"
+          :folder-name="bookshelfStore.folders.find((f) => f.id === book.folderId)?.name"
+          @open="selectBook(book)"
+          @delete="confirmDelete(book.id, $event)"
+          @move-folder="toggleFolderDropdown(book.id, $event)"
+        />
       </div>
 
       <!-- No search results -->
@@ -924,11 +772,12 @@ onUnmounted(() => {
     />
 
     <!-- Folder assignment dropdown -->
-    <div
-      v-if="folderDropdownOpen"
-      class="folder-dropdown"
-      :style="{ left: folderDropdownPos.x + 'px', top: folderDropdownPos.y + 'px' }"
-      @click.stop
+    <Popover
+      :open="folderDropdownOpen"
+      :x="folderDropdownPos.x"
+      :y="folderDropdownPos.y"
+      style="min-width: 170px"
+      @close="closeDropdown"
     >
       <div class="folder-dropdown-header">Move to folder</div>
       <button
@@ -962,18 +811,19 @@ onUnmounted(() => {
       >
         {{ folder.name }}
       </button>
-    </div>
+    </Popover>
 
     <!-- Folder context menu -->
-    <div
-      v-if="folderCtxId"
-      class="folder-context-menu"
-      :style="{ left: folderCtxPos.x + 'px', top: folderCtxPos.y + 'px' }"
-      @click.stop
+    <Popover
+      :open="!!folderCtxId"
+      :x="folderCtxPos.x"
+      :y="folderCtxPos.y"
+      style="min-width: 130px"
+      @close="closeFolderCtx"
     >
       <button class="ctx-item" @click="renameFolderCtx">Rename</button>
       <button class="ctx-item ctx-danger" @click="deleteFolderCtx">Delete</button>
-    </div>
+    </Popover>
   </div>
 </template>
 
@@ -1205,17 +1055,6 @@ onUnmounted(() => {
    MENU POPOVER
    ========================================== */
 
-.menu-popover {
-  position: fixed;
-  min-width: 200px;
-  padding: 6px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: var(--shadow-lg);
-  z-index: 1001;
-}
-
 .menu-section {
   display: flex;
   flex-direction: column;
@@ -1273,23 +1112,6 @@ onUnmounted(() => {
 }
 
 /* Menu pop transition */
-.menu-pop-enter-active {
-  transition: all 0.18s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.menu-pop-leave-active {
-  transition: all 0.12s ease-in;
-}
-
-.menu-pop-enter-from {
-  opacity: 0;
-  transform: translateY(-6px) scale(0.96);
-}
-
-.menu-pop-leave-to {
-  opacity: 0;
-  transform: translateY(-4px) scale(0.97);
-}
 
 /* ==========================================
    SHELF GROUP
@@ -1498,194 +1320,6 @@ onUnmounted(() => {
 }
 
 /* ==========================================
-   BOOK CARD
-   ========================================== */
-
-.book-card {
-  position: relative;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all var(--transition-base);
-  display: flex;
-  flex-direction: column;
-  animation: fadeInUp 0.45s ease-out backwards;
-  box-shadow: var(--shadow-xs);
-}
-
-/* Cover */
-.book-cover {
-  position: relative;
-  aspect-ratio: 3/4;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  box-shadow:
-    var(--shadow-sm),
-    inset 0 1px 0 rgba(255, 255, 255, 0.15);
-  transition:
-    transform var(--transition-base),
-    box-shadow var(--transition-base);
-}
-
-.book-card:hover .book-cover {
-  transform: scale(1.04);
-  box-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.12),
-    0 12px 28px rgba(0, 0, 0, 0.15),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
-}
-
-.cover-image {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.cover-initial {
-  font-family: var(--font-display);
-  font-size: 52px;
-  font-weight: 500;
-  color: #fff;
-  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
-  transition: transform var(--transition-base);
-}
-
-.book-card:hover .cover-initial {
-  transform: scale(1.1);
-}
-
-/* Subtle paper texture on covers */
-.book-cover::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background:
-    repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 2px,
-      rgba(255, 255, 255, 0.015) 2px,
-      rgba(255, 255, 255, 0.015) 4px
-    ),
-    repeating-linear-gradient(
-      90deg,
-      transparent,
-      transparent 2px,
-      rgba(0, 0, 0, 0.01) 2px,
-      rgba(0, 0, 0, 0.01) 4px
-    );
-  pointer-events: none;
-  opacity: 0.5;
-}
-
-/* Info */
-.book-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.book-title {
-  font-size: 14px;
-  font-weight: 600;
-  margin: 0;
-  color: var(--reader-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  line-height: 1.35;
-  letter-spacing: -0.01em;
-}
-
-.book-author {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.book-author.unknown {
-  color: var(--text-secondary);
-  font-style: italic;
-}
-
-.book-meta {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.book-card-footer {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 6px;
-  min-height: 16px;
-}
-
-.meta-dot {
-  width: 4px;
-  height: 4px;
-  background: var(--accent);
-  border-radius: 50%;
-  flex-shrink: 0;
-  opacity: 0.7;
-}
-
-.meta-date {
-  font-size: 11px;
-  color: var(--text-secondary);
-  font-family: var(--font-ui);
-}
-
-/* Delete button */
-.btn-delete {
-  position: absolute;
-  top: 7px;
-  right: 7px;
-  width: 30px;
-  height: 30px;
-  border-radius: 7px;
-  border: none;
-  background: rgba(255, 255, 255, 0.93);
-  cursor: pointer;
-  opacity: 0;
-  transform: scale(0.85);
-  transition: all var(--transition-fast);
-  color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  z-index: 1;
-}
-
-.book-card:hover .btn-delete {
-  opacity: 1;
-  transform: scale(1);
-}
-
-.btn-delete:hover {
-  background: var(--color-danger-soft);
-  color: var(--color-danger);
-  box-shadow: 0 3px 10px rgba(220, 38, 38, 0.18);
-}
-
-.btn-delete:active {
-  transform: scale(0.92);
-}
-
-/* ==========================================
    LIST VIEW
    ========================================== */
 
@@ -1693,142 +1327,6 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 2px;
-}
-
-.book-list-item {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 9px 12px;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: background var(--transition-fast);
-  animation: fadeInUp 0.3s ease-out backwards;
-}
-
-.book-list-item:hover {
-  background: var(--bg-secondary);
-}
-
-.book-list-item:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.book-list-item:hover .btn-delete,
-.book-list-item:hover .btn-folder-list {
-  opacity: 1;
-  transform: scale(1);
-}
-
-.btn-folder-list {
-  position: relative;
-  top: auto;
-  right: auto;
-  opacity: 0;
-  transform: scale(0.85);
-  flex-shrink: 0;
-}
-
-.list-cover {
-  position: relative;
-  width: 38px;
-  height: 52px;
-  border-radius: 5px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  overflow: hidden;
-  box-shadow: var(--shadow-xs);
-}
-
-.list-cover-img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.list-cover-initial {
-  font-family: var(--font-display);
-  font-size: 18px;
-  font-weight: 600;
-  color: #fff;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
-}
-
-.list-cover-read-badge {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.9);
-  color: #16a34a;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
-}
-
-.list-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.list-details {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.list-title {
-  font-size: 14px;
-  font-weight: 600;
-  margin: 0;
-  color: var(--reader-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  letter-spacing: -0.01em;
-}
-
-.list-author {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.list-folder-tag {
-  font-size: 10px;
-  color: var(--text-secondary);
-  background: var(--bg-tertiary);
-  padding: 1px 6px;
-  border-radius: 4px;
-  flex-shrink: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100px;
-}
-
-.list-meta {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-shrink: 0;
 }
 
 /* ==========================================
@@ -1919,88 +1417,13 @@ onUnmounted(() => {
   outline: none;
 }
 
-.book-title {
-  cursor: text;
-}
-
 /* ═══════════════════════════════════════════════
    FOLDER TAG ON CARD
    ═══════════════════════════════════════════════ */
 
-.book-folder-tag {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10px;
-  color: var(--text-secondary);
-  line-height: 1;
-}
-
-.book-folder-tag svg {
-  flex-shrink: 0;
-  opacity: 0.6;
-}
-
-.book-folder-tag span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* ═══════════════════════════════════════════════
-   FOLDER BUTTON ON CARD HOVER
-   ═══════════════════════════════════════════════ */
-
-.btn-folder {
-  position: absolute;
-  top: 7px;
-  right: 41px;
-  width: 30px;
-  height: 30px;
-  border-radius: 7px;
-  border: none;
-  background: rgba(255, 255, 255, 0.93);
-  cursor: pointer;
-  opacity: 0;
-  transform: scale(0.85);
-  transition: all var(--transition-fast);
-  color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  z-index: 1;
-}
-
-.book-card:hover .btn-folder {
-  opacity: 1;
-  transform: scale(1);
-}
-
-.btn-folder:hover {
-  background: #f0f5ff;
-  color: var(--accent);
-  box-shadow: 0 3px 10px rgba(91, 154, 255, 0.18);
-}
-
-.btn-folder:active {
-  transform: scale(0.92);
-}
-
 /* ═══════════════════════════════════════════════
    FOLDER DROPDOWN
    ═══════════════════════════════════════════════ */
-
-.folder-dropdown {
-  position: fixed;
-  z-index: 1002;
-  min-width: 170px;
-  padding: 6px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: var(--shadow-lg);
-}
 
 .folder-dropdown-header {
   padding: 6px 10px 4px;
@@ -2046,17 +1469,6 @@ onUnmounted(() => {
 /* ═══════════════════════════════════════════════
    FOLDER CONTEXT MENU
    ═══════════════════════════════════════════════ */
-
-.folder-context-menu {
-  position: fixed;
-  z-index: 1003;
-  min-width: 130px;
-  padding: 6px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: var(--shadow-lg);
-}
 
 .ctx-item {
   display: flex;
@@ -2131,15 +1543,6 @@ onUnmounted(() => {
 }
 
 /* Fade transition */
-.fade-enter-active,
-.fade-leave-active {
-  transition: all var(--transition-base);
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
 
 /* ==========================================
    RESPONSIVE
@@ -2157,10 +1560,6 @@ onUnmounted(() => {
   .book-grid {
     grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
     gap: 24px;
-  }
-
-  .stats-bar {
-    padding-left: 0;
   }
 
   .folder-bar {
@@ -2208,17 +1607,9 @@ onUnmounted(() => {
     padding-left: 0;
   }
 
-  .stat-sep {
-    display: none;
-  }
-
   .book-grid {
     grid-template-columns: repeat(2, 1fr);
     gap: 14px;
-  }
-
-  .list-meta {
-    display: none;
   }
 
   .shelf-header {
