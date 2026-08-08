@@ -4,7 +4,7 @@ import AutoReadControls from "./AutoReadControls.vue";
 
 // Flag: true while auto-read is dispatching NEXT_PAGE (so page:changed events from
 // auto-read itself are distinguishable from user-initiated page changes).
-export let _autoAdvancing = false;
+let _autoAdvancing = false;
 export function setAutoAdvancing(v: boolean) {
   _autoAdvancing = v;
 }

@@ -1,10 +1,11 @@
-import type { Plugin, PluginContext } from "../types";
+import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
+import type { ServerClient } from "../../utils/api";
 
-let pluginContext: PluginContext | null = null;
+let opdsServer: ServerClient | null = null;
 
-export function getPluginContext(): PluginContext | null {
-  return pluginContext;
+export function getOpdsServer(): ServerClient | null {
+  return opdsServer;
 }
 
 export const opdsPlugin: Plugin = {
@@ -13,7 +14,7 @@ export const opdsPlugin: Plugin = {
   name: "OPDS Catalog",
   version: "0.1.0",
   setup(ctx) {
-    pluginContext = ctx;
+    opdsServer = ctx.server;
     ctx.ui.registerModal("opds", () => import("./OpdsPanel.vue"));
     ctx.ui.registerBookshelfMenuAction({
       id: "opds",

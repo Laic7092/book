@@ -10,12 +10,11 @@ import {
   type OpdsPagination,
   type OpdsFeed,
 } from "./opds-parser";
-import { getPluginContext } from "./index";
+import { getOpdsServer } from "./index";
 
 const emit = defineEmits<{ (e: "close"): void }>();
 
-const ctx = getPluginContext();
-const server = ctx?.server;
+const server = getOpdsServer();
 const bookshelfStore = useBookshelfStore();
 const uiStore = useUIStore();
 
