@@ -17,6 +17,17 @@ export function createStatsEngine(
   storage: PluginStorageAdapter,
   getSession: () => ReaderSession | null,
 ) {
+  // Plugin events fire without awaiting their handlers, so concurrent calls
+  // (e.g. book:closed while a content:loaded handler is still writing) could
+  // interleave read-modify-write cycles on the sessions record. Serialize all
+  // storage-touching operations through a promise queue.
+  let queue: Promise<unknown> = Promise.resolve();
+  function enqueue<T>(fn: () => Promise<T>): Promise<T> {
+    const run = queue.then(fn);
+    queue = run.catch(() => undefined);
+    return run;
+  }
+
   // ── Session helpers ──
 
   async function getSessions(): Promise<ReadingSession[]> {
@@ -30,102 +41,125 @@ export function createStatsEngine(
 
   // ── Public API ──
 
-  async function startSession(bookId: string): Promise<void> {
-    const sessions = await getSessions();
+  function startSession(bookId: string): Promise<void> {
+    return enqueue(async () => {
+      const sessions = await getSessions();
 
-    // Close any lingering open sessions for this book
-    sessions.forEach((session) => {
-      if (session.bookId === bookId && !session.endTime) {
-        session.endTime = Date.now();
-      }
+      // Close any lingering open sessions for this book
+      sessions.forEach((session) => {
+        if (session.bookId === bookId && !session.endTime) {
+          session.endTime = Date.now();
+        }
+      });
+
+      sessions.push({
+        bookId,
+        startTime: Date.now(),
+        chaptersRead: [],
+        wordsRead: 0,
+      });
+
+      await saveSessions(sessions);
     });
-
-    sessions.push({
-      bookId,
-      startTime: Date.now(),
-      chaptersRead: [],
-      wordsRead: 0,
-    });
-
-    await saveSessions(sessions);
   }
 
-  async function endSession(
+  function endSession(
     bookId: string,
     chapterId?: string,
-    wordsRead?: number,
+    totalChapters?: number,
   ): Promise<BookReadingStats> {
-    const sessions = await getSessions();
-    const idx = sessions.findIndex((s) => s.bookId === bookId && !s.endTime);
+    return enqueue(async () => {
+      const sessions = await getSessions();
+      const idx = sessions.findIndex((s) => s.bookId === bookId && !s.endTime);
 
-    if (idx === -1) {
-      const existingStats = await getStats(bookId);
-      return (
-        existingStats || {
-          bookId,
-          totalSessions: 0,
-          totalReadingTime: 0,
-          averageSessionTime: 0,
-          wordsRead: 0,
-          readingSpeed: 0,
-          chaptersCompleted: 0,
-          lastActiveDate: "",
-          activeHours: [],
-          firstReadAt: undefined,
-          lastReadAt: undefined,
-        }
-      );
-    }
+      if (idx === -1) {
+        const existingStats = await getStats(bookId);
+        return (
+          existingStats || {
+            bookId,
+            totalSessions: 0,
+            totalReadingTime: 0,
+            averageSessionTime: 0,
+            wordsRead: 0,
+            readingSpeed: 0,
+            chaptersCompleted: 0,
+            lastActiveDate: "",
+            activeHours: [],
+            firstReadAt: undefined,
+            lastReadAt: undefined,
+          }
+        );
+      }
 
-    sessions[idx].endTime = Date.now();
-    if (chapterId && !sessions[idx].chaptersRead.includes(chapterId)) {
-      sessions[idx].chaptersRead.push(chapterId);
-    }
-    if (wordsRead) {
-      sessions[idx].wordsRead = (sessions[idx].wordsRead ?? 0) + wordsRead;
-    }
-    await saveSessions(sessions);
-
-    return updateStats(bookId);
-  }
-
-  async function recordChapterRead(bookId: string, chapterId: string): Promise<void> {
-    const sessions = await getSessions();
-    const session = sessions.find((s) => s.bookId === bookId && !s.endTime);
-    if (session && !session.chaptersRead.includes(chapterId)) {
-      session.chaptersRead.push(chapterId);
+      sessions[idx].endTime = Date.now();
+      if (chapterId && !sessions[idx].chaptersRead.includes(chapterId)) {
+        sessions[idx].chaptersRead.push(chapterId);
+      }
       await saveSessions(sessions);
-    }
+
+      return computeStats(bookId, totalChapters);
+    });
   }
 
-  async function recordWordsRead(bookId: string, words: number): Promise<void> {
-    const sessions = await getSessions();
-    const session = sessions.find((s) => s.bookId === bookId && !s.endTime);
-    if (session) {
+  function recordChapterRead(bookId: string, chapterId: string): Promise<void> {
+    return enqueue(async () => {
+      const sessions = await getSessions();
+      const session = sessions.find((s) => s.bookId === bookId && !s.endTime);
+      if (session && !session.chaptersRead.includes(chapterId)) {
+        session.chaptersRead.push(chapterId);
+        await saveSessions(sessions);
+      }
+    });
+  }
+
+  function recordWordsRead(bookId: string, chapterId: string, words: number): Promise<void> {
+    return enqueue(async () => {
+      const sessions = await getSessions();
+
+      // Dedupe across every session of this book: a chapter's word count is
+      // only counted once even if it is reopened after a page refresh.
+      const alreadyCounted = sessions.some(
+        (s) => s.bookId === bookId && s.wordsByChapter?.[chapterId] !== undefined,
+      );
+      if (alreadyCounted) return;
+
+      const session = sessions.find((s) => s.bookId === bookId && !s.endTime);
+      if (!session) return;
+
+      session.wordsByChapter = { ...session.wordsByChapter, [chapterId]: words };
       session.wordsRead = (session.wordsRead ?? 0) + words;
       await saveSessions(sessions);
-    }
+    });
   }
 
-  async function getStats(bookId: string): Promise<BookReadingStats | undefined> {
+  function getStats(bookId: string): Promise<BookReadingStats | undefined> {
     return storage.get<BookReadingStats>(statsKey(bookId));
   }
 
   async function getAllStats(): Promise<BookReadingStats[]> {
-    const all = await storage.getAll<BookReadingStats>();
-    // Filter out the sessions entry ("{ sessions: [...] }") that snuck in
-    return all
-      .filter((s): s is BookReadingStats => {
-        const r = s as unknown as Record<string, unknown>;
-        return typeof r.bookId === "string" && typeof r.totalReadingTime === "number";
-      })
-      .map((s) => {
-        if (!Array.isArray(s.activeHours)) s.activeHours = [];
-        return s;
-      });
+    const all = await storage.getAll<BookReadingStats | { sessions: ReadingSession[] }>();
+    return all.filter(isBookReadingStats).map((s) => {
+      if (!Array.isArray(s.activeHours)) s.activeHours = [];
+      return s;
+    });
   }
 
-  async function updateStats(bookId: string): Promise<BookReadingStats> {
+  /**
+   * Sessions live in the same storage partition as per-book stats; only the
+   * `sessions` key holds a non-stats record, which this guard filters out.
+   */
+  function isBookReadingStats(value: unknown): value is BookReadingStats {
+    if (typeof value !== "object" || value === null) return false;
+    const r = value as Record<string, unknown>;
+    return typeof r.bookId === "string" && typeof r.totalReadingTime === "number";
+  }
+
+  /**
+   * Recompute and persist the aggregate stats for a book. Plain internal
+   * function — callers already inside the queue (e.g. endSession) must use
+   * this directly; the public updateStats wraps it in a queued call.
+   */
+  async function computeStats(bookId: string, totalChapters?: number): Promise<BookReadingStats> {
     const allBookSessions = (await getSessions()).filter((s) => s.bookId === bookId);
 
     const totalSessions = allBookSessions.length;
@@ -135,8 +169,9 @@ export function createStatsEngine(
     }, 0);
     const averageSessionTime = totalSessions > 0 ? Math.round(totalReadingTime / totalSessions) : 0;
     const wordsRead = allBookSessions.reduce((sum, s) => sum + (s.wordsRead ?? 0), 0);
+    // Words per minute
     const readingSpeed =
-      totalReadingTime > 0 ? Math.round((wordsRead / totalReadingTime) * 3600000) : 0;
+      totalReadingTime > 0 ? Math.round((wordsRead / totalReadingTime) * 60000) : 0;
     const chaptersCompleted = new Set(allBookSessions.flatMap((s) => s.chaptersRead)).size;
 
     // Active hours histogram
@@ -160,6 +195,7 @@ export function createStatsEngine(
       chaptersCompleted,
       lastActiveDate,
       activeHours,
+      chaptersTotal: totalChapters,
       firstReadAt: allBookSessions[0]?.startTime,
       lastReadAt: lastSession?.endTime,
     };
@@ -168,46 +204,49 @@ export function createStatsEngine(
     return stats;
   }
 
+  function updateStats(bookId: string, totalChapters?: number): Promise<BookReadingStats> {
+    return enqueue(() => computeStats(bookId, totalChapters));
+  }
+
   async function getSummaryStats(): Promise<{
     totalBooks: number;
     totalReadingTime: number;
     totalSessions: number;
-    booksInProgress: number;
-    completedBooks: number;
     thisWeekReadingTime: number;
   }> {
     const allStats = await getAllStats();
     const now = Date.now();
     const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
 
+    // Real weekly aggregate: sum the overlap of every session with the last
+    // 7 days (in-progress sessions count up to now).
     let thisWeekReadingTime = 0;
-    allStats.forEach((stats) => {
-      if (stats.lastReadAt && stats.lastReadAt > weekAgo) {
-        const sessionsThisWeek = Math.ceil(stats.totalSessions / 4);
-        thisWeekReadingTime += stats.averageSessionTime * sessionsThisWeek;
-      }
-    });
+    for (const s of await getSessions()) {
+      const start = Math.max(s.startTime, weekAgo);
+      const end = Math.min(s.endTime ?? now, now);
+      if (end > start) thisWeekReadingTime += end - start;
+    }
 
     return {
       totalBooks: allStats.length,
       totalReadingTime: allStats.reduce((sum, s) => sum + s.totalReadingTime, 0),
       totalSessions: allStats.reduce((sum, s) => sum + s.totalSessions, 0),
-      booksInProgress: allStats.filter((s) => s.chaptersCompleted > 0).length,
-      completedBooks: 0,
       thisWeekReadingTime,
     };
   }
 
-  async function deleteStats(bookId: string): Promise<void> {
-    await storage.delete(statsKey(bookId));
+  function deleteStats(bookId: string): Promise<void> {
+    return enqueue(async () => {
+      await storage.delete(statsKey(bookId));
 
-    const sessions = await getSessions();
-    const filtered = sessions.filter((s) => s.bookId !== bookId);
-    if (filtered.length > 0) {
-      await saveSessions(filtered);
-    } else {
-      await storage.delete(SESSIONS_KEY);
-    }
+      const sessions = await getSessions();
+      const filtered = sessions.filter((s) => s.bookId !== bookId);
+      if (filtered.length > 0) {
+        await saveSessions(filtered);
+      } else {
+        await storage.delete(SESSIONS_KEY);
+      }
+    });
   }
 
   return {

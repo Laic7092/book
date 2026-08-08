@@ -13,8 +13,6 @@ interface SummaryStats {
   totalBooks: number;
   totalReadingTime: number;
   totalSessions: number;
-  booksInProgress: number;
-  completedBooks: number;
   thisWeekReadingTime: number;
 }
 

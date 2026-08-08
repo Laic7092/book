@@ -128,6 +128,8 @@ export interface ReadingSession {
   endTime?: number; // Session end timestamp (recorded when closing book)
   chaptersRead: string[]; // Chapter IDs read in this session
   wordsRead?: number; // Approximate words read in this session
+  /** Word counts per chapter — the dedup source for wordsRead. */
+  wordsByChapter?: Record<string, number>;
 }
 
 /**
@@ -143,7 +145,7 @@ export interface BookReadingStats {
   chaptersCompleted: number; // Number of chapters completed
   lastActiveDate: string; // Last active date (YYYY-MM-DD format)
   activeHours: number[]; // Array of hours (0-23) when user was active
-  estimatedTimeRemaining?: number; // Estimated time remaining in milliseconds
+  chaptersTotal?: number; // Total chapters in the book (recorded at session end)
   firstReadAt?: number; // Timestamp of first reading session
   lastReadAt?: number; // Timestamp of most recent session end
 }
