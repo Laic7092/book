@@ -14,7 +14,7 @@ export const bookSourcesPlugin: Plugin = {
   name: "书源导入",
   version: "0.1.0",
   setup(ctx) {
-    _manager = createSourceManager(ctx.server);
+    _manager = createSourceManager(ctx.server, ctx.storage);
 
     ctx.ui.registerModal("book-sources", () => import("./BookSourcesPanel.vue"));
     ctx.ui.registerBookshelfMenuAction({

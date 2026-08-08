@@ -6,7 +6,8 @@
 
 import type { ServerClient } from "../../utils/api";
 import type { NetFetchInit } from "@book/contracts";
-import { STORES, dbPut, dbGetAll, dbDelete } from "../../storage/db";
+import type { PluginStorageAdapter } from "../types";
+import { createPluginStorageAdapter } from "../context";
 import {
   parseSearchResults,
   parseBookInfo,
@@ -75,31 +76,29 @@ export interface SourceManager {
 
 // ── Persistence ──
 
-const STORE_ID = "_book_sources";
+/**
+ * Legacy sources were stored under the plugin id "_book_sources" (a literal
+ * string, not the plugin's real id "book-sources"). Migrate them into the
+ * plugin's own storage partition once, when the imported list is first read.
+ */
+const LEGACY_PLUGIN_ID = "_book_sources";
+let legacyMigrated = false;
 
-interface PersistedSource {
-  pluginId: string;
-  key: string;
-  value: LegadoSource;
-  createdAt: number;
-}
+async function migrateLegacySources(storage: PluginStorageAdapter): Promise<void> {
+  if (legacyMigrated) return;
+  legacyMigrated = true;
 
-async function loadPersistedSources(): Promise<LegadoSource[]> {
-  const all = await dbGetAll<PersistedSource>(STORES.PLUGIN_STORE);
-  return all.filter((r) => r.pluginId === STORE_ID).map((r) => r.value);
-}
+  const legacy = createPluginStorageAdapter(LEGACY_PLUGIN_ID);
+  const old = await legacy.getAll<LegadoSource>();
+  if (!old.length) return;
 
-async function persistSource(source: LegadoSource): Promise<void> {
-  await dbPut(STORES.PLUGIN_STORE, {
-    pluginId: STORE_ID,
-    key: source.bookSourceUrl,
-    value: source,
-    createdAt: Date.now(),
-  } as PersistedSource);
-}
+  // Never overwrite data that was already saved under the new partition.
+  if ((await storage.getAll<LegadoSource>()).length) return;
 
-async function removePersistedSource(sourceUrl: string): Promise<void> {
-  await dbDelete(STORES.PLUGIN_STORE, [STORE_ID, sourceUrl]);
+  for (const src of old) {
+    await storage.put(src.bookSourceUrl, src, Date.now());
+  }
+  await legacy.clear();
 }
 
 // ── Built-in source ──
@@ -167,12 +166,18 @@ function parseLegadoUrl(raw: string): RequestConfig {
 
 // ── Factory ──
 
-export function createSourceManager(server: ServerClient): SourceManager {
+export function createSourceManager(
+  server: ServerClient,
+  storage: PluginStorageAdapter,
+): SourceManager {
   // Cache of loaded imported sources
   let importedCache: LegadoSource[] | null = null;
 
   async function getImported(): Promise<LegadoSource[]> {
-    if (!importedCache) importedCache = await loadPersistedSources();
+    if (!importedCache) {
+      await migrateLegacySources(storage);
+      importedCache = await storage.getAll<LegadoSource>();
+    }
     return importedCache;
   }
 
@@ -212,12 +217,12 @@ export function createSourceManager(server: ServerClient): SourceManager {
     },
 
     async save(source: LegadoSource) {
-      await persistSource(source);
+      await storage.put(source.bookSourceUrl, source, Date.now());
       invalidateCache();
     },
 
     async remove(sourceUrl: string) {
-      await removePersistedSource(sourceUrl);
+      await storage.delete(sourceUrl);
       invalidateCache();
     },
 
@@ -234,7 +239,7 @@ export function createSourceManager(server: ServerClient): SourceManager {
         throw new Error("无效的书源 JSON 格式");
       }
       for (const src of sources) {
-        await persistSource(src);
+        await storage.put(src.bookSourceUrl, src, Date.now());
       }
       invalidateCache();
       return sources;
