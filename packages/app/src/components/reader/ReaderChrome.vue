@@ -80,7 +80,6 @@ async function openModal(modal: string) {
     </button>
     <div class="header-center">
       <h1 class="book-title">{{ bookTitle }}</h1>
-      <span v-if="chapterTitle" class="chapter-title">{{ chapterTitle }}</span>
     </div>
     <div class="header-actions">
       <button
@@ -237,16 +236,6 @@ async function openModal(modal: string) {
   margin: 0;
   letter-spacing: -0.01em;
   color: var(--reader-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-}
-
-.chapter-title {
-  font-size: 12px;
-  color: var(--text-secondary);
-  opacity: 0.8;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -511,10 +500,6 @@ async function openModal(modal: string) {
     font-size: 14px;
   }
 
-  .chapter-title {
-    font-size: 11px;
-  }
-
   .footer-sections {
     padding: 8px;
     padding-bottom: max(8px, env(safe-area-inset-bottom, 8px));
@@ -595,10 +580,6 @@ async function openModal(modal: string) {
   }
 
   .book-title,
-  .chapter-title {
-    font-size: 12px;
-  }
-
   .footer-sections {
     padding: 6px 12px;
     min-height: 44px;

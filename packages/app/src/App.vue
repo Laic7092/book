@@ -48,23 +48,21 @@ watch(
 
 <template>
   <Transition name="page">
-    <component
-      v-if="currentRoute.name === 'page' && pageComponent"
-      :is="pageComponent"
-      key="page"
-    />
-    <template v-else-if="currentRoute.name === 'reader'" key="reader">
-      <FixedLayoutReader
-        v-if="readerStore.currentBook && isFixedLayout"
-        :book="readerStore.currentBook"
+    <KeepAlive :include="['ReflowableReader', 'FixedLayoutReader', 'Bookshelf']">
+      <component
+        v-if="currentRoute.name === 'page' && pageComponent"
+        :is="pageComponent"
+        key="page"
       />
-      <ReflowableReader v-else-if="readerStore.currentBook" :book="readerStore.currentBook" />
-      <div v-else class="reader-loading" />
-    </template>
-    <Bookshelf v-else key="bookshelf" />
+      <template v-else-if="currentRoute.name === 'reader'" key="reader">
+        <FixedLayoutReader
+          v-if="readerStore.currentBook && isFixedLayout"
+          :book="readerStore.currentBook"
+        />
+        <ReflowableReader v-else-if="readerStore.currentBook" :book="readerStore.currentBook" />
+        <div v-else class="reader-loading" />
+      </template>
+      <Bookshelf v-else key="bookshelf" />
+    </KeepAlive>
   </Transition>
 </template>
-
-<style scoped>
-/* App-level scoped styles — global tokens and base styles live in styles/tokens.css */
-</style>
