@@ -1,5 +1,6 @@
 import type { ReaderSettings } from "./types";
-import { generateThemeCSS, generateBaseCSS, generateTypographyCSS } from "../../utils/reader-css";
+import { generateThemeCSS, generateTypographyCSS } from "../../utils/reader-css";
+import { BASE_CSS } from "@book/reader-engine";
 import { buildCustomColors } from "./index";
 
 export interface PreviewIframe {
@@ -37,7 +38,7 @@ export function createPreviewIframe(
     settings.theme || settings.useCustomColors || settings.customBgImage
       ? generateThemeCSS(settings.theme, settings.contrast, customColors)
       : "";
-  const baseCSS = generateBaseCSS();
+  const baseCSS = BASE_CSS;
   const typographyCSS = generateTypographyCSS(settings);
 
   doc.open();

@@ -7,7 +7,7 @@ export { Engine } from "./engine";
 export type { EngineOptions, ReaderSession } from "./engine";
 export type { ResolvedChapter, ResourceInfo } from "./resources";
 export { injectResources, clearResources } from "./resources";
-export { BASE_CSS, PAGINATION_CSS } from "./styles";
+export { BASE_CSS } from "./styles";
 export {
   computePageFromOffset,
   computeAnchorScrollTop,

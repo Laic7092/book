@@ -272,19 +272,6 @@ export function generateCfiFromRange(
 }
 
 /**
- * Generate a CFI for the current selection.
- */
-export function generateCfiFromSelection(spineIndex: number, contentRoot: Element): string | null {
-  const selection = window.getSelection();
-  if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
-    return null;
-  }
-
-  const range = selection.getRangeAt(0);
-  return generateCfiFromRange(spineIndex, range, contentRoot);
-}
-
-/**
  * Generate a CFI for a specific element position.
  * Useful for bookmarking the top of an element.
  */

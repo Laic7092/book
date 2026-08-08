@@ -1,34 +1,5 @@
 import type { BookParser, ParserResult, StreamingParseEvent } from "../types";
-
-interface SerializedResult {
-  id: string;
-  title: string;
-  author: string;
-  coverUrl?: string;
-  chapters: Array<{
-    id: string;
-    title: string;
-    href?: string;
-    order: number;
-    content?: string;
-  }>;
-  contentEntries: Array<[string, string]>;
-  rawData?: ArrayBuffer;
-}
-
-interface WorkerMessageIn {
-  id: number;
-  file: File;
-}
-
-interface WorkerMessageOut {
-  type: "success" | "stream-event" | "stream-done" | "error";
-  id: number;
-  result?: SerializedResult;
-  event?: StreamingParseEvent;
-  error?: string;
-  needsMainThread?: boolean;
-}
+import type { SerializedResult, WorkerMessageIn, WorkerMessageOut } from "./protocol";
 
 function deserialize(msg: SerializedResult): ParserResult {
   return {

@@ -4,7 +4,7 @@ import { PLUGIN_BRAND } from "../types";
 import { createEntityStore, type EntityStore } from "../store-factory";
 import type { ReaderSettings, CustomFontFace } from "./types";
 import { DEFAULT_SETTINGS } from "./defaults";
-import { generateThemeCSS, generateBaseCSS, generateTypographyCSS } from "../../utils/reader-css";
+import { generateThemeCSS, generateTypographyCSS } from "../../utils/reader-css";
 
 // ── State ──
 
@@ -93,7 +93,9 @@ function buildFullCSS(s: ReaderSettings, fonts?: CustomFontFace[]): string {
   if (activeFont) {
     fontFacesCSS = buildFontFacesCSS([activeFont]);
   }
-  return generateBaseCSS() + fontFacesCSS + themeCSS + generateTypographyCSS(s);
+  // Base layout CSS is owned by reader-engine (injected into the iframe);
+  // this style only carries theme + typography increments.
+  return fontFacesCSS + themeCSS + generateTypographyCSS(s);
 }
 
 // ── Plugin ──

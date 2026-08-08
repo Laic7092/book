@@ -2,52 +2,7 @@
 // Formats that need browser APIs (DOMParser, window, canvas) will throw
 // during import or parse — the client catches these and retries on the main thread.
 
-import type { StreamingParseEvent } from "../index";
-
-interface ParseRequest {
-  id: number;
-  file: File;
-}
-
-interface SerializedResult {
-  id: string;
-  title: string;
-  author: string;
-  coverUrl?: string;
-  chapters: Array<{
-    id: string;
-    title: string;
-    href?: string;
-    order: number;
-    content?: string;
-  }>;
-  contentEntries: Array<[string, string]>;
-  rawData?: ArrayBuffer;
-}
-
-interface ParseSuccessMessage {
-  type: "success";
-  id: number;
-  result: SerializedResult;
-}
-
-interface ParseStreamEventMessage {
-  type: "stream-event";
-  id: number;
-  event: StreamingParseEvent;
-}
-
-interface ParseStreamDoneMessage {
-  type: "stream-done";
-  id: number;
-}
-
-interface ParseErrorMessage {
-  type: "error";
-  id: number;
-  error: string;
-  needsMainThread?: boolean;
-}
+import type { SerializedResult, WorkerMessageIn, WorkerMessageOut } from "./protocol";
 
 // 兜底识别:parser 未声明 requiresBrowser 但仍用到浏览器全局时,
 // ReferenceError 文案在 Chrome/Firefox 是 "X is not defined",
@@ -72,7 +27,7 @@ async function doParse(id: number, file: File): Promise<void> {
       id,
       error: err instanceof Error ? err.message : String(err),
       needsMainThread: isBrowserApiError(err),
-    } satisfies ParseErrorMessage);
+    } satisfies WorkerMessageOut);
     return;
   }
 
@@ -82,7 +37,7 @@ async function doParse(id: number, file: File): Promise<void> {
       type: "error",
       id,
       error: `Unsupported format: ${file.type || file.name}`,
-    } satisfies ParseErrorMessage);
+    } satisfies WorkerMessageOut);
     return;
   }
 
@@ -94,7 +49,7 @@ async function doParse(id: number, file: File): Promise<void> {
       id,
       error: `${parser.format} parser requires browser APIs; falling back to main thread`,
       needsMainThread: true,
-    } satisfies ParseErrorMessage);
+    } satisfies WorkerMessageOut);
     return;
   }
 
@@ -102,18 +57,18 @@ async function doParse(id: number, file: File): Promise<void> {
     try {
       const gen = parser.parseStreaming(file);
       for await (const event of gen) {
-        postMessage({ type: "stream-event", id, event } satisfies ParseStreamEventMessage);
+        postMessage({ type: "stream-event", id, event } satisfies WorkerMessageOut);
       }
       // The stream contract ends with an explicit done message; without it
       // the client's pending promise would never resolve.
-      postMessage({ type: "stream-done", id } satisfies ParseStreamDoneMessage);
+      postMessage({ type: "stream-done", id } satisfies WorkerMessageOut);
     } catch (err) {
       postMessage({
         type: "error",
         id,
         error: err instanceof Error ? err.message : String(err),
         needsMainThread: isBrowserApiError(err),
-      } satisfies ParseErrorMessage);
+      } satisfies WorkerMessageOut);
     }
     return;
   }
@@ -140,7 +95,7 @@ async function doParse(id: number, file: File): Promise<void> {
     if (serialized.rawData) transfer.push(serialized.rawData);
 
     postMessage(
-      { type: "success", id, result: serialized } satisfies ParseSuccessMessage,
+      { type: "success", id, result: serialized } satisfies WorkerMessageOut,
       transfer.length ? { transfer } : undefined,
     );
   } catch (err) {
@@ -149,10 +104,10 @@ async function doParse(id: number, file: File): Promise<void> {
       id,
       error: err instanceof Error ? err.message : String(err),
       needsMainThread: isBrowserApiError(err),
-    } satisfies ParseErrorMessage);
+    } satisfies WorkerMessageOut);
   }
 }
 
-self.onmessage = (e: MessageEvent<ParseRequest>) => {
+self.onmessage = (e: MessageEvent<WorkerMessageIn>) => {
   void doParse(e.data.id, e.data.file);
 };

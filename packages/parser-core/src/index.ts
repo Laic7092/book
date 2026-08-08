@@ -12,7 +12,6 @@ export type { PdfOutlineItem } from "./pdf/pdf-renderer";
 export {
   registerParserLoader,
   getParserForFormat,
-  getParserForFile,
   loadParserForFormat,
   getParserForFileAuto,
   getParsers,

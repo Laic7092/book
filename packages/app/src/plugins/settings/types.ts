@@ -33,6 +33,3 @@ export interface CustomFontFace {
   data: string; // base64-encoded font data
   format: string; // "woff2" | "ttf" | "otf"
 }
-
-/** @deprecated Use ThemeRegistry (src/core/theme-registry.ts) instead. */
-export const THEME_COLORS = {} as Record<string, { background: string; text: string }>;

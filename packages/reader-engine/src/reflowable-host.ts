@@ -1,7 +1,7 @@
 import { type ReaderEffect, type Chapter } from "@book/reader-core";
 import { getParserForFormat } from "@book/parser-core";
 import { Engine, type EngineOptions } from "./engine";
-import { BASE_CSS, PAGINATION_CSS } from "./styles";
+import { BASE_CSS } from "./styles";
 import {
   resolveChapterResources,
   injectResources,
@@ -549,7 +549,7 @@ export class ReflowableHost extends Engine {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <style id="base-style">${BASE_CSS}\n${PAGINATION_CSS}</style>
+  <style id="base-style">${BASE_CSS}</style>
 </head>
 <body class="reader-content">
 </body>
