@@ -25,6 +25,8 @@ export interface ReaderState {
   page: PageState;
   /** In scroll mode: progress within the current chapter (0..1), not whole-book. */
   scrollProgress: number;
+  /** Viewport-top offset inside the chapter (0..1), for exact restore. */
+  scrollAnchor: number | undefined;
   lastError: string | null;
 }
 
@@ -36,7 +38,7 @@ export type ReaderAction =
       chapterIndex: number;
       mode: "pagination" | "scroll";
       initialPage?: Partial<PageState>;
-      initialScroll?: Partial<{ progress: number }>;
+      initialScroll?: Partial<{ progress: number; anchor?: number }>;
     }
   | { type: "CHAPTER_LOADED"; chapterId: string }
   | { type: "CHAPTER_FAILED"; chapterId: string; error: string }
@@ -46,14 +48,14 @@ export type ReaderAction =
   | { type: "GO_TO_CHAPTER"; chapterId: string; targetPage?: number }
   | { type: "GO_TO_PAGE"; page: number }
   | { type: "SET_MODE"; mode: "pagination" | "scroll" }
-  | { type: "SCROLL_PROGRESS"; bookProgress: number }
+  | { type: "SCROLL_PROGRESS"; bookProgress: number; anchor?: number }
   | { type: "SET_CURRENT_CHAPTER"; chapterId: string }
   | { type: "RETRY" }
   | { type: "TEARDOWN" };
 
 export type ReaderEffect =
   | { type: "FETCH_CHAPTER"; bookId: string; chapterId: string }
-  | { type: "SCROLL_PROGRESS_UPDATED"; progress: number }
+  | { type: "SCROLL_PROGRESS_UPDATED"; progress: number; anchor?: number }
   | { type: "PAGE_POSITION_CHANGED"; page: number }
   | { type: "MODE_CHANGED"; mode: "paginated" | "scroll" }
   | { type: "CHAPTER_DID_CHANGE"; chapterId: string; previousChapterId: string | null }
@@ -67,6 +69,7 @@ export type ReaderEffect =
       mode: "pagination" | "scroll";
       page: number;
       scrollProgress: number;
+      scrollAnchor: number | undefined;
     };
 
 export function createInitialState(): ReaderState {
@@ -78,6 +81,7 @@ export function createInitialState(): ReaderState {
     status: "idle",
     page: { current: 0, total: 0, pendingTarget: null },
     scrollProgress: 0,
+    scrollAnchor: undefined,
     lastError: null,
   };
 }
@@ -117,6 +121,7 @@ function initReducer(
     status: "loading",
     page: { current: 0, total: 0, pendingTarget: null, ...action.initialPage },
     scrollProgress: action.initialScroll?.progress ?? 0,
+    scrollAnchor: action.initialScroll?.anchor,
     lastError: null,
   };
 
@@ -299,6 +304,7 @@ function goToChapterReducer(
     currentChapterIndex: idx,
     page: { ...state.page, current: 0, total: 0, pendingTarget: action.targetPage ?? null },
     scrollProgress: 0,
+    scrollAnchor: undefined,
     lastError: null,
   };
 
@@ -347,6 +353,7 @@ function setModeReducer(
     mode: action.mode,
     page: { current: 0, total: 0, pendingTarget: null },
     scrollProgress: 0,
+    scrollAnchor: undefined,
   };
 
   return {
@@ -363,9 +370,17 @@ function scrollProgressReducer(
 ): { state: ReaderState; effects: ReaderEffect[] } {
   if (state.status !== "ready") return { state, effects: [] };
   return {
-    state: { ...state, scrollProgress: action.bookProgress },
+    // anchor may be absent while the restored document is still settling;
+    // keep the saved anchor rather than overwriting it with the clamped value.
+    state: {
+      ...state,
+      scrollProgress: action.bookProgress,
+      scrollAnchor: action.anchor !== undefined ? action.anchor : state.scrollAnchor,
+    },
     // Notify so plugins can debounce-persist; no polling needed.
-    effects: [{ type: "SCROLL_PROGRESS_UPDATED", progress: action.bookProgress }],
+    effects: [
+      { type: "SCROLL_PROGRESS_UPDATED", progress: action.bookProgress, anchor: action.anchor },
+    ],
   };
 }
 
@@ -420,6 +435,7 @@ function teardownReducer(state: ReaderState): { state: ReaderState; effects: Rea
       mode: state.mode,
       page: state.page.current,
       scrollProgress: state.scrollProgress,
+      scrollAnchor: state.scrollAnchor,
     });
   }
   return { state: createInitialState(), effects };

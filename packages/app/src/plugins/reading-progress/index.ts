@@ -6,6 +6,7 @@ interface ProgressData {
   chapterIndex: number;
   pageIndex?: number;
   scrollProgress?: number;
+  scrollAnchor?: number;
 }
 
 const PROGRESS_PREFIX = "readingProgress";
@@ -66,12 +67,19 @@ export const readingProgressPlugin: Plugin = {
     });
     ctx.events.on(
       "reader:unmounted",
-      ({ bookId, chapterId, chapterIndex, mode, page, scrollProgress }) => {
+      ({ bookId, chapterId, chapterIndex, mode, page, scrollProgress, scrollAnchor }) => {
         flushSave();
         // The machine resets its state before this event fires; save the
         // snapshot carried by the event instead of reading the session.
         if (!chapterId || chapterIndex < 0) return;
-        void saveFromSnapshot(bookId, { chapterId, chapterIndex, mode, page, scrollProgress });
+        void saveFromSnapshot(bookId, {
+          chapterId,
+          chapterIndex,
+          mode,
+          page,
+          scrollProgress,
+          scrollAnchor,
+        });
       },
     );
 
@@ -103,6 +111,7 @@ export const readingProgressPlugin: Plugin = {
         mode: "pagination" | "scroll";
         page: number;
         scrollProgress: number;
+        scrollAnchor?: number;
       },
     ) {
       lastSavedAt = performance.now();
@@ -111,8 +120,10 @@ export const readingProgressPlugin: Plugin = {
         chapterIndex: snapshot.chapterIndex,
       };
       if (snapshot.mode === "scroll") {
-        // In-chapter progress (0..1); restored against the single-chapter document.
+        // In-chapter progress (0..1); scrollAnchor is the viewport-top offset
+        // inside the chapter, restored exactly (see scroll-progress.ts).
         data.scrollProgress = snapshot.scrollProgress;
+        data.scrollAnchor = snapshot.scrollAnchor;
       } else {
         data.pageIndex = snapshot.page;
       }
@@ -131,6 +142,7 @@ export const readingProgressPlugin: Plugin = {
         mode: s.mode,
         page: s.page.current,
         scrollProgress: s.scrollProgress,
+        scrollAnchor: s.scrollAnchor,
       });
     }
 
@@ -147,7 +159,7 @@ export const readingProgressPlugin: Plugin = {
           ...config,
           mode: "scroll",
           chapterIndex: data.chapterIndex,
-          initialScroll: { progress: data.scrollProgress },
+          initialScroll: { progress: data.scrollProgress, anchor: data.scrollAnchor },
         };
       }
       if (data.pageIndex !== undefined) {

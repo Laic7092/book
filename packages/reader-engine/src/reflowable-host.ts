@@ -303,10 +303,11 @@ export class ReflowableHost extends Engine {
     this.dispatch({ type: "CHAPTER_LOADED", chapterId });
 
     requestAnimationFrame(() => {
-      this.restoreScrollPosition();
-      this.syncScrollPosition();
-      this.setupScrollSentinels();
-      this.startScrollCalibration();
+      void this.restoreScrollPosition().then(() => {
+        this.syncScrollPosition();
+        this.setupScrollSentinels();
+        this.startScrollCalibration();
+      });
     });
   }
 
@@ -345,14 +346,14 @@ export class ReflowableHost extends Engine {
     const scrollTop = html.scrollTop || 0;
     const clientHeight = html.clientHeight || 0;
 
-    const { chapterId, progress } = computeChapterScrollProgress(
+    const { chapterId, progress, anchor } = computeChapterScrollProgress(
       doc.body.querySelectorAll<HTMLElement>("[data-chapter-id]"),
       scrollTop,
       clientHeight,
       html.scrollHeight || 0,
     );
 
-    this.dispatch({ type: "SCROLL_PROGRESS", bookProgress: progress });
+    this.dispatch({ type: "SCROLL_PROGRESS", bookProgress: progress, anchor });
 
     // Notify machine when visible chapter changes (without triggering a fetch)
     if (chapterId) {
@@ -381,22 +382,19 @@ export class ReflowableHost extends Engine {
     this.handleScroll();
   }
 
-  /** Restore scroll position after content load in scroll mode */
-  private restoreScrollPosition(): void {
+  /** Restore scroll position after content load in scroll mode. */
+  private async restoreScrollPosition(): Promise<void> {
     if (this.state.mode !== "scroll") return;
-    const progress = this.state.scrollProgress;
-    if (progress <= 0) return;
     const doc = this.iframeDoc;
     const html = doc.documentElement;
-    // Keep the same coordinate system as computeChapterScrollProgress:
-    // in-chapter scrollTop is -rect.top and the denominator is
-    // wrapper.scrollHeight - clientHeight. A chapter whose first block (e.g.
-    // h1) carries a top margin collapses it through the wrapper into the
-    // document: the wrapper sits `offset` px below the document top, and that
-    // offset is counted in html.scrollHeight but not in wrapper.scrollHeight.
-    // Restoring against html dimensions alone would lose
-    // `offset * (1 - progress)` on every re-entry, so the in-chapter anchor
-    // drifts upward.
+    // Restore against the saved anchor (viewport-top offset inside the
+    // chapter, over the chapter's own height — see scroll-progress.ts). A
+    // chapter whose first block (e.g. h1) carries a top margin collapses it
+    // through the wrapper into the document: the wrapper sits `offset` px
+    // below the document top, and that offset is counted in html.scrollHeight
+    // but not in wrapper.scrollHeight. Restoring against html dimensions alone
+    // would lose `offset * (1 - anchor)` on every re-entry, so the in-chapter
+    // anchor drifts upward.
     const wrapper = doc.body.querySelector<HTMLElement>("[data-chapter-id]");
     if (!wrapper) return;
     // Document coordinate: viewport top + scrollTop. Reading rect.top alone is
@@ -404,11 +402,51 @@ export class ReflowableHost extends Engine {
     // the first restore (MODE_CHANGED → restructureForMode), by which time the
     // wrapper top is far above the viewport and rect.top is negative.
     const offset = wrapper.getBoundingClientRect().top + html.scrollTop;
-    const maxScroll = wrapper.scrollHeight - html.clientHeight;
-    if (maxScroll > 0) {
-      html.scrollTop = computeScrollTarget(progress, maxScroll, offset);
-      this.lastCalibratedTop = html.scrollTop;
+
+    const anchor = this.state.scrollAnchor;
+    if (anchor === undefined) {
+      // Legacy save (progress only, saturated read-fraction): fall back to
+      // the old in-chapter mapping so existing progress is not lost.
+      const progress = this.state.scrollProgress;
+      if (progress <= 0) return;
+      const maxScroll = wrapper.scrollHeight - html.clientHeight;
+      if (maxScroll > 0) {
+        html.scrollTop = computeScrollTarget(progress, maxScroll, offset);
+        this.lastCalibratedTop = html.scrollTop;
+      }
+      return;
     }
+    if (anchor <= 0) return;
+
+    // The saved viewport-top may lie beyond the single-chapter document (the
+    // viewport bottom edge needs the next chapter). Append chapters until the
+    // position is actually reachable, then set scrollTop once — no observer
+    // round-trips, no intermediate clamps.
+    for (let guard = 0; guard < 32; guard++) {
+      const maxScroll = wrapper.scrollHeight;
+      if (maxScroll <= 0) return;
+      html.scrollTop = computeScrollTarget(anchor, maxScroll, offset);
+      this.lastCalibratedTop = html.scrollTop;
+      // Position reachable: viewport bottom sits inside the document.
+      if (html.scrollTop < html.scrollHeight - html.clientHeight - 1) return;
+      if (!this.hasMoreChapters("next")) return;
+      const before = this.loadedChapterIds.size;
+      await this.autoLoadChapter("next");
+      if (this.loadedChapterIds.size === before) return; // nothing appended
+    }
+  }
+
+  private hasMoreChapters(dir: "prev" | "next"): boolean {
+    const chapters = this.state.chapters;
+    let idx = -1;
+    for (const id of this.loadedChapterIds) {
+      const i = chapters.findIndex((c) => c.id === id);
+      if (i < 0) continue;
+      if (dir === "next" && i > idx) idx = i;
+      if (dir === "prev" && (idx < 0 || i < idx)) idx = i;
+    }
+    const target = dir === "next" ? idx + 1 : idx - 1;
+    return target >= 0 && target < chapters.length;
   }
 
   /**
@@ -422,8 +460,8 @@ export class ReflowableHost extends Engine {
   private startScrollCalibration(): void {
     this.teardownScrollCalibration();
     if (this.state.mode !== "scroll") return;
-    const progress = this.state.scrollProgress;
-    if (progress <= 0) return;
+    const anchor = this.state.scrollAnchor;
+    if (anchor === undefined || anchor <= 0) return;
     this.calibrationObserver = new ResizeObserver(() => {
       if (this.state.mode !== "scroll" || this.state.status !== "ready") return;
       const html = this.iframeDoc.documentElement;
@@ -433,14 +471,14 @@ export class ReflowableHost extends Engine {
       // is usually scrolled above the viewport by the time this fires, so
       // rect.top alone would be negative and collapse the target to ~0.
       const offset = wrapper.getBoundingClientRect().top + html.scrollTop;
-      const max = wrapper.scrollHeight - html.clientHeight;
+      const max = wrapper.scrollHeight;
       if (max <= 0) return;
       // User has scrolled away from the restored position → stop calibrating.
       if (hasScrolledAway(html.scrollTop, this.lastCalibratedTop)) {
         this.teardownScrollCalibration();
         return;
       }
-      const target = computeScrollTarget(this.state.scrollProgress, max, offset);
+      const target = computeScrollTarget(this.state.scrollAnchor ?? 0, max, offset);
       html.scrollTop = target;
       this.lastCalibratedTop = target;
     });
@@ -485,10 +523,11 @@ export class ReflowableHost extends Engine {
       this.iframeDoc.documentElement.scrollTop = 0;
       if (this.state.status === "ready") {
         requestAnimationFrame(() => {
-          this.restoreScrollPosition();
-          this.syncScrollPosition();
-          this.setupScrollSentinels();
-          this.startScrollCalibration();
+          void this.restoreScrollPosition().then(() => {
+            this.syncScrollPosition();
+            this.setupScrollSentinels();
+            this.startScrollCalibration();
+          });
         });
       }
     } else {

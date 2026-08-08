@@ -49,6 +49,7 @@ export function translateEffect(effect: ReaderEffect, bookId: string): void {
       void pluginEvents.emit("scroll:progress", {
         bookId,
         progress: effect.progress,
+        anchor: effect.anchor,
       });
       break;
     case "READER_UNMOUNTED":
@@ -59,6 +60,7 @@ export function translateEffect(effect: ReaderEffect, bookId: string): void {
         mode: effect.mode,
         page: effect.page,
         scrollProgress: effect.scrollProgress,
+        scrollAnchor: effect.scrollAnchor,
       });
       break;
   }

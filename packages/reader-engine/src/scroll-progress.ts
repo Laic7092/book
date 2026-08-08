@@ -8,17 +8,26 @@ export interface ChapterWrapperLike {
 export interface ChapterScrollResult {
   chapterId: string | undefined;
   progress: number;
+  /**
+   * Viewport-top-edge offset inside the chapter (0..1), `-rect.top` over the
+   * chapter's own height. Unlike `progress` it never saturates: it pins the
+   * exact scroll position, so re-entering restores the same viewport instead
+   * of clamping to "chapter bottom aligned". Undefined when no chapter owns
+   * the anchor (degenerate fallback).
+   */
+  anchor?: number;
 }
 
 /**
  * Compute the in-chapter scroll progress for the current chapter.
  *
- * The current chapter is the one whose top line is inside the viewport and
- * closest to the viewport top (largest `rect.top`). A chapter whose top has
- * entered the viewport stays current until it scrolls past the top edge —
- * a trailing sliver of the previous chapter at the top boundary (e.g. after
- * autoLoad prepends a chapter and compensates scrollTop) never steals the
- * anchor, so `SET_CURRENT_CHAPTER` stays consistent with what is on screen.
+ * The current chapter is the one the viewport's top edge falls inside: the
+ * topmost wrapper whose content still intersects the viewport. A chapter keeps
+ * the anchor until it has fully scrolled out (its bottom edge passes the
+ * viewport top) — a trailing portion of the previous chapter sharing the
+ * viewport with the next chapter's top never steals the anchor, so
+ * `SET_CURRENT_CHAPTER` stays consistent with what the reader is actually
+ * looking at.
  *
  * - In-chapter scrollTop is the distance the wrapper's top has scrolled out of
  *   the viewport (`-rect.top`); it is stable across autoLoad append/prepend
@@ -29,9 +38,9 @@ export interface ChapterScrollResult {
  *   document); using `documentElement.scrollHeight` directly would not round
  *   trip, because a collapsed top margin of the chapter's first block (e.g. an
  *   h1) is counted in `html.scrollHeight` but not in `wrapper.scrollHeight`.
- * - When no wrapper is visible (degenerate state), fall back to the legacy
- *   whole-document ratio and return `chapterId: undefined` so chapter
- *   switching is not triggered.
+ * - When no wrapper intersects the viewport (degenerate state), fall back to
+ *   the legacy whole-document ratio and return `chapterId: undefined` so
+ *   chapter switching is not triggered.
  */
 export function computeChapterScrollProgress(
   wrappers: ArrayLike<ChapterWrapperLike>,
@@ -40,10 +49,14 @@ export function computeChapterScrollProgress(
   docScrollHeight: number,
 ): ChapterScrollResult {
   let visible: ChapterWrapperLike | undefined;
-  let bestTop = -Infinity;
+  let bestTop = Infinity;
   for (let i = 0; i < wrappers.length; i++) {
     const rect = wrappers[i].getBoundingClientRect();
-    if (rect.top <= clientHeight && rect.top > bestTop) {
+    // Wrapper intersects the viewport: its top line has not scrolled past the
+    // bottom edge and its bottom has not passed the top edge.
+    if (rect.top > clientHeight || rect.bottom <= 0) continue;
+    // Topmost intersecting wrapper owns the viewport top edge.
+    if (rect.top < bestTop) {
       visible = wrappers[i];
       bestTop = rect.top;
     }
@@ -63,5 +76,6 @@ export function computeChapterScrollProgress(
   return {
     chapterId: visible.dataset.chapterId,
     progress: Math.min(1, chapterScrollTop / max),
+    anchor: Math.min(1, Math.max(0, -rect.top / visible.scrollHeight)),
   };
 }

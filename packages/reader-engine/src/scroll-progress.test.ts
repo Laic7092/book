@@ -22,6 +22,7 @@ describe("computeChapterScrollProgress", () => {
     const result = computeChapterScrollProgress([wrapper], 200, CLIENT_HEIGHT, 5000);
     expect(result.chapterId).toBe("ch1");
     expect(result.progress).toBeCloseTo(200 / 500, 5);
+    expect(result.anchor).toBeCloseTo(200 / 1500, 5);
   });
 
   test("wrapper top above viewport uses -rect.top as in-chapter scrollTop", () => {
@@ -60,12 +61,27 @@ describe("computeChapterScrollProgress", () => {
     expect(result.progress).toBeCloseTo(100 / 500, 5);
   });
 
-  test("chapter boundary: the new chapter whose top entered the viewport wins", () => {
-    const ch1 = makeWrapper("ch1", -950, 50, 2000); // 50px sliver still at viewport bottom
-    const ch2 = makeWrapper("ch2", 50, 1050, 1500); // top line just entered the viewport
+  test("viewport top edge still inside the previous chapter keeps its anchor", () => {
+    // ch1's trailing 50px and ch2's leading 50px share the viewport; the
+    // reader is still looking at ch1 content, so the anchor stays on ch1.
+    const ch1 = makeWrapper("ch1", -950, 50, 2000);
+    const ch2 = makeWrapper("ch2", 50, 1050, 1500);
     const result = computeChapterScrollProgress([ch1, ch2], 950, CLIENT_HEIGHT, 6000);
-    expect(result.chapterId).toBe("ch2");
-    expect(result.progress).toBe(0);
+    expect(result.chapterId).toBe("ch1");
+    expect(result.progress).toBeCloseTo(950 / 1000, 5);
+  });
+
+  test("previous chapter with half a screen left shares the viewport with the next chapter's top", () => {
+    // The reported bug: ch1 trailing half-screen + ch2 leading half-screen
+    // used to switch the anchor to ch2, so re-entering dropped ch1's tail.
+    // The anchor must keep ch1 AND carry the exact viewport-top offset so
+    // re-entry restores the same half-and-half viewport.
+    const ch1 = makeWrapper("ch1", -600, 400, 1000);
+    const ch2 = makeWrapper("ch2", 400, 1400, 1000);
+    const result = computeChapterScrollProgress([ch1, ch2], 600, 800, 2000);
+    expect(result.chapterId).toBe("ch1");
+    expect(result.progress).toBe(1);
+    expect(result.anchor).toBeCloseTo(600 / 1000, 5);
   });
 
   test("after prepend compensation the current chapter top sits at viewport top", () => {
@@ -87,7 +103,7 @@ describe("computeChapterScrollProgress", () => {
   });
 
   test("scrolled to chapter end clamps at 1.0", () => {
-    const wrapper = makeWrapper("ch1", -1000, 0, 2000);
+    const wrapper = makeWrapper("ch1", -1000, 100, 2000);
     const result = computeChapterScrollProgress([wrapper], 1000, CLIENT_HEIGHT, 5000);
     expect(result.chapterId).toBe("ch1");
     expect(result.progress).toBe(1);

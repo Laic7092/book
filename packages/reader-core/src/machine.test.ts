@@ -22,6 +22,7 @@ function readyState(overrides?: Partial<ReaderState>): ReaderState {
     status: "ready",
     page: { current: 0, total: 10, pendingTarget: null },
     scrollProgress: 0,
+    scrollAnchor: undefined,
     lastError: null,
     ...overrides,
   };
