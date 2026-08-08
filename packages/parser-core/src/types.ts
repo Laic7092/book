@@ -32,6 +32,9 @@ export type StreamingParseEvent =
 
 export interface BookParser {
   format: string;
+  /** True when parsing needs browser APIs (DOMParser/document); such formats
+   * must run on the main thread and the worker bails out before executing. */
+  requiresBrowser?: boolean;
   supportsFormat(mimeType: string): boolean;
   parse(file: File): Promise<ParserResult>;
   parseStreaming?(file: File): AsyncGenerator<StreamingParseEvent>;

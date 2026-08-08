@@ -8,6 +8,7 @@ export class HtmlParser implements BookParser {
   private static readonly SUPPORTED_MIME_TYPES = ["text/html", "application/xhtml+xml"];
 
   readonly format = "html";
+  readonly requiresBrowser = true;
 
   supportsFormat(mimeType: string): boolean {
     return HtmlParser.SUPPORTED_MIME_TYPES.includes(mimeType);

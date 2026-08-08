@@ -40,6 +40,7 @@ export class EpubParser implements BookParser {
   private static readonly SUPPORTED_MIME_TYPES = ["application/epub+zip", "application/x-epub+zip"];
 
   readonly format = "epub" as const;
+  readonly requiresBrowser = true;
 
   private _entriesCache = new WeakMap<ArrayBuffer, CachedZipData>();
 

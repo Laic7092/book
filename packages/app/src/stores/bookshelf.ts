@@ -18,7 +18,10 @@ export interface BookshelfState {
   coverUrls: Map<string, string>;
 }
 
-async function computeFileHash(file: File): Promise<string> {
+async function computeFileHash(file: File): Promise<string | null> {
+  // crypto.subtle 仅在 secure context (HTTPS/localhost) 下存在;
+  // iOS Safari 经局域网 IP 访问时不可用,此时跳过查重直接导入。
+  if (!globalThis.crypto?.subtle) return null;
   const chunk = file.slice(0, 256 * 1024);
   const buffer = await chunk.arrayBuffer();
   const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
@@ -76,7 +79,9 @@ export const useBookshelfStore = defineStore("bookshelf", {
       this.isUploading = true;
       try {
         const contentHash = await computeFileHash(file);
-        const existing = this.books.find((b) => b.contentHash === contentHash);
+        const existing = contentHash
+          ? this.books.find((b) => b.contentHash === contentHash)
+          : undefined;
         if (existing) {
           useUIStore().triggerToast(
             `${file.name} 已导入为「${truncateTitle(existing.title)}」`,
@@ -85,7 +90,7 @@ export const useBookshelfStore = defineStore("bookshelf", {
           return;
         }
 
-        const result = await parseAndSaveBook(file, contentHash);
+        const result = await parseAndSaveBook(file, contentHash ?? undefined);
         await this.loadBooks();
         return result;
       } finally {

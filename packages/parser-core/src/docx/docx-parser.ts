@@ -23,6 +23,7 @@ export class DocxParser implements BookParser {
     "application/msword",
   ];
 
+  readonly requiresBrowser = true;
   readonly format = "docx";
 
   supportsFormat(mimeType: string): boolean {

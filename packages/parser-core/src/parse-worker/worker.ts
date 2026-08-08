@@ -49,15 +49,16 @@ interface ParseErrorMessage {
   needsMainThread?: boolean;
 }
 
+// 兜底识别:parser 未声明 requiresBrowser 但仍用到浏览器全局时,
+// ReferenceError 文案在 Chrome/Firefox 是 "X is not defined",
+// Safari 是 "Can't find variable: X"。仅匹配已知浏览器全局,避免误伤业务错误。
+const BROWSER_GLOBALS = ["window", "document", "DOMParser", "navigator", "Worker"] as const;
+
 function isBrowserApiError(err: unknown): boolean {
-  if (!(err instanceof Error)) return false;
+  if (!(err instanceof ReferenceError)) return false;
   const msg = err.message;
-  return (
-    msg.includes("window is not defined") ||
-    msg.includes("DOMParser is not defined") ||
-    msg.includes("document is not defined") ||
-    msg.includes("navigator is not defined") ||
-    msg.includes("Worker is not defined")
+  return BROWSER_GLOBALS.some(
+    (g) => msg.includes(`${g} is not defined`) || msg.includes(`Can't find variable: ${g}`),
   );
 }
 
@@ -81,6 +82,18 @@ async function doParse(id: number, file: File): Promise<void> {
       type: "error",
       id,
       error: `Unsupported format: ${file.type || file.name}`,
+    } satisfies ParseErrorMessage);
+    return;
+  }
+
+  // DOM-dependent formats can never run in a worker — bail out with the
+  // needsMainThread flag instead of failing with a ReferenceError.
+  if (parser.requiresBrowser) {
+    postMessage({
+      type: "error",
+      id,
+      error: `${parser.format} parser requires browser APIs; falling back to main thread`,
+      needsMainThread: true,
     } satisfies ParseErrorMessage);
     return;
   }

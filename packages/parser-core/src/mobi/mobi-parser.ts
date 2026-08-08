@@ -159,6 +159,8 @@ function findKf8ZipOffset(data: Uint8Array): number {
 }
 
 export class MobiParser implements BookParser {
+  readonly requiresBrowser = true;
+
   private static readonly SUPPORTED_MIME_TYPES = [
     "application/x-mobipocket-ebook",
     "application/x-mobi",

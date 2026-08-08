@@ -10,6 +10,7 @@ export class Fb2Parser implements BookParser {
   ];
 
   readonly format = "fb2";
+  readonly requiresBrowser = true;
 
   supportsFormat(mimeType: string): boolean {
     return Fb2Parser.SUPPORTED_MIME_TYPES.includes(mimeType);
