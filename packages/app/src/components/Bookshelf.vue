@@ -20,7 +20,7 @@ import {
   pluginStateVersion,
 } from "../plugins/manager/registry";
 import { loadPluginsFor } from "../plugins/loader";
-import { navigate } from "../utils/router";
+import { currentRoute, navigate } from "../utils/router";
 
 loadPluginsFor("bookshelf");
 
@@ -766,7 +766,7 @@ onUnmounted(() => {
 
     <!-- Modal container (plugin modals: OPDS, stats, etc.) -->
     <ModalWrapper
-      v-if="uiStore.activeModal && uiStore.activeModal !== 'toc'"
+      v-if="uiStore.activeModal && currentRoute.name === 'bookshelf'"
       :modal-type="uiStore.activeModal"
       @close="closeModal"
     />
