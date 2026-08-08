@@ -15,5 +15,9 @@
     "chardet": "^2.1.1",
     "pdfjs-dist": "^5.7.284",
     "unrar-js": "^0.2.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.7.0",
+    "jsdom": "^30.0.1"
   }
 }
