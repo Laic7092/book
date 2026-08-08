@@ -12,7 +12,6 @@ export const opdsPlugin: Plugin = {
   id: "opds",
   name: "OPDS Catalog",
   version: "0.1.0",
-  activationFailedReason: "后端服务未运行（OPDS 需要服务端代理网络请求）",
   setup(ctx) {
     pluginContext = ctx;
     ctx.ui.registerModal("opds", () => import("./OpdsPanel.vue"));
