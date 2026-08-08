@@ -76,17 +76,9 @@ const overlayVisible = computed(() => engine.isReady.value);
       :total-pages="engine.totalPages.value"
       :book-progress="engine.totalBookProgress.value"
       :current-chapter-title="currentChapterTitle || ''"
-      :can-go-to-prev-chapter="engine.currentChapterIndex.value > 0"
-      :can-go-to-next-chapter="engine.currentChapterIndex.value < engine.chapters.value.length - 1"
       @close="handleClose"
       @prev-page="engine.prevPage"
       @next-page="engine.nextPage"
-      @prev-chapter="
-        engine.handleSelectChapter(engine.chapters.value[engine.currentChapterIndex.value - 1]?.id)
-      "
-      @next-chapter="
-        engine.handleSelectChapter(engine.chapters.value[engine.currentChapterIndex.value + 1]?.id)
-      "
       @open-modal="openModal"
     />
 

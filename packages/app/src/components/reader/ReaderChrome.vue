@@ -16,16 +16,12 @@ defineProps<{
   totalPages: number;
   bookProgress: number;
   currentChapterTitle: string;
-  canGoToPrevChapter: boolean;
-  canGoToNextChapter: boolean;
 }>();
 
 const emit = defineEmits<{
   (e: "close"): void;
   (e: "prev-page"): void;
   (e: "next-page"): void;
-  (e: "prev-chapter"): void;
-  (e: "next-chapter"): void;
   (e: "open-modal", modal: string): void;
 }>();
 
@@ -132,23 +128,6 @@ async function openModal(modal: string) {
     <div class="footer-sections">
       <div class="actions-section">
         <button
-          v-for="a in barActions"
-          :key="a.id"
-          class="footer-btn"
-          @click.stop="openModal(a.modal!)"
-          :aria-label="a.label"
-        >
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-            v-html="a.icon"
-          />
-        </button>
-        <button
           v-if="hasMenuActions"
           class="footer-btn"
           :class="{ active: showMenu }"
@@ -183,40 +162,23 @@ async function openModal(modal: string) {
         </button>
       </div>
 
-      <div class="nav-section">
+      <div class="actions-section">
         <button
+          v-for="a in barActions"
+          :key="a.id"
           class="footer-btn"
-          @click.stop="emit('prev-chapter')"
-          :disabled="!canGoToPrevChapter"
-          aria-label="Previous chapter"
+          @click.stop="openModal(a.modal!)"
+          :aria-label="a.label"
         >
           <svg
-            width="16"
-            height="16"
+            width="18"
+            height="18"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            stroke-width="2"
-          >
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
-        </button>
-        <button
-          class="footer-btn"
-          @click.stop="emit('next-chapter')"
-          :disabled="!canGoToNextChapter"
-          aria-label="Next chapter"
-        >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path d="M9 18l6-6-6-6" />
-          </svg>
+            stroke-width="1.5"
+            v-html="a.icon"
+          />
         </button>
       </div>
     </div>
@@ -354,13 +316,13 @@ async function openModal(modal: string) {
 .footer-sections {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 10px 12px;
   padding-bottom: max(10px, env(safe-area-inset-bottom, 10px));
   min-height: 56px;
   gap: 8px;
 }
 
-.nav-section,
 .actions-section {
   display: flex;
   gap: 6px;
