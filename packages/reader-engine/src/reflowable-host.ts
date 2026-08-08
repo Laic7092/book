@@ -404,19 +404,7 @@ export class ReflowableHost extends Engine {
     const offset = wrapper.getBoundingClientRect().top + html.scrollTop;
 
     const anchor = this.state.scrollAnchor;
-    if (anchor === undefined) {
-      // Legacy save (progress only, saturated read-fraction): fall back to
-      // the old in-chapter mapping so existing progress is not lost.
-      const progress = this.state.scrollProgress;
-      if (progress <= 0) return;
-      const maxScroll = wrapper.scrollHeight - html.clientHeight;
-      if (maxScroll > 0) {
-        html.scrollTop = computeScrollTarget(progress, maxScroll, offset);
-        this.lastCalibratedTop = html.scrollTop;
-      }
-      return;
-    }
-    if (anchor <= 0) return;
+    if (anchor === undefined || anchor <= 0) return;
 
     // The saved viewport-top may lie beyond the single-chapter document (the
     // viewport bottom edge needs the next chapter). Append chapters until the
