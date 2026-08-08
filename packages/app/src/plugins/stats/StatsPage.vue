@@ -6,6 +6,7 @@ import { getBookGradient, getInitial } from "../../utils/colors";
 import type { BookReadingStats, Book } from "../../core/types";
 import { formatDuration, formatRelativeTime, formatHour } from "../../utils/time";
 import { navigate } from "../../utils/router";
+import { pluginEvents } from "../manager/registry";
 
 const bookshelfStore = useBookshelfStore();
 
@@ -45,12 +46,29 @@ const avgSpeed = computed(() => {
 const activeHourTotals = computed(() => {
   const hours = new Map<number, number>();
   for (const stat of allStats.value) {
-    for (const h of stat.activeHours ?? []) {
-      hours.set(h, (hours.get(h) || 0) + 1);
+    // activeHours is indexed by hour (0-23); the values are session counts.
+    for (const [hour, count] of (stat.activeHours ?? []).entries()) {
+      if (count > 0) hours.set(hour, (hours.get(hour) || 0) + count);
     }
   }
   return hours;
 });
+
+const completedBooks = computed(
+  () =>
+    allStats.value.filter(
+      (s) => (s.chaptersTotal ?? 0) > 0 && s.chaptersCompleted >= s.chaptersTotal!,
+    ).length,
+);
+
+const inProgressBooks = computed(
+  () =>
+    allStats.value.filter(
+      (s) =>
+        s.chaptersCompleted > 0 &&
+        ((s.chaptersTotal ?? 0) === 0 || s.chaptersCompleted < s.chaptersTotal!),
+    ).length,
+);
 
 const allHours = Array.from({ length: 24 }, (_, i) => i);
 const maxHourCount = computed(() => Math.max(1, ...activeHourTotals.value.values()));
@@ -78,17 +96,25 @@ function onKeydown(e: KeyboardEvent) {
   if (e.key === "Escape") navigate("/");
 }
 
+const unsubs: (() => void)[] = [];
+
 onMounted(() => {
   load();
   document.addEventListener("keydown", onKeydown);
+  // Refresh when reading activity lands while this page is open.
+  unsubs.push(pluginEvents.on("book:closed", () => void load()));
+  unsubs.push(pluginEvents.on("book:deleted", () => void load()));
 });
-onUnmounted(() => document.removeEventListener("keydown", onKeydown));
+onUnmounted(() => {
+  document.removeEventListener("keydown", onKeydown);
+  unsubs.forEach((unsub) => unsub());
+});
 </script>
 
 <template>
   <div class="stats-page-wrapper">
     <transition name="stats-page-fade">
-      <div v-if="true" class="stats-page-backdrop" @click.self="navigate('/')">
+      <div class="stats-page-backdrop" @click.self="navigate('/')">
         <div class="stats-page">
           <!-- Header -->
           <header class="sp-header">
@@ -126,6 +152,14 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
               <div class="ov-card">
                 <div class="ov-value">{{ summary.totalBooks }}</div>
                 <div class="ov-label">Books explored</div>
+              </div>
+              <div class="ov-card">
+                <div class="ov-value">{{ completedBooks }}</div>
+                <div class="ov-label">Completed</div>
+              </div>
+              <div class="ov-card">
+                <div class="ov-value">{{ inProgressBooks }}</div>
+                <div class="ov-label">In progress</div>
               </div>
               <div class="ov-card">
                 <div class="ov-value">{{ totalWordsRead.toLocaleString() }}</div>

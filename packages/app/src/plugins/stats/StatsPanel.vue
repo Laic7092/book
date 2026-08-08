@@ -10,6 +10,15 @@ const getSession = eng.getSession();
 const stats = ref<BookReadingStats | null>(null);
 const totalChapters = computed(() => getSession?.getState().chapters.length ?? 0);
 
+const maxHourCount = computed(() => Math.max(1, ...(stats.value?.activeHours ?? [0])));
+const estimatedRemaining = computed(() => {
+  const s = stats.value;
+  if (!s || !totalChapters.value || s.chaptersCompleted <= 0) return 0;
+  const remaining = totalChapters.value - s.chaptersCompleted;
+  if (remaining <= 0) return 0;
+  return Math.round((s.totalReadingTime / s.chaptersCompleted) * remaining);
+});
+
 onMounted(async () => {
   const bookId = getSession?.getState().bookId;
   if (bookId) {
@@ -69,6 +78,9 @@ const emit = defineEmits<{
                 }}%
               </div>
             </div>
+            <div v-if="estimatedRemaining > 0" class="progress-eta">
+              ~{{ formatDuration(estimatedRemaining) }} remaining at your pace
+            </div>
           </div>
         </div>
 
@@ -89,8 +101,19 @@ const emit = defineEmits<{
         <div class="stats-card" v-if="stats.activeHours.length > 0">
           <h4 class="stats-card-title">Active Hours</h4>
           <div class="hours-grid">
-            <div v-for="hour in stats.activeHours" :key="hour" class="hour-item">
-              <div class="hour-bar"></div>
+            <div
+              v-for="(count, hour) in stats.activeHours"
+              :key="hour"
+              class="hour-item"
+              :title="`${formatHour(hour)}: ${count} sessions`"
+            >
+              <div
+                class="hour-bar"
+                :style="{
+                  height: `${Math.max(3, (count / maxHourCount) * 24)}px`,
+                  opacity: count > 0 ? 0.85 : 0.12,
+                }"
+              ></div>
               <span class="hour-label">{{ formatHour(hour) }}</span>
             </div>
           </div>
@@ -248,6 +271,11 @@ const emit = defineEmits<{
   font-weight: 600;
   color: var(--reader-text);
   min-width: 40px;
+}
+
+.progress-eta {
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .speed-grid {
