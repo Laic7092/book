@@ -766,7 +766,7 @@ onUnmounted(() => {
 
     <!-- Modal container (plugin modals: OPDS, stats, etc.) -->
     <ModalWrapper
-      v-if="uiStore.activeModal"
+      v-if="uiStore.activeModal && uiStore.activeModal !== 'toc'"
       :modal-type="uiStore.activeModal"
       @close="closeModal"
     />
