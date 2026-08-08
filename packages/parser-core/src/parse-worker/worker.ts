@@ -37,6 +37,11 @@ interface ParseStreamEventMessage {
   event: StreamingParseEvent;
 }
 
+interface ParseStreamDoneMessage {
+  type: "stream-done";
+  id: number;
+}
+
 interface ParseErrorMessage {
   type: "error";
   id: number;
@@ -86,6 +91,9 @@ async function doParse(id: number, file: File): Promise<void> {
       for await (const event of gen) {
         postMessage({ type: "stream-event", id, event } satisfies ParseStreamEventMessage);
       }
+      // The stream contract ends with an explicit done message; without it
+      // the client's pending promise would never resolve.
+      postMessage({ type: "stream-done", id } satisfies ParseStreamDoneMessage);
     } catch (err) {
       postMessage({
         type: "error",

@@ -1,4 +1,5 @@
-import { generateId, readAsText } from "../base";
+import { generateId, readAsText, parseXML } from "../base";
+import { escapeHtml } from "../shared";
 import type { BookParser, ParserResult, ChapterData } from "../types";
 
 export class Fb2Parser implements BookParser {
@@ -16,7 +17,7 @@ export class Fb2Parser implements BookParser {
 
   async parse(file: File): Promise<ParserResult> {
     const rawContent = await readAsText(file);
-    const xmlDoc = new DOMParser().parseFromString(rawContent, "application/xml");
+    const xmlDoc = parseXML(rawContent);
 
     const parseError = xmlDoc.querySelector("parsererror");
     if (parseError) throw new Error("FB2 XML parse error");
@@ -107,7 +108,7 @@ export class Fb2Parser implements BookParser {
     try {
       const decoder = new TextDecoder();
       const xml = decoder.decode(rawData);
-      const xmlDoc = new DOMParser().parseFromString(xml, "application/xml");
+      const xmlDoc = parseXML(xml);
 
       const binaries = new Map<string, string>();
       for (const bin of xmlDoc.querySelectorAll("binary")) {
@@ -134,7 +135,7 @@ export class Fb2Parser implements BookParser {
     try {
       const decoder = new TextDecoder();
       const xml = decoder.decode(rawData);
-      const xmlDoc = new DOMParser().parseFromString(xml, "application/xml");
+      const xmlDoc = parseXML(xml);
       const bin = xmlDoc.querySelector(`binary[id="${path}"]`);
       if (bin?.textContent) {
         const ct = bin.getAttribute("content-type") || "image/jpeg";
@@ -173,12 +174,12 @@ export class Fb2Parser implements BookParser {
         switch (tag) {
           case "title": {
             const text = Fb2Parser.getElementText(el);
-            if (text) parts.push(`<h2>${Fb2Parser.escapeHtml(text)}</h2>`);
+            if (text) parts.push(`<h2>${escapeHtml(text)}</h2>`);
             break;
           }
           case "subtitle": {
             const text = el.textContent?.trim();
-            if (text) parts.push(`<h3>${Fb2Parser.escapeHtml(text)}</h3>`);
+            if (text) parts.push(`<h3>${escapeHtml(text)}</h3>`);
             break;
           }
           case "p":
@@ -216,13 +217,13 @@ export class Fb2Parser implements BookParser {
             break;
           case "annotation": {
             const text = el.textContent?.trim();
-            if (text) parts.push(`<blockquote>${Fb2Parser.escapeHtml(text)}</blockquote>`);
+            if (text) parts.push(`<blockquote>${escapeHtml(text)}</blockquote>`);
             break;
           }
           default:
             // Unhandled elements — extract text content
             const text = el.textContent?.trim();
-            if (text) parts.push(`<p>${Fb2Parser.escapeHtml(text)}</p>`);
+            if (text) parts.push(`<p>${escapeHtml(text)}</p>`);
         }
       }
     }
@@ -233,7 +234,7 @@ export class Fb2Parser implements BookParser {
     let html = "";
     for (const node of Array.from(el.childNodes)) {
       if (node.nodeType === Node.TEXT_NODE) {
-        html += Fb2Parser.escapeHtml(node.textContent ?? "");
+        html += escapeHtml(node.textContent ?? "");
       } else if (node.nodeType === Node.ELEMENT_NODE) {
         const child = node as Element;
         const tag = child.tagName.toLowerCase();
@@ -280,13 +281,5 @@ export class Fb2Parser implements BookParser {
       }
     }
     return html;
-  }
-
-  private static escapeHtml(text: string): string {
-    return text
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
   }
 }

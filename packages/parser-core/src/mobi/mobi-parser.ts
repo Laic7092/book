@@ -1,4 +1,5 @@
-import { generateId, readAsArrayBuffer } from "../base";
+import { generateId, readAsArrayBuffer, parseXML } from "../base";
+import { wrapHtml, collectChildren, resolvePath, parseHTML } from "../shared";
 import type { BookParser, ParserResult, ChapterData } from "../types";
 
 // ── PDB / PalmDB container constants ──
@@ -144,14 +145,6 @@ function splitHtmlChapters(
   }
 
   return { chapters, content };
-}
-
-function wrapHtml(body: string, title: string): string {
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title></head><body>${body}</body></html>`;
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 /** Try to find the KF8 embedded ZIP start offset in the raw file data. */
@@ -377,7 +370,7 @@ export class MobiParser implements BookParser {
     // Use DOMParser for proper parsing if we have a recognizable HTML document
     let bodyHtml = rawHtml;
     try {
-      const doc = new DOMParser().parseFromString(rawHtml, "text/html");
+      const doc = parseHTML(rawHtml);
       const parseError = doc.querySelector("parsererror");
       if (!parseError && doc.body) {
         // Use the DOM-parsed version for heading splitting
@@ -465,7 +458,7 @@ export class MobiParser implements BookParser {
       const containerXml = files.get("META-INF/container.xml");
       if (!containerXml) throw new Error("KF8 EPUB: missing container.xml");
 
-      const containerDoc = new DOMParser().parseFromString(await containerXml.text(), "text/xml");
+      const containerDoc = parseXML(await containerXml.text());
       const opfPath =
         containerDoc.querySelector("rootfile")?.getAttribute("full-path") || "OEBPS/content.opf";
       const opfDir = opfPath.substring(0, opfPath.lastIndexOf("/") + 1);
@@ -473,7 +466,7 @@ export class MobiParser implements BookParser {
       const opfFile = files.get(opfPath);
       if (!opfFile) throw new Error("KF8 EPUB: missing content.opf");
 
-      const opfDoc = new DOMParser().parseFromString(await opfFile.text(), "text/xml");
+      const opfDoc = parseXML(await opfFile.text());
 
       // Extract metadata
       const titleEl = opfDoc.querySelector("dc\\:title, title");
@@ -553,23 +546,4 @@ export class MobiParser implements BookParser {
       await zipReader.close();
     }
   }
-}
-
-function collectChildren(parent: Element, start: number, end: number): string {
-  let html = "";
-  for (let i = start; i < end && i < parent.children.length; i++) {
-    html += parent.children[i].outerHTML;
-  }
-  return html;
-}
-
-function resolvePath(base: string, relative: string): string {
-  if (relative.startsWith("/")) return relative.slice(1);
-  const parts = (base + relative).split("/");
-  const stack: string[] = [];
-  for (const part of parts) {
-    if (part === "..") stack.pop();
-    else if (part && part !== ".") stack.push(part);
-  }
-  return stack.join("/");
 }

@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "type": "module",
   "dependencies": {
+    "@book/contracts": "workspace:*",
     "@book/parser-core": "workspace:*",
     "@book/reader-core": "workspace:*",
     "@book/reader-engine": "workspace:*",

@@ -1,4 +1,5 @@
 import { generateId, getFileMetadata, readAsArrayBuffer } from "../base";
+import { escapeHtml } from "../shared";
 import type { BookParser, ParserResult, ChapterData } from "../types";
 
 const PARAGRAPHS_PER_CHUNK = 320;
@@ -343,9 +344,10 @@ export class TxtParser implements BookParser {
     const paragraphs = lines
       .map((line) => line.trim())
       .filter(Boolean)
-      .map((line) => `<p>${line}</p>`);
+      .map((line) => `<p>${escapeHtml(line)}</p>`);
 
     const body = paragraphs.join("");
-    return `<html><body><h2 class="chapter-heading">${title || "Chapter"}</h2>${body}</body></html>`;
+    const heading = escapeHtml(title || "Chapter");
+    return `<html><body><h2 class="chapter-heading">${heading}</h2>${body}</body></html>`;
   }
 }

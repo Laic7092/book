@@ -1,4 +1,5 @@
 import { generateId, readAsArrayBuffer } from "../base";
+import { getMimeType, pageToHtml } from "../shared";
 import type { BookParser, ParserResult, ChapterData } from "../types";
 
 const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp", "bmp"]);
@@ -16,18 +17,6 @@ async function unrarAsync(
       }
     }, 0);
   });
-}
-
-function getMimeType(ext: string): string {
-  const map: Record<string, string> = {
-    jpg: "image/jpeg",
-    jpeg: "image/jpeg",
-    png: "image/png",
-    gif: "image/gif",
-    webp: "image/webp",
-    bmp: "image/bmp",
-  };
-  return map[ext.toLowerCase()] || "image/jpeg";
 }
 
 export class CbrParser implements BookParser {
@@ -104,7 +93,7 @@ export class CbrParser implements BookParser {
     if (!chapter.href) return undefined;
 
     const ext = chapter.href.split(".").pop() || "jpg";
-    const mimeType = getMimeType(ext);
+    const mimeType = getMimeType(ext, "image/jpeg");
 
     try {
       const files = await unrarAsync(rawData);
@@ -116,7 +105,7 @@ export class CbrParser implements BookParser {
         type: mimeType,
       });
       const url = URL.createObjectURL(blob);
-      return CbrParser.pageToHtml(url);
+      return pageToHtml(url);
     } catch {
       return undefined;
     }
@@ -132,9 +121,5 @@ export class CbrParser implements BookParser {
     } catch {
       return undefined;
     }
-  }
-
-  private static pageToHtml(imageUrl: string): string {
-    return `<html style="height:100%;margin:0"><body style="height:100%;margin:0;display:flex;align-items:center;justify-content:center"><img src="${imageUrl}" style="max-width:100%;max-height:100%;object-fit:contain;display:block"></body></html>`;
   }
 }

@@ -19,6 +19,16 @@ export {
   getFormatForExtension,
 } from "./registry";
 export { generateId, getFileMetadata, readAsText, readAsArrayBuffer, parseXML } from "./base";
+export {
+  resolvePath,
+  escapeHtml,
+  wrapHtml,
+  collectChildren,
+  getMimeType,
+  pageToHtml,
+  getZipModule,
+  parseHTML,
+} from "./shared";
 export { getParseWorker, ParseWorkerClient } from "./parse-worker/client";
 
 // ── Built-in parsers (registered eagerly at import time) ──

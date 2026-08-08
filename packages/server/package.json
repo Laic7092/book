@@ -8,6 +8,7 @@
     "start": "tsx src/index.ts"
   },
   "dependencies": {
+    "@book/contracts": "workspace:*",
     "@hono/node-server": "^1.14.1",
     "hono": "^4.7.7"
   },

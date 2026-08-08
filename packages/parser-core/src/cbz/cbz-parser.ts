@@ -1,31 +1,9 @@
 import type { FileEntry } from "@zip.js/zip.js";
 import { generateId, readAsArrayBuffer } from "../base";
-
+import { getMimeType, getZipModule, pageToHtml } from "../shared";
 import type { BookParser, ParserResult, ChapterData, StreamingParseEvent } from "../types";
 
 const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp", "bmp"]);
-
-function getMimeType(ext: string): string {
-  const map: Record<string, string> = {
-    jpg: "image/jpeg",
-    jpeg: "image/jpeg",
-    png: "image/png",
-    gif: "image/gif",
-    webp: "image/webp",
-    bmp: "image/bmp",
-  };
-  return map[ext.toLowerCase()] || "image/jpeg";
-}
-
-async function getZipModule() {
-  const mod = await import("@zip.js/zip.js");
-  return {
-    ZipReader: mod.ZipReader,
-    Uint8ArrayReader: mod.Uint8ArrayReader,
-    BlobReader: mod.BlobReader,
-    BlobWriter: mod.BlobWriter,
-  };
-}
 
 export class CbzParser implements BookParser {
   private static readonly SUPPORTED_MIME_TYPES = [
@@ -51,10 +29,10 @@ export class CbzParser implements BookParser {
       if (!data) return undefined;
 
       const ext = chapter.href.split(".").pop() || "jpg";
-      const mimeType = getMimeType(ext);
+      const mimeType = getMimeType(ext, "image/jpeg");
       const url = URL.createObjectURL(new Blob([data], { type: mimeType }));
 
-      return CbzParser.pageToHtml(url);
+      return pageToHtml(url);
     } catch {
       return undefined;
     }
@@ -201,9 +179,5 @@ export class CbzParser implements BookParser {
     } finally {
       await zipReader.close();
     }
-  }
-
-  private static pageToHtml(imageUrl: string): string {
-    return `<html style="height:100%;margin:0"><body style="height:100%;margin:0;display:flex;align-items:center;justify-content:center"><img src="${imageUrl}" style="max-width:100%;max-height:100%;object-fit:contain;display:block"></body></html>`;
   }
 }

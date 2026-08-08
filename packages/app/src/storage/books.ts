@@ -5,7 +5,7 @@ import { STORES, dbPut, dbGet, dbGetAll, dbTransaction, dbDelete, dbGetAllFromIn
 import type { BookParser } from "@book/parser-core";
 import { getParserForFormat, generateId } from "@book/parser-core";
 import { saveZip, getZip, deleteZip as deleteRawZip } from "./raw-data";
-import { getMimeTypeFromExtension } from "../utils/constants";
+import { getMimeType } from "@book/parser-core";
 
 const MAX_STORED_BOOKS = 20;
 
@@ -140,7 +140,7 @@ export async function saveBook(parsedBook: ParsedBook, parser: BookParser): Prom
     try {
       const data = await parser.extractResource(parsedBook.rawData, parsedBook.book.coverUrl);
       if (data) {
-        const mimeType = getMimeTypeFromExtension(parsedBook.book.coverUrl);
+        const mimeType = getMimeType(parsedBook.book.coverUrl);
         const blob = new Blob([data], { type: mimeType });
         await saveCoverBlob(parsedBook.book.id, blob);
       }

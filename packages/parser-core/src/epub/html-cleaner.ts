@@ -1,3 +1,5 @@
+import { parseXML } from "../base";
+
 function sanitizeResourceAttrs(html: string): string {
   return html
     .replace(
@@ -145,7 +147,7 @@ function splitBrBlocks(root: Document | HTMLElement): void {
 }
 
 export function cleanHtml(html: string): string {
-  const xmlDoc = new DOMParser().parseFromString(html, "application/xhtml+xml");
+  const xmlDoc = parseXML(html, "application/xhtml+xml");
   const hasXmlError = xmlDoc.querySelector("parsererror");
 
   if (!hasXmlError) {

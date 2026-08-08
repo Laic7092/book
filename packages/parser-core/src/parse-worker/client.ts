@@ -1,4 +1,4 @@
-import type { BookParser, ParserResult } from "../types";
+import type { BookParser, ParserResult, StreamingParseEvent } from "../types";
 
 interface SerializedResult {
   id: string;
@@ -22,15 +22,11 @@ interface WorkerMessageIn {
 }
 
 interface WorkerMessageOut {
-  type: "success";
+  type: "success" | "stream-event" | "stream-done" | "error";
   id: number;
-  result: SerializedResult;
-}
-
-interface WorkerMessageError {
-  type: "error";
-  id: number;
-  error: string;
+  result?: SerializedResult;
+  event?: StreamingParseEvent;
+  error?: string;
   needsMainThread?: boolean;
 }
 
@@ -56,10 +52,16 @@ export class ParseWorkerClient {
   private nextId = 1;
   private pending = new Map<
     number,
-    {
-      resolve: (result: ParserResult) => void;
-      reject: (err: Error & { needsMainThread?: boolean }) => void;
-    }
+    | {
+        kind: "parse";
+        resolve: (result: ParserResult) => void;
+        reject: (err: Error & { needsMainThread?: boolean }) => void;
+      }
+    | {
+        kind: "stream";
+        controller: ReadableStreamDefaultController<StreamingParseEvent>;
+        reject: (err: Error & { needsMainThread?: boolean }) => void;
+      }
   >();
 
   private getWorker(): Worker {
@@ -67,7 +69,7 @@ export class ParseWorkerClient {
       this.worker = new Worker(new URL("./worker.ts", import.meta.url), {
         type: "module",
       });
-      this.worker.onmessage = (e: MessageEvent<WorkerMessageOut | WorkerMessageError>) => {
+      this.worker.onmessage = (e: MessageEvent<WorkerMessageOut>) => {
         this.handleMessage(e.data);
       };
       this.worker.onerror = (err) => {
@@ -80,18 +82,39 @@ export class ParseWorkerClient {
     return this.worker;
   }
 
-  private handleMessage(msg: WorkerMessageOut | WorkerMessageError): void {
+  private handleMessage(msg: WorkerMessageOut): void {
     const pending = this.pending.get(msg.id);
     if (!pending) return;
 
-    if (msg.type === "success") {
-      this.pending.delete(msg.id);
-      pending.resolve(deserialize(msg.result));
-    } else if (msg.type === "error") {
-      this.pending.delete(msg.id);
-      const err = new Error(msg.error) as Error & { needsMainThread?: boolean };
-      err.needsMainThread = msg.needsMainThread;
-      pending.reject(err);
+    switch (msg.type) {
+      case "success": {
+        if (pending.kind !== "parse" || !msg.result) return;
+        this.pending.delete(msg.id);
+        pending.resolve(deserialize(msg.result));
+        break;
+      }
+      case "stream-event": {
+        if (pending.kind !== "stream" || !msg.event) return;
+        pending.controller.enqueue(msg.event);
+        break;
+      }
+      case "stream-done": {
+        if (pending.kind !== "stream") return;
+        this.pending.delete(msg.id);
+        pending.controller.close();
+        break;
+      }
+      case "error": {
+        this.pending.delete(msg.id);
+        const err = new Error(msg.error) as Error & { needsMainThread?: boolean };
+        err.needsMainThread = msg.needsMainThread;
+        if (pending.kind === "stream") {
+          pending.controller.error(err);
+        } else {
+          pending.reject(err);
+        }
+        break;
+      }
     }
   }
 
@@ -101,7 +124,7 @@ export class ParseWorkerClient {
 
     try {
       return await new Promise<ParserResult>((resolve, reject) => {
-        this.pending.set(id, { resolve, reject });
+        this.pending.set(id, { kind: "parse", resolve, reject });
         this.getWorker().postMessage({ id, file } satisfies WorkerMessageIn);
       });
     } catch (err) {
@@ -112,10 +135,37 @@ export class ParseWorkerClient {
     }
   }
 
+  /**
+   * Stream a file through the worker's parseStreaming. Yields events as they
+   * arrive; a `needsMainThread` error surfaces from the generator and the
+   * caller can retry on the main thread.
+   */
+  async *parseStreaming(file: File): AsyncGenerator<StreamingParseEvent> {
+    const id = this.nextId++;
+
+    const stream = new ReadableStream<StreamingParseEvent>({
+      start: (controller) => {
+        this.pending.set(id, {
+          kind: "stream",
+          controller,
+          reject: (err) => controller.error(err),
+        });
+        this.getWorker().postMessage({ id, file } satisfies WorkerMessageIn);
+      },
+      cancel: () => {
+        this.pending.delete(id);
+      },
+    });
+
+    for await (const event of stream) {
+      yield event;
+    }
+  }
+
   private async parseOnMainThread(file: File, parser?: BookParser): Promise<ParserResult> {
     const { getParserForFileAuto } = await import("../index");
     const p = parser ?? (await getParserForFileAuto(file));
-    if (!p) throw new Error(`Unsupported format: ${file.type || file.name}`);
+    if (!p) throw new Error(`Unsupported file format: ${file.type || file.name}`);
     return p.parse(file);
   }
 
@@ -123,6 +173,9 @@ export class ParseWorkerClient {
     if (this.worker) {
       this.worker.terminate();
       this.worker = null;
+    }
+    for (const [, p] of this.pending) {
+      if (p.kind === "stream") p.controller.error(new Error("Parse worker destroyed"));
     }
     this.pending.clear();
   }

@@ -7,7 +7,8 @@ import { Hono } from "hono";
 setDefaultResultOrder("ipv4first");
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
-import { netFetch, isInternalUrl } from "./net";
+import { SERVER_VERSION } from "@book/contracts";
+import { netFetch, isInternalUrl, SAFE_HEADERS } from "./net";
 import { registerFsRoutes } from "./routes/fs";
 import { registerCapabilitiesRoutes } from "./routes/capabilities";
 
@@ -25,18 +26,22 @@ app.use(
 app.use("*", logger());
 
 // ── Health ──
-app.get("/api/health", (c) => c.json({ status: "ok", version: "0.1.0" }));
+app.get("/api/health", (c) => c.json({ status: "ok", version: SERVER_VERSION }));
 
 // ── Net: CORS proxy for external HTTP requests ──
-app.get("/api/net/fetch", async (c) => {
+app.all("/api/net/fetch", async (c) => {
   const url = c.req.query("url");
   if (!url) return c.json({ error: "Missing 'url' query parameter" }, 400);
   if (await isInternalUrl(url)) return c.json({ error: "Internal URLs are not allowed" }, 403);
-  // Build request with minimal safe headers, not forwarding client headers
-  const upstream = new Request(url, {
-    method: "GET",
-    headers: { accept: c.req.header("accept") || "*/*" },
-  });
+  // Forward method/body plus a whitelisted header set only
+  const headers: Record<string, string> = {};
+  for (const name of SAFE_HEADERS) {
+    const value = c.req.header(name);
+    if (value) headers[name] = value;
+  }
+  const method = c.req.method;
+  const body = method === "GET" || method === "HEAD" ? undefined : await c.req.arrayBuffer();
+  const upstream = new Request(url, { method, headers, body });
   return netFetch(url, upstream);
 });
 

@@ -1,13 +1,8 @@
 import type { Entry, FileEntry, ZipReader } from "@zip.js/zip.js";
 import { generateId, readAsArrayBuffer, parseXML } from "../base";
+import { getZipModule, resolvePath } from "../shared";
 import { cleanHtml } from "./html-cleaner";
 import type { BookParser, ParserResult, ChapterData, StreamingParseEvent } from "../types";
-
-let _zipModule: typeof import("@zip.js/zip.js") | null = null;
-async function getZipModule() {
-  if (!_zipModule) _zipModule = await import("@zip.js/zip.js");
-  return _zipModule;
-}
 
 interface EpubMetadata {
   title: string;
@@ -109,20 +104,6 @@ export class EpubParser implements BookParser {
     return map;
   }
 
-  private static resolvePath(base: string, relative: string): string {
-    if (relative.startsWith("/")) return relative.slice(1);
-    const parts = (base + relative).split("/");
-    const stack: string[] = [];
-    for (const part of parts) {
-      if (part === "..") {
-        stack.pop();
-      } else if (part && part !== ".") {
-        stack.push(part);
-      }
-    }
-    return stack.join("/");
-  }
-
   async *parseStreaming(file: File): AsyncGenerator<StreamingParseEvent> {
     const { ZipReader: ZR, BlobReader: BR } = await getZipModule();
     const zipReader = new ZR(new BR(file));
@@ -166,7 +147,7 @@ export class EpubParser implements BookParser {
       const { TextWriter: TW } = await getZipModule();
       let order = 0;
       for (const item of spineItems) {
-        const fullPath = EpubParser.resolvePath(opfDir, item.href);
+        const fullPath = resolvePath(opfDir, item.href);
         const tocItem = tocMap.get(item.href) || tocMap.get(fullPath);
 
         let chapterId: string;
@@ -199,7 +180,7 @@ export class EpubParser implements BookParser {
 
       let coverData: ArrayBuffer | undefined;
       if (metadata.coverHref) {
-        const coverFullPath = EpubParser.resolvePath(opfDir, metadata.coverHref);
+        const coverFullPath = resolvePath(opfDir, metadata.coverHref);
         const entry = EpubParser.findEntry(pathMap, coverFullPath);
         if (entry) {
           try {
@@ -252,7 +233,7 @@ export class EpubParser implements BookParser {
 
       let order = 0;
       for (const item of spineItems) {
-        const fullPath = EpubParser.resolvePath(opfDir, item.href);
+        const fullPath = resolvePath(opfDir, item.href);
         const tocItem = tocMap.get(item.href) || tocMap.get(fullPath);
 
         if (tocItem) {
@@ -276,7 +257,7 @@ export class EpubParser implements BookParser {
 
       const resources = new Map<string, ArrayBuffer>();
       if (metadata.coverHref) {
-        const coverFullPath = EpubParser.resolvePath(opfDir, metadata.coverHref);
+        const coverFullPath = resolvePath(opfDir, metadata.coverHref);
         const coverData = await this.readZipEntryBinary(ctx, coverFullPath);
         if (coverData) {
           resources.set(metadata.coverHref, coverData);
@@ -413,7 +394,7 @@ export class EpubParser implements BookParser {
     if (navItem) {
       const navHref = navItem.getAttribute("href");
       if (navHref) {
-        const fullPath = EpubParser.resolvePath(opfDir, navHref);
+        const fullPath = resolvePath(opfDir, navHref);
         const navContent = await this.readZipEntry(ctx, fullPath);
         if (navContent) {
           return this.parseNavDocument(navContent);
@@ -425,7 +406,7 @@ export class EpubParser implements BookParser {
     if (ncxItem) {
       const ncxHref = ncxItem.getAttribute("href");
       if (ncxHref) {
-        const fullPath = EpubParser.resolvePath(opfDir, ncxHref);
+        const fullPath = resolvePath(opfDir, ncxHref);
         const ncxContent = await this.readZipEntry(ctx, fullPath);
         if (ncxContent) {
           return this.parseNcx(ncxContent);

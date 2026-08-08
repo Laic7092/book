@@ -9,7 +9,15 @@ import https from "node:https";
 import http from "node:http";
 import { lookup } from "node:dns/promises";
 
-const SAFE_HEADERS = ["accept", "accept-language", "user-agent", "cache-control"];
+// content-type is only forwarded when the client explicitly sends it (the
+// net.fetch route never sets it itself), so it stays a whitelisted header.
+export const SAFE_HEADERS = [
+  "accept",
+  "accept-language",
+  "user-agent",
+  "cache-control",
+  "content-type",
+];
 const MAX_REDIRECT = 8;
 
 // Internal IP ranges blocked for SSRF prevention

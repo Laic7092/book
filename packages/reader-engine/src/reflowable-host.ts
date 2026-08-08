@@ -9,6 +9,14 @@ import {
   type ResourceInfo,
 } from "./resources";
 import { computeChapterScrollProgress } from "./scroll-progress";
+import {
+  computePageFromOffset,
+  computeAnchorScrollTop,
+  computePageCount,
+  computeScrollTarget,
+  hasScrolledAway,
+  computePrependCompensation,
+} from "./layout";
 
 const INTERACTIVE_SELECTOR =
   "button, input, textarea, select, details, summary, [contenteditable], [contenteditable=true]";
@@ -131,19 +139,7 @@ export class ReflowableHost extends Engine {
         const el =
           this.iframeDoc.querySelector(`[id="${CSS.escape(anchor)}"]`) ||
           this.iframeDoc.querySelector(`[name="${CSS.escape(anchor)}"]`);
-        if (el) {
-          if (this.state.mode === "pagination") {
-            const step = this.iframeDoc.documentElement.clientWidth;
-            if (step > 0) {
-              const offset =
-                el.getBoundingClientRect().left - this.iframeDoc.body.getBoundingClientRect().left;
-              this.dispatch({ type: "GO_TO_PAGE", page: Math.floor(offset / step) });
-            }
-          } else {
-            const top = el.getBoundingClientRect().top + this.iframeDoc.documentElement.scrollTop;
-            this.iframeDoc.documentElement.scrollTop = top;
-          }
-        }
+        if (el) this.navigateToAnchor(el);
       }
       return;
     }
@@ -159,19 +155,28 @@ export class ReflowableHost extends Engine {
       const el =
         this.iframeDoc.querySelector(`[id="${CSS.escape(anchor)}"]`) ||
         this.iframeDoc.querySelector(`[name="${CSS.escape(anchor)}"]`);
-      if (el) {
-        if (this.state.mode === "pagination") {
-          const step = this.iframeDoc.documentElement.clientWidth;
-          if (step > 0) {
-            const offset =
-              el.getBoundingClientRect().left - this.iframeDoc.body.getBoundingClientRect().left;
-            this.dispatch({ type: "GO_TO_PAGE", page: Math.floor(offset / step) });
-          }
-        } else {
-          const top = el.getBoundingClientRect().top + this.iframeDoc.documentElement.scrollTop;
-          this.iframeDoc.documentElement.scrollTop = top;
-        }
+      if (el) this.navigateToAnchor(el);
+    }
+  }
+
+  /** Position the iframe at an anchor element in either mode. */
+  private navigateToAnchor(el: Element): void {
+    if (this.state.mode === "pagination") {
+      const step = this.iframeDoc.documentElement.clientWidth;
+      if (step > 0) {
+        const page = computePageFromOffset(
+          el.getBoundingClientRect().left,
+          this.iframeDoc.body.getBoundingClientRect().left,
+          step,
+        );
+        this.dispatch({ type: "GO_TO_PAGE", page });
       }
+    } else {
+      const top = computeAnchorScrollTop(
+        el.getBoundingClientRect().top,
+        this.iframeDoc.documentElement.scrollTop,
+      );
+      this.iframeDoc.documentElement.scrollTop = top;
     }
   }
 
@@ -401,7 +406,7 @@ export class ReflowableHost extends Engine {
     const offset = wrapper.getBoundingClientRect().top + html.scrollTop;
     const maxScroll = wrapper.scrollHeight - html.clientHeight;
     if (maxScroll > 0) {
-      html.scrollTop = progress * maxScroll + offset;
+      html.scrollTop = computeScrollTarget(progress, maxScroll, offset);
       this.lastCalibratedTop = html.scrollTop;
     }
   }
@@ -431,11 +436,11 @@ export class ReflowableHost extends Engine {
       const max = wrapper.scrollHeight - html.clientHeight;
       if (max <= 0) return;
       // User has scrolled away from the restored position → stop calibrating.
-      if (Math.abs(html.scrollTop - this.lastCalibratedTop) > 1) {
+      if (hasScrolledAway(html.scrollTop, this.lastCalibratedTop)) {
         this.teardownScrollCalibration();
         return;
       }
-      const target = this.state.scrollProgress * max + offset;
+      const target = computeScrollTarget(this.state.scrollProgress, max, offset);
       html.scrollTop = target;
       this.lastCalibratedTop = target;
     });
@@ -452,10 +457,7 @@ export class ReflowableHost extends Engine {
   private measureColumns(chapterId: string): void {
     const doc = this.iframeDoc;
     if (!doc?.body) return;
-    const contentWidth = doc.body.scrollWidth;
-    const iframeWidth = doc.documentElement.clientWidth;
-    const step = Math.max(iframeWidth, 1);
-    const total = Math.max(1, Math.ceil(contentWidth / step));
+    const total = computePageCount(doc.body.scrollWidth, doc.documentElement.clientWidth);
     this.dispatch({ type: "PAGE_COUNT_UPDATED", chapterId, total });
   }
 
@@ -592,7 +594,11 @@ export class ReflowableHost extends Engine {
       } else {
         const prevHeight = this.iframeDoc.body.scrollHeight;
         this.iframeDoc.body.prepend(wrapper);
-        this.iframeDoc.documentElement.scrollTop += this.iframeDoc.body.scrollHeight - prevHeight;
+        this.iframeDoc.documentElement.scrollTop = computePrependCompensation(
+          prevHeight,
+          this.iframeDoc.body.scrollHeight,
+          this.iframeDoc.documentElement.scrollTop,
+        );
       }
 
       this.loadedChapterIds.add(chapter.id);

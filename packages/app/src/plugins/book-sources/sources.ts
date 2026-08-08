@@ -5,6 +5,7 @@
  */
 
 import type { ServerClient } from "../../utils/api";
+import type { NetFetchInit } from "@book/contracts";
 import { STORES, dbPut, dbGetAll, dbDelete } from "../../storage/db";
 import {
   parseSearchResults,
@@ -180,7 +181,7 @@ export function createSourceManager(server: ServerClient): SourceManager {
   }
 
   async function fetchHtml(url: string, method = "GET", body?: string): Promise<string> {
-    const init: RequestInit = { method };
+    const init: NetFetchInit = { method };
     if (body) {
       init.body = body;
       init.headers = { "content-type": "application/x-www-form-urlencoded" };

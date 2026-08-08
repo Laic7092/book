@@ -1,4 +1,5 @@
 import { generateId, readAsArrayBuffer } from "../base";
+import { pageToHtml } from "../shared";
 import type { BookParser, ParserResult, ChapterData } from "../types";
 
 async function getPdfjsModule() {
@@ -30,7 +31,7 @@ export class PdfParser implements BookParser {
     try {
       const imgBlob = await PdfParser.renderPage(rawData, pageNum);
       const url = URL.createObjectURL(imgBlob);
-      return PdfParser.pageToHtml(url, pageNum);
+      return pageToHtml(url, pageNum);
     } catch {
       return undefined;
     }
@@ -211,9 +212,5 @@ export class PdfParser implements BookParser {
         0.85,
       );
     });
-  }
-
-  private static pageToHtml(imageUrl: string, pageNum: number): string {
-    return `<html style="height:100%;margin:0"><body style="height:100%;margin:0;display:flex;align-items:center;justify-content:center"><img src="${imageUrl}" data-page="${pageNum}" style="max-width:100%;max-height:100%;object-fit:contain;display:block"></body></html>`;
   }
 }

@@ -1,7 +1,7 @@
 import { getParserForFileAuto, getParseWorker } from "@book/parser-core";
 import { mapParserResult } from "../core/types";
 import { assertValidBookFile } from "../utils/validation";
-import { getMimeTypeFromExtension } from "../utils/constants";
+import { getMimeType } from "@book/parser-core";
 import * as booksStore from "./books";
 import { saveZipFromFile } from "./raw-data";
 import type { Book, Chapter } from "../core/types";
@@ -23,7 +23,19 @@ export async function parseAndSaveBook(
   }
 
   if (parser.parseStreaming) {
-    return parseAndSaveBookStreaming(file, parser, contentHash);
+    // Worker first; DOM-dependent parsers (epub) throw needsMainThread and
+    // fall back to the main thread below.
+    try {
+      return await consumeStreamingEvents(
+        getParseWorker().parseStreaming(file),
+        file,
+        parser,
+        contentHash,
+      );
+    } catch (err) {
+      if (!(err as { needsMainThread?: boolean }).needsMainThread) throw err;
+    }
+    return consumeStreamingEvents(parser.parseStreaming!(file), file, parser, contentHash);
   }
 
   // Try worker first; DOMParser-dependent formats fall back to main thread
@@ -34,12 +46,12 @@ export async function parseAndSaveBook(
   return { book: parsedBook.book, chapters: parsedBook.chapters };
 }
 
-async function parseAndSaveBookStreaming(
+async function consumeStreamingEvents(
+  generator: AsyncGenerator<import("@book/parser-core").StreamingParseEvent>,
   file: File,
   parser: import("@book/parser-core").BookParser,
   contentHash?: string,
 ): Promise<ParseAndSaveResult> {
-  const generator = parser.parseStreaming!(file);
   let book: Book | undefined;
   const chapters: Chapter[] = [];
 
@@ -88,7 +100,7 @@ async function parseAndSaveBookStreaming(
         await saveZipFromFile(book.id, file, book.fileSize);
 
         if (book.coverUrl && event.coverData) {
-          const mimeType = getMimeTypeFromExtension(book.coverUrl);
+          const mimeType = getMimeType(book.coverUrl);
           await booksStore.saveCoverBlob(book.id, new Blob([event.coverData], { type: mimeType }));
         }
         break;

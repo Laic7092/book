@@ -1,4 +1,5 @@
 import type { Hono } from "hono";
+import { SERVER_VERSION } from "@book/contracts";
 
 /**
  * Capabilities endpoint — lets the frontend discover what the server supports.
@@ -9,7 +10,7 @@ import type { Hono } from "hono";
 export function registerCapabilitiesRoutes(app: Hono): void {
   app.get("/api/capabilities", (c) => {
     return c.json({
-      version: "0.0.0",
+      version: SERVER_VERSION,
       net: true,
       fs: true,
     });

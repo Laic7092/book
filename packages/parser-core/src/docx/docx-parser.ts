@@ -1,17 +1,9 @@
-import { generateId, readAsArrayBuffer } from "../base";
+import { generateId, readAsArrayBuffer, parseXML } from "../base";
+import { escapeHtml, getZipModule } from "../shared";
 import type { BookParser, ParserResult, ChapterData } from "../types";
 
 const WORD_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const DC_NS = "http://purl.org/dc/elements/1.1/";
-
-async function getZipModule() {
-  const mod = await import("@zip.js/zip.js");
-  return {
-    ZipReader: mod.ZipReader,
-    Uint8ArrayReader: mod.Uint8ArrayReader,
-    BlobWriter: mod.BlobWriter,
-  };
-}
 
 interface DocxRun {
   text: string;
@@ -57,7 +49,7 @@ export class DocxParser implements BookParser {
 
       const coreXml = files.get("docProps/core.xml");
       if (coreXml) {
-        const doc = new DOMParser().parseFromString(await coreXml.text(), "text/xml");
+        const doc = parseXML(await coreXml.text());
         const titleEl = doc.getElementsByTagNameNS(DC_NS, "title")[0];
         if (titleEl?.textContent?.trim()) title = titleEl.textContent.trim();
         const dcCreator = doc.getElementsByTagNameNS(DC_NS, "creator")[0];
@@ -70,7 +62,7 @@ export class DocxParser implements BookParser {
       const headingStyles = new Set<string>();
       const stylesXml = files.get("word/styles.xml");
       if (stylesXml) {
-        const doc = new DOMParser().parseFromString(await stylesXml.text(), "text/xml");
+        const doc = parseXML(await stylesXml.text());
         const styleEls = doc.getElementsByTagNameNS(WORD_NS, "style");
         for (const style of styleEls) {
           const styleId = style.getAttributeNS(WORD_NS, "val");
@@ -86,7 +78,7 @@ export class DocxParser implements BookParser {
       if (!docXml) throw new Error("DOCX: word/document.xml not found");
 
       const xmlStr = await docXml.text();
-      const doc = new DOMParser().parseFromString(xmlStr, "text/xml");
+      const doc = parseXML(xmlStr);
 
       const paragraphs = DocxParser.parseParagraphs(doc);
       const chapters = DocxParser.buildChapters(paragraphs, headingStyles, title);
@@ -241,7 +233,7 @@ export class DocxParser implements BookParser {
   private static runsToHtml(runs: DocxRun[]): string {
     return runs
       .map((r) => {
-        let text = DocxParser.escapeHtml(r.text);
+        let text = escapeHtml(r.text);
         if (r.bold) text = `<strong>${text}</strong>`;
         if (r.italic) text = `<em>${text}</em>`;
         return text;
@@ -251,13 +243,5 @@ export class DocxParser implements BookParser {
 
   private static paragraphText(paragraphs: DocxParagraph[]): string {
     return paragraphs.map((p) => DocxParser.runText(p.runs)).join(" ");
-  }
-
-  private static escapeHtml(text: string): string {
-    return text
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
   }
 }

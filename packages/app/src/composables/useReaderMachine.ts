@@ -1,5 +1,5 @@
 import { ref, computed, shallowRef, watch, onMounted, onUnmounted, type Ref } from "vue";
-import { ReflowableHost } from "@book/reader-engine";
+import { ReflowableHost, computePageFromOffset, computeAnchorScrollTop } from "@book/reader-engine";
 import type { ReaderState, ReaderAction, ReaderEffect } from "@book/reader-core";
 import { createInitialState } from "@book/reader-core";
 import { currentSession } from "../stores/reader-session";
@@ -280,22 +280,25 @@ export function useReaderMachine(
     if (state.value.mode === "pagination") {
       const element = resolveCfiToElement(cfi, doc.body);
       if (element) {
-        const bodyRect = doc.body.getBoundingClientRect();
-        const elRect = element.getBoundingClientRect();
-        const offset = elRect.left - bodyRect.left;
         const step = doc.documentElement.clientWidth;
         if (step > 0) {
           host?.dispatch({
             type: "GO_TO_PAGE",
-            page: Math.floor(offset / step),
+            page: computePageFromOffset(
+              element.getBoundingClientRect().left,
+              doc.body.getBoundingClientRect().left,
+              step,
+            ),
           });
         }
       }
     } else {
       const element = resolveCfiToElement(cfi, doc.body);
       if (element) {
-        const top = element.getBoundingClientRect().top + doc.documentElement.scrollTop;
-        doc.documentElement.scrollTop = top;
+        doc.documentElement.scrollTop = computeAnchorScrollTop(
+          element.getBoundingClientRect().top,
+          doc.documentElement.scrollTop,
+        );
       }
     }
   }

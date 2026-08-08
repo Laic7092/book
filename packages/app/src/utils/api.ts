@@ -10,27 +10,39 @@
  *   ctx.server.fs.list("/src")
  */
 
+import type { CapabilitiesResponse, ErrorResponse, NetFetchInit } from "@book/contracts";
+
 // ── Net (HTTP / CORS proxy) ──
 
 export interface NetClient {
-  /** Proxy a GET request to an external URL. Returns the raw Response. */
-  fetch(targetUrl: string, init?: RequestInit): Promise<Response>;
+  /** Proxy a request to an external URL. Returns the raw Response. */
+  fetch(targetUrl: string, init?: NetFetchInit): Promise<Response>;
 
   /** Convenience: proxy GET + parse JSON. Throws on non-OK. */
   getJson<T = unknown>(targetUrl: string): Promise<T>;
 }
 
+async function errorFrom(res: Response, fallback: string): Promise<Error> {
+  try {
+    const data = (await res.json()) as ErrorResponse;
+    if (data && typeof data.error === "string") return new Error(data.error);
+  } catch {
+    // Non-JSON error body; fall through to the generic message.
+  }
+  return new Error(`${fallback}: ${res.status} ${res.statusText}`);
+}
+
 function createNetClient(): NetClient {
   return {
-    async fetch(targetUrl: string, init?: RequestInit): Promise<Response> {
+    async fetch(targetUrl: string, init?: NetFetchInit): Promise<Response> {
       const params = new URLSearchParams({ url: targetUrl });
-      return window.fetch(`/api/net/fetch?${params}`, init);
+      return window.fetch(`/api/net/fetch?${params}`, init as RequestInit);
     },
 
     async getJson<T = unknown>(targetUrl: string): Promise<T> {
       const res = await this.fetch(targetUrl);
       if (!res.ok) {
-        throw new Error(`net.fetch failed: ${res.status} ${res.statusText}`);
+        throw await errorFrom(res, "net.fetch failed");
       }
       return res.json() as Promise<T>;
     },
@@ -107,7 +119,7 @@ export interface ServerClient {
   net: NetClient;
   fs: FSClient;
   /** Fetch capabilities from the server. */
-  capabilities(): Promise<Record<string, boolean | string>>;
+  capabilities(): Promise<CapabilitiesResponse>;
 }
 
 export function createServerClient(): ServerClient {
