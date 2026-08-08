@@ -12,16 +12,13 @@ function update() {
   width.value = `${pct}%`;
 }
 
-// Scroll mode has no page:changed; its only progress signal is scroll:progress.
-// progress is the visible chapter's in-chapter fraction; chapters before it
-// count as fully read.
+// Scroll mode has no page:changed; scroll:progress carries the current
+// chapter's in-chapter fraction (0..1) directly.
 function updateFromScroll(progress: number) {
   const s = currentSession.value?.getState();
   if (!s || s.mode !== "scroll") return;
-  const total = s.chapters.length;
-  if (total <= 0) return;
   const clamped = Math.min(1, Math.max(0, progress));
-  width.value = `${(((s.currentChapterIndex + clamped) / total) * 100).toFixed(1)}%`;
+  width.value = `${(clamped * 100).toFixed(1)}%`;
 }
 
 const unsubPage = pluginEvents.on("page:changed", update);
