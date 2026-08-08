@@ -7,9 +7,57 @@
 
 import https from "node:https";
 import http from "node:http";
+import { lookup } from "node:dns/promises";
 
 const SAFE_HEADERS = ["accept", "accept-language", "user-agent", "cache-control"];
 const MAX_REDIRECT = 8;
+
+// Internal IP ranges blocked for SSRF prevention
+const BLOCKED_IP_PATTERNS = [
+  /^127\.\d+\.\d+\.\d+$/,
+  /^10\.\d+\.\d+\.\d+$/,
+  /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/,
+  /^192\.168\.\d+\.\d+$/,
+  /^169\.254\.\d+\.\d+$/,
+  /^0\.0\.0\.0$/,
+  /^::1$/,
+  /^fc00:/,
+  /^fe80:/,
+];
+
+function isInternalIp(ip: string): boolean {
+  // Normalize IPv4-mapped IPv6 (::ffff:127.0.0.1 -> 127.0.0.1) and strip
+  // URL's brackets around IPv6 literals ([::1] -> ::1).
+  const host = ip.toLowerCase().replace(/^\[|\]$/g, "");
+  const mapped = host.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  return BLOCKED_IP_PATTERNS.some((p) => p.test(mapped ? mapped[1] : host));
+}
+
+/**
+ * SSRF guard: reject anything that resolves to a private/loopback address,
+ * including hostnames like `localhost` that would bypass numeric-IP checks.
+ * Unresolvable hostnames are blocked too — an unverifiable target must not
+ * be fetched.
+ */
+export async function isInternalUrl(raw: string): Promise<boolean> {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return true;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return true;
+  const hostname = url.hostname;
+  if (hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local"))
+    return true;
+  if (isInternalIp(hostname)) return true;
+  try {
+    const addrs = await lookup(hostname, { all: true });
+    return addrs.some((a) => isInternalIp(a.address));
+  } catch {
+    return true;
+  }
+}
 
 function nodeHeadersToWeb(raw: Record<string, string | string[] | undefined>): Headers {
   const h = new Headers();
@@ -86,6 +134,14 @@ function nodeRequest(
 }
 
 export async function netFetch(targetUrl: string, request: Request): Promise<Response> {
+  // Defense in depth: every caller goes through the SSRF guard, not just
+  // the route handler that remembers to call it.
+  if (await isInternalUrl(targetUrl)) {
+    return new Response(JSON.stringify({ error: "net.fetch failed: internal address blocked" }), {
+      status: 502,
+      headers: { "content-type": "application/json" },
+    });
+  }
   // Collect safe headers
   const reqHeaders: Record<string, string> = {};
   for (const name of SAFE_HEADERS) {
@@ -108,7 +164,16 @@ export async function netFetch(targetUrl: string, request: Request): Promise<Res
       const result = await nodeRequest(url, method, reqHeaders, currentBody, signal);
 
       if (result.redirect) {
-        url = new URL(result.redirect);
+        const nextUrl = new URL(result.redirect);
+        // Re-check every hop: an external 302 could point back at an
+        // internal address that the initial request never touched.
+        if (await isInternalUrl(nextUrl.href)) {
+          return new Response(
+            JSON.stringify({ error: "net.fetch failed: redirect to internal address blocked" }),
+            { status: 502, headers: { "content-type": "application/json" } },
+          );
+        }
+        url = nextUrl;
         // Standard: POST → GET after 301/302, keep method on 307/308
         if (result.status === 307 || result.status === 308) {
           // keep method + body

@@ -11,6 +11,27 @@ const MAX_STORED_BOOKS = 20;
 
 const PLUGIN_ID = "_covers";
 
+// Only these formats can re-extract a chapter from stored raw data
+// (chapters carry a href and the parser implements extractChapterContent).
+// Evicting any other format clears content that can never be restored.
+const LAZY_EXTRACTABLE_FORMATS = new Set(["epub", "pdf", "cbz", "cbr"]);
+
+const BLOB_URL_PATTERN = /blob:[^\s"'<>)]+/g;
+
+/**
+ * Revoke object URLs embedded in stored chapter HTML. The pdf/cbz/cbr
+ * parsers lazily render pages into blob: URLs; without an explicit revoke
+ * every lazy extraction leaks one URL forever.
+ */
+function revokeBlobUrls(html: string): void {
+  const matches = html.match(BLOB_URL_PATTERN);
+  if (!matches) return;
+  for (const url of matches) {
+    // Revoking an already-revoked or unknown URL is a harmless no-op.
+    URL.revokeObjectURL(url);
+  }
+}
+
 interface CoverEntry {
   pluginId: string;
   key: string;
@@ -55,7 +76,10 @@ async function evictChapters(): Promise<void> {
   const books = await getAllBooks();
   if (books.length <= MAX_STORED_BOOKS) return;
 
-  const toEvict = books.slice(MAX_STORED_BOOKS);
+  const toEvict = books
+    .slice(MAX_STORED_BOOKS)
+    .filter((b) => LAZY_EXTRACTABLE_FORMATS.has(b.format));
+  if (toEvict.length === 0) return;
   await dbTransaction([STORES.CHAPTERS], "readwrite", async (stores) => {
     const chaptersStore = stores.get(STORES.CHAPTERS)!;
     for (const book of toEvict) {
@@ -67,6 +91,7 @@ async function evictChapters(): Promise<void> {
           if (cursor) {
             const record = cursor.value as StoredChapter;
             if (record.content) {
+              revokeBlobUrls(record.content);
               record.content = "";
               cursor.update(record);
             }
@@ -160,10 +185,13 @@ export async function deleteBook(bookId: string): Promise<void> {
     const chaptersIndex = chaptersStore.index("bookId");
 
     await new Promise<void>((resolve, reject) => {
-      const request = chaptersIndex.getAllKeys(IDBKeyRange.only(bookId));
+      const request = chaptersIndex.getAll(IDBKeyRange.only(bookId));
       request.onsuccess = () => {
-        const keys = request.result as Array<[string, string]>;
-        keys.forEach((key) => chaptersStore.delete(key));
+        const chapters = request.result as StoredChapter[];
+        for (const ch of chapters) {
+          if (ch.content) revokeBlobUrls(ch.content);
+          chaptersStore.delete([bookId, ch.chapterId]);
+        }
         resolve();
       };
       request.onerror = () => reject(request.error);
@@ -305,6 +333,7 @@ async function updateChapterContent(
 ): Promise<void> {
   const chapter = await dbGet<StoredChapter>(STORES.CHAPTERS, [bookId, chapterId]);
   if (chapter) {
+    if (chapter.content && chapter.content !== content) revokeBlobUrls(chapter.content);
     chapter.content = content;
     await dbPut(STORES.CHAPTERS, chapter);
   }

@@ -22,7 +22,14 @@ export interface PluginEventMap {
   "scroll:progress": { bookId: string; progress: number };
   "reader:init": { bookId: string };
   "reader:mounted": { bookId: string };
-  "reader:unmounted": { bookId: string };
+  "reader:unmounted": {
+    bookId: string;
+    chapterId?: string;
+    chapterIndex: number;
+    mode: "pagination" | "scroll";
+    page: number;
+    scrollProgress: number;
+  };
   [key: string]: unknown;
 }
 

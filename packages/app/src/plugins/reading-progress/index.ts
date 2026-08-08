@@ -64,10 +64,16 @@ export const readingProgressPlugin: Plugin = {
     ctx.events.on("mode:changed", ({ bookId, mode }) => {
       if (mode === "scroll") void save(bookId);
     });
-    ctx.events.on("reader:unmounted", ({ bookId }) => {
-      flushSave();
-      void save(bookId);
-    });
+    ctx.events.on(
+      "reader:unmounted",
+      ({ bookId, chapterId, chapterIndex, mode, page, scrollProgress }) => {
+        flushSave();
+        // The machine resets its state before this event fires; save the
+        // snapshot carried by the event instead of reading the session.
+        if (!chapterId || chapterIndex < 0) return;
+        void saveFromSnapshot(bookId, { chapterId, chapterIndex, mode, page, scrollProgress });
+      },
+    );
 
     // Fallback for refresh / tab switch / lock screen, where Vue's unmount
     // never runs.
@@ -89,24 +95,43 @@ export const readingProgressPlugin: Plugin = {
       window.removeEventListener("pagehide", onHidden);
     });
 
-    async function save(bookId: string) {
+    async function saveFromSnapshot(
+      bookId: string,
+      snapshot: {
+        chapterId: string;
+        chapterIndex: number;
+        mode: "pagination" | "scroll";
+        page: number;
+        scrollProgress: number;
+      },
+    ) {
       lastSavedAt = performance.now();
+      const data: ProgressData = {
+        chapterId: snapshot.chapterId,
+        chapterIndex: snapshot.chapterIndex,
+      };
+      if (snapshot.mode === "scroll") {
+        // In-chapter progress (0..1); restored against the single-chapter document.
+        data.scrollProgress = snapshot.scrollProgress;
+      } else {
+        data.pageIndex = snapshot.page;
+      }
+      await ctx.storage.put(progressKey(bookId), data);
+    }
+
+    async function save(bookId: string) {
       const h = ctx.readerSession();
       if (!h) return;
       const s = h.getState();
       const chapter = s.chapters[s.currentChapterIndex];
       if (!chapter) return;
-      const data: ProgressData = {
+      void saveFromSnapshot(bookId, {
         chapterId: chapter.id,
         chapterIndex: s.currentChapterIndex,
-      };
-      if (s.mode === "scroll") {
-        // In-chapter progress (0..1); restored against the single-chapter document.
-        data.scrollProgress = s.scrollProgress;
-      } else {
-        data.pageIndex = s.page.current;
-      }
-      await ctx.storage.put(progressKey(bookId), data);
+        mode: s.mode,
+        page: s.page.current,
+        scrollProgress: s.scrollProgress,
+      });
     }
 
     ctx.hooks.filter("reader:init-config", async (config) => {

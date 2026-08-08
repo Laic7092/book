@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, defineAsyncComponent } from "vue";
+import { computed, onMounted, onUnmounted, ref, defineAsyncComponent } from "vue";
 import { useBookshelfStore } from "../stores/bookshelf";
 import { useUIStore } from "../stores/ui";
 import { getBookGradient, getInitial } from "../utils/colors";
@@ -43,28 +43,6 @@ const bookshelfMenuActions = computed(() => {
   void pluginStateVersion.value;
   return getBookshelfMenuActions();
 });
-
-// ── Rename state ──
-const renamingBookId = ref<string | null>(null);
-const renameValue = ref("");
-
-function startRename(book: Book) {
-  renamingBookId.value = book.id;
-  renameValue.value = book.title;
-}
-
-function saveRename() {
-  const id = renamingBookId.value;
-  if (id) {
-    bookshelfStore.renameBook(id, renameValue.value);
-  }
-  cancelRename();
-}
-
-function cancelRename() {
-  renamingBookId.value = null;
-  renameValue.value = "";
-}
 
 // ── Folder dropdown state ──
 const folderDropdownBookId = ref<string | null>(null);
@@ -295,6 +273,10 @@ onMounted(() => {
   bookshelfStore.loadBooks();
   bookshelfStore.loadFolders();
   document.addEventListener("click", onDocumentClick);
+});
+
+onUnmounted(() => {
+  document.removeEventListener("click", onDocumentClick);
 });
 </script>
 
@@ -1935,25 +1917,6 @@ onMounted(() => {
   font-size: 12px;
   font-family: var(--font-ui);
   outline: none;
-}
-
-/* ═══════════════════════════════════════════════
-   BOOK RENAME INPUT
-   ═══════════════════════════════════════════════ */
-
-.rename-input {
-  width: 100%;
-  padding: 2px 4px;
-  font-size: 14px;
-  font-weight: 600;
-  font-family: var(--font-ui);
-  border: 1px solid var(--accent);
-  border-radius: 4px;
-  background: var(--bg-elevated);
-  color: var(--reader-text);
-  outline: none;
-  line-height: 1.35;
-  box-sizing: border-box;
 }
 
 .book-title {

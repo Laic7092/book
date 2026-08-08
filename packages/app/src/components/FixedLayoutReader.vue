@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, shallowRef } from "vue";
 import FixedLayoutPage from "./reader/FixedLayoutPage.vue";
-import { useNavigationStack } from "../composables/useNavigationStack";
 import { FixedHost } from "@book/reader-engine";
 import type { FixedLayoutSurface, SelfContainedRenderer } from "@book/reader-engine";
 import { createInitialState } from "@book/reader-core";
@@ -18,8 +17,6 @@ import type { PdfOutlineItem } from "@book/parser-core";
 import { translateEffect } from "../composables/useReaderMachine";
 
 const props = defineProps<{ book: Book }>();
-
-const navStack = useNavigationStack();
 
 // ── Renderer selection (format → renderer factory) ──
 
@@ -288,7 +285,6 @@ onMounted(async () => {
 onUnmounted(() => {
   host.value?.destroy();
   currentSession.value = null;
-  navStack.reset();
   window.removeEventListener("keydown", handleKeydown);
 });
 </script>

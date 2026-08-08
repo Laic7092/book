@@ -1,11 +1,6 @@
 <script setup lang="ts">
 import ModalHeader from "../../components/modals/ModalHeader.vue";
-import {
-  THEME_OPTIONS,
-  READING_MODE_OPTIONS,
-  ANIMATION_OPTIONS,
-  FONT_SIZE_PRESETS,
-} from "./options";
+import { THEME_OPTIONS, READING_MODE_OPTIONS, FONT_SIZE_PRESETS } from "./options";
 import { getSettingsState } from "./index";
 import { useUIStore } from "../../stores/ui";
 import { themeRegistry } from "../../core/theme-registry";
@@ -239,30 +234,6 @@ function removeBgImage() {
               </svg>
               <span>{{ mode.label }}</span>
               <span class="mode-desc">{{ mode.desc }}</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- 翻页动画 -->
-        <div
-          class="setting-row"
-          v-if="(settings.readingMode || 'vertical') === 'pagination' && false"
-        >
-          <label class="setting-label">
-            <span>翻页效果</span>
-            <span class="setting-value">{{ settings.paginationAnimation || "fade" }}</span>
-          </label>
-          <div class="anim-options">
-            <button
-              v-for="anim in ANIMATION_OPTIONS"
-              :key="anim.value"
-              :class="[
-                'anim-btn',
-                { active: (settings.paginationAnimation || 'fade') === anim.value },
-              ]"
-              @click="state.update({ paginationAnimation: anim.value })"
-            >
-              {{ anim.label }}
             </button>
           </div>
         </div>

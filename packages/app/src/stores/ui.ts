@@ -19,6 +19,10 @@ export interface UIState {
   suppressControls: boolean;
 }
 
+// Tracked outside state so the handle never shows in devtools; a new toast
+// must cancel the previous hide timer or the old one closes it early.
+let toastTimer: ReturnType<typeof setTimeout> | null = null;
+
 export const useUIStore = defineStore("ui", {
   state: (): UIState => ({
     showControls: false,
@@ -74,14 +78,7 @@ export const useUIStore = defineStore("ui", {
       this.toastTitle = "";
       this.toastMessage = message;
       this.toastError = isError;
-
-      // Use requestAnimationFrame to ensure DOM update
-      requestAnimationFrame(() => {
-        this.showToast = true;
-        setTimeout(() => {
-          this.showToast = false;
-        }, TOAST_DURATION);
-      });
+      this.scheduleToastHide();
     },
 
     /**
@@ -92,10 +89,20 @@ export const useUIStore = defineStore("ui", {
       this.toastTitle = title;
       this.toastMessage = message;
       this.toastError = isError;
+      this.scheduleToastHide();
+    },
 
+    /**
+     * Hide the toast after TOAST_DURATION, cancelling any previous timer so a
+     * rapid sequence of toasts doesn't get closed early by the first one.
+     */
+    scheduleToastHide() {
+      if (toastTimer !== null) clearTimeout(toastTimer);
+      // Use requestAnimationFrame to ensure DOM update
       requestAnimationFrame(() => {
         this.showToast = true;
-        setTimeout(() => {
+        toastTimer = setTimeout(() => {
+          toastTimer = null;
           this.showToast = false;
         }, TOAST_DURATION);
       });

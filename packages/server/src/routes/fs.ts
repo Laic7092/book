@@ -1,6 +1,6 @@
 import { readFile, writeFile, readdir, stat, unlink, rm, mkdir } from "node:fs/promises";
 import { statSync } from "node:fs";
-import { resolve, dirname } from "node:path";
+import { resolve, dirname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Hono } from "hono";
 
@@ -9,7 +9,10 @@ const ROOT = resolve(fileURLToPath(import.meta.url), "../..");
 
 function safePath(input: string): string | null {
   const absolute = resolve(ROOT, input);
-  if (!absolute.startsWith(ROOT)) return null;
+  // Path-separator boundary: without it, a sibling dir like
+  // `<root>-evil` would pass a bare startsWith check.
+  if (absolute === ROOT) return absolute;
+  if (!absolute.startsWith(ROOT + sep)) return null;
   return absolute;
 }
 

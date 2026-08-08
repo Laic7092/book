@@ -115,7 +115,7 @@ export class ReflowableHost extends Engine {
       return;
 
     const hashIndex = href.indexOf("#");
-    const filePath = hashIndex > 0 ? href.substring(0, hashIndex) : href;
+    const filePath = hashIndex >= 0 ? href.substring(0, hashIndex) : href;
     const anchor = hashIndex >= 0 ? href.substring(hashIndex + 1) : "";
 
     const targetChapter = this.state.chapters.find(

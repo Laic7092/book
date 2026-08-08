@@ -4,7 +4,6 @@ import type { ReaderState, ReaderAction, ReaderEffect } from "@book/reader-core"
 import { createInitialState } from "@book/reader-core";
 import { currentSession } from "../stores/reader-session";
 import { useUIStore } from "../stores/ui";
-import { NavigationStack } from "./useNavigationStack";
 import {
   applyContentTransformers,
   getOverlayComponents,
@@ -55,6 +54,11 @@ export function translateEffect(effect: ReaderEffect, bookId: string): void {
     case "READER_UNMOUNTED":
       void pluginEvents.emit("reader:unmounted", {
         bookId: effect.bookId,
+        chapterId: effect.chapterId ?? undefined,
+        chapterIndex: effect.chapterIndex,
+        mode: effect.mode,
+        page: effect.page,
+        scrollProgress: effect.scrollProgress,
       });
       break;
   }
@@ -68,17 +72,9 @@ export function useReaderMachine(
   void pluginEvents.emit("reader:init", { bookId: bookId.value });
 
   const uiStore = useUIStore();
-  const navStack = new NavigationStack();
 
   const state = shallowRef<ReaderState>(createInitialState());
-  const navSnapshot = shallowRef(navStack.getSnapshot());
-
-  function syncNavSnapshot() {
-    navSnapshot.value = navStack.getSnapshot();
-  }
-
   const isRestoring = ref(true);
-  const isHistoryNav = ref(false);
   let host: ReflowableHost | null = null;
 
   const overlayComponents = computed(() => {
@@ -125,9 +121,6 @@ export function useReaderMachine(
     return false;
   });
 
-  const canGoBack = computed(() => navSnapshot.value.canGoBack);
-  const canGoForward = computed(() => navSnapshot.value.canGoForward);
-
   const chapters = computed(() => state.value.chapters);
   const isReady = computed(() => state.value.status === "ready");
 
@@ -149,42 +142,8 @@ export function useReaderMachine(
     host?.prevPage();
   }
 
-  function handleHistoryBack() {
-    const entry = navStack.back();
-    syncNavSnapshot();
-    if (!entry) return;
-    isHistoryNav.value = true;
-    if (entry.chapterId === currentChapterId.value) {
-      host?.dispatch({ type: "GO_TO_PAGE", page: entry.page });
-    } else {
-      host?.dispatch({
-        type: "GO_TO_CHAPTER",
-        chapterId: entry.chapterId,
-        targetPage: entry.page,
-      });
-    }
-    isHistoryNav.value = false;
-  }
-
   function retry() {
     host?.retry();
-  }
-
-  function handleHistoryForward() {
-    const entry = navStack.forward();
-    syncNavSnapshot();
-    if (!entry) return;
-    isHistoryNav.value = true;
-    if (entry.chapterId === currentChapterId.value) {
-      host?.dispatch({ type: "GO_TO_PAGE", page: entry.page });
-    } else {
-      host?.dispatch({
-        type: "GO_TO_CHAPTER",
-        chapterId: entry.chapterId,
-        targetPage: entry.page,
-      });
-    }
-    isHistoryNav.value = false;
   }
 
   function handleInternalLinkClick(href: string) {
@@ -273,7 +232,6 @@ export function useReaderMachine(
 
   onUnmounted(() => {
     host?.destroy();
-    navStack.reset();
     // host.destroy() emits READER_UNMOUNTED asynchronously (microtask); the
     // plugin's exit save reads the session. Drop the reference afterwards so
     // the final save is not silently skipped.
@@ -357,24 +315,15 @@ export function useReaderMachine(
     isReady,
     overlayComponents,
     headerActions,
-    canGoBack,
-    canGoForward,
     hasError,
     errorMessage,
     retry,
     handleSelectChapter,
     nextPage,
     prevPage,
-    handleHistoryBack,
-    handleHistoryForward,
     handleInternalLinkClick,
     currentPage,
     totalPages,
     navigateToCfiLocation,
-    getDocument: getIframeDoc,
-    reloadForPagination: () => {
-      const chId = currentChapterId.value;
-      if (chId) host?.goToChapter(chId);
-    },
   };
 }

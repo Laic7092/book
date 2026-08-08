@@ -12,11 +12,6 @@
 //   - index: 1-based child position * 2 (even for elements, odd for text)
 //   - assertions: optional id, before/after, text location markers
 
-export interface CfiRange {
-  startCfi: string;
-  endCfi: string;
-}
-
 export interface ParsedCfi {
   spineIndex: number;
   steps: CfiStep[];
@@ -472,35 +467,6 @@ export function resolveCfi(cfi: string, contentRoot: Element): CfiTarget | null 
 }
 
 /**
- * Resolve a CFI to a DOM Range (for highlighting selections).
- */
-export function resolveCfiToRange(cfi: string, contentRoot: Element): Range | null {
-  const parsed = parseCfi(cfi);
-  if (!parsed) return null;
-
-  const startResult = resolveSteps(parsed.steps, contentRoot);
-  if (!startResult) return null;
-
-  const range = contentRoot.ownerDocument.createRange();
-
-  if (parsed.textOffsetStart !== undefined && isTextNode(startResult.node)) {
-    const textLen = (startResult.node.textContent || "").length;
-    const startOffset = Math.min(Math.max(0, parsed.textOffsetStart), textLen);
-    const endOffset =
-      parsed.textOffsetEnd !== undefined
-        ? Math.min(Math.max(0, parsed.textOffsetEnd), textLen)
-        : startOffset;
-    range.setStart(startResult.node, startOffset);
-    range.setEnd(startResult.node, endOffset);
-  } else {
-    range.setStart(startResult.node, startResult.offset);
-    range.setEnd(startResult.node, startResult.offset);
-  }
-
-  return range;
-}
-
-/**
  * Resolve a start+end CFI pair to a DOM Range spanning both positions.
  */
 export function resolveCfiRange(
@@ -516,76 +482,6 @@ export function resolveCfiRange(
   range.setStart(start.node, start.offset);
   range.setEnd(end.node, end.offset);
   return range;
-}
-
-// ─── Navigation ────────────────────────────────────────────────────────────
-
-function paginateToElement(element: Element): void {
-  const doc = element.ownerDocument?.documentElement;
-  if (!doc) return;
-  const top =
-    element.getBoundingClientRect().top +
-    doc.scrollTop -
-    doc.clientHeight / 2 +
-    (element instanceof HTMLElement ? element.offsetHeight / 2 : 0);
-  doc.scrollTop = top;
-}
-
-/**
- * Navigate to a CFI location by scrolling the target element into view.
- * Also highlights the target briefly.
- */
-export function navigateToCfi(cfi: string, contentRoot: Element): boolean {
-  const target = resolveCfi(cfi, contentRoot);
-  if (!target) return false;
-
-  const element =
-    target.node.nodeType === Node.TEXT_NODE
-      ? (target.node.parentElement as HTMLElement | null)
-      : (target.node as HTMLElement);
-
-  if (!element) return false;
-
-  // Create a temporary highlight
-  const originalBg = element.style.backgroundColor;
-  element.style.transition = "background-color 0.3s ease";
-  element.style.backgroundColor = "rgba(251, 191, 36, 0.3)";
-
-  // Scroll into view
-  paginateToElement(element);
-
-  // Remove highlight after animation
-  setTimeout(() => {
-    element.style.backgroundColor = originalBg;
-  }, 2000);
-
-  return true;
-}
-
-/**
- * Navigate to a CFI and set the browser selection to the target.
- */
-export function selectCfi(cfi: string, contentRoot: Element): boolean {
-  const range = resolveCfiToRange(cfi, contentRoot);
-  if (!range) return false;
-
-  const selection = contentRoot.ownerDocument.defaultView?.getSelection();
-  if (!selection) return false;
-
-  selection.removeAllRanges();
-  selection.addRange(range);
-
-  // Also scroll the range into view
-  const element =
-    range.startContainer.nodeType === Node.TEXT_NODE
-      ? (range.startContainer.parentElement as Element | null)
-      : (range.startContainer as Element);
-
-  if (element) {
-    paginateToElement(element);
-  }
-
-  return true;
 }
 
 // ─── Comparison ────────────────────────────────────────────────────────────
@@ -627,78 +523,3 @@ export function compareCfi(a: string, b: string): number {
 }
 
 // ─── Utilities ─────────────────────────────────────────────────────────────
-
-export function createCfiRange(startCfi: string, endCfi: string): CfiRange {
-  return { startCfi, endCfi };
-}
-
-export function isValidCfi(cfi: string): boolean {
-  return parseCfi(cfi) !== null;
-}
-
-/**
- * Get a human-readable description of a CFI location.
- */
-export function describeCfiLocation(cfi: string): string {
-  const parsed = parseCfi(cfi);
-  if (!parsed) return "Unknown location";
-
-  const stepStr = parsed.steps.map((s) => s.index).join("/");
-  const offsetStr = parsed.textOffsetStart !== undefined ? `:${parsed.textOffsetStart}` : "";
-  return `Spine ${parsed.spineIndex + 1}, path: ${stepStr}${offsetStr}`;
-}
-
-/**
- * Build a CFI range string from two CFIs.
- */
-export function buildCfiRangeString(startCfi: string, endCfi: string): string {
-  const parsedStart = parseCfi(startCfi);
-  const parsedEnd = parseCfi(endCfi);
-
-  if (!parsedStart || !parsedEnd) return startCfi;
-
-  if (parsedStart.spineIndex !== parsedEnd.spineIndex) {
-    // Cross-spine range: return just the start
-    return startCfi;
-  }
-
-  // Same spine: build a range with end path
-  const startInner = startCfi.startsWith("epubcfi(") ? startCfi.slice(8, -1) : startCfi;
-  const endInner = endCfi.startsWith("epubcfi(") ? endCfi.slice(8, -1) : endCfi;
-
-  // Extract local paths (after /6/N)
-  const startLocal = startInner.replace(/^\/6\/\d+/, "");
-  const endLocal = endInner.replace(/^\/6\/\d+/, "");
-
-  return `epubcfi(${startLocal}~${endLocal})`;
-}
-
-/**
- * Get the spine index from a CFI.
- */
-export function getSpineIndex(cfi: string): number {
-  const parsed = parseCfi(cfi);
-  return parsed ? parsed.spineIndex : -1;
-}
-
-/**
- * Extract text content at a CFI location.
- */
-export function getTextAtCfi(cfi: string, contentRoot: Element, contextLength = 100): string {
-  const target = resolveCfi(cfi, contentRoot);
-  if (!target) return "";
-
-  const textNode = target.node.nodeType === Node.TEXT_NODE ? (target.node as Text) : null;
-
-  if (textNode) {
-    const text = textNode.textContent || "";
-    const start = Math.max(0, target.offset - 20);
-    const end = Math.min(text.length, target.offset + contextLength);
-    return text.slice(start, end);
-  }
-
-  // Get text from the element
-  const element = target.node as Element;
-  const text = element.textContent || "";
-  return text.slice(0, contextLength);
-}

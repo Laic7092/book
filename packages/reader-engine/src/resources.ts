@@ -116,8 +116,17 @@ export function injectResources(
   for (const [, info] of injectedResources.entries()) {
     if (info.type === "style") allCssParts.push(info.content);
   }
+  const cssText = allCssParts.join("\n");
   const styleTag = doc.getElementById(styleTagId);
-  if (styleTag) styleTag.textContent = allCssParts.join("\n");
+  if (styleTag) {
+    styleTag.textContent = cssText;
+  } else if (cssText) {
+    const tag = doc.createElement("style");
+    tag.id = styleTagId;
+    tag.setAttribute(dynamicAttrName, "true");
+    tag.textContent = cssText;
+    doc.head.appendChild(tag);
+  }
 
   for (const link of newLinkElements) {
     doc.head.appendChild(link);
@@ -128,9 +137,14 @@ export function clearResources(
   doc: Document,
   injectedResources: Map<string, ResourceInfo>,
   styleTagId = "resource-style",
+  dynamicAttrName = "data-resource-dynamic",
 ): void {
   const styleTag = doc.getElementById(styleTagId);
-  if (styleTag) styleTag.textContent = "";
+  if (styleTag) {
+    // 动态创建的聚合标签直接移除;宿主自带的静态标签只清空内容
+    if (styleTag.hasAttribute(dynamicAttrName)) styleTag.remove();
+    else styleTag.textContent = "";
+  }
   for (const [, info] of injectedResources.entries()) {
     if (info?.element) info.element.remove();
   }

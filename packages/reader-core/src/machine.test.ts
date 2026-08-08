@@ -639,6 +639,10 @@ describe("TEARDOWN", () => {
       type: "READER_UNMOUNTED",
       bookId: "book1",
       chapterId: "ch1",
+      chapterIndex: 0,
+      mode: "pagination",
+      page: 0,
+      scrollProgress: 0,
     });
   });
 

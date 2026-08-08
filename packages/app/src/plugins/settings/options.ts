@@ -11,12 +11,6 @@ export const READING_MODE_OPTIONS = [
   { label: "Pagination", value: "pagination", desc: "Page by page" },
 ] as const;
 
-// Pagination animation options
-export const ANIMATION_OPTIONS = [
-  { label: "Slide", value: "slide", desc: "Smooth slide" },
-  { label: "Fade", value: "fade", desc: "Fade transition" },
-] as const;
-
 // Font options for typography settings UI
 export const FONT_OPTIONS = [
   { label: "Literata", value: "Literata, Georgia, serif", preview: "Literata" },

@@ -59,7 +59,15 @@ export type ReaderEffect =
   | { type: "CHAPTER_DID_CHANGE"; chapterId: string; previousChapterId: string | null }
   | { type: "PAGE_DID_CHANGE"; page: number; totalPages: number; chapterId: string }
   | { type: "CONTENT_DID_LOAD"; chapterId: string }
-  | { type: "READER_UNMOUNTED"; bookId: string; chapterId: string | null };
+  | {
+      type: "READER_UNMOUNTED";
+      bookId: string;
+      chapterId: string | null;
+      chapterIndex: number;
+      mode: "pagination" | "scroll";
+      page: number;
+      scrollProgress: number;
+    };
 
 export function createInitialState(): ReaderState {
   return {
@@ -402,7 +410,17 @@ function teardownReducer(state: ReaderState): { state: ReaderState; effects: Rea
   const chapterId = getChapterId(state);
   const effects: ReaderEffect[] = [];
   if (state.bookId) {
-    effects.push({ type: "READER_UNMOUNTED", bookId: state.bookId, chapterId });
+    // Snapshot the full position: the state is reset synchronously, so any
+    // effect consumer reading it afterwards would see an empty machine.
+    effects.push({
+      type: "READER_UNMOUNTED",
+      bookId: state.bookId,
+      chapterId,
+      chapterIndex: state.currentChapterIndex,
+      mode: state.mode,
+      page: state.page.current,
+      scrollProgress: state.scrollProgress,
+    });
   }
   return { state: createInitialState(), effects };
 }

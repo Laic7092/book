@@ -163,16 +163,5 @@ export const useBookshelfStore = defineStore("bookshelf", {
       book.folderId = folderId ?? undefined;
       await booksStore.updateBook(bookId, { folderId: book.folderId });
     },
-
-    // ── Rename action ──
-
-    async renameBook(bookId: string, title: string) {
-      const book = this.books.find((b) => b.id === bookId);
-      if (!book) return;
-      const trimmed = title.trim();
-      if (!trimmed) return;
-      book.title = trimmed;
-      await booksStore.updateBook(bookId, { title: trimmed });
-    },
   },
 });
