@@ -1,4 +1,4 @@
-import type { ReaderSettings } from "../plugins/settings/types";
+import type { ReaderSettings } from "../core/reader-settings";
 import { themeRegistry } from "../core/theme-registry";
 
 export function generateThemeCSS(

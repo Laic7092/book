@@ -2,7 +2,8 @@ import { ref, watch } from "vue";
 import type { Plugin } from "../types";
 import { PLUGIN_BRAND } from "../types";
 import { createEntityStore, type EntityStore } from "../store-factory";
-import type { ReaderSettings, CustomFontFace } from "./types";
+import type { CustomFontFace } from "./types";
+import type { ReaderSettings } from "../../core/reader-settings";
 import { DEFAULT_SETTINGS } from "./defaults";
 import { generateThemeCSS, generateTypographyCSS } from "../../utils/reader-css";
 

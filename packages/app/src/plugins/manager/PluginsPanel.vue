@@ -62,6 +62,16 @@ const allPlugins = computed(() => {
   return getAllPlugins();
 });
 
+// setup 失败 (含 apiVersion 不匹配) 时展示错误原因; 错误只影响该插件自身.
+const setupErrors = computed<Record<string, string>>(() => {
+  const result: Record<string, string> = {};
+  for (const p of allPlugins.value) {
+    const err = (p as Plugin & { setupError?: Error }).setupError;
+    if (err) result[p.id] = err.message;
+  }
+  return result;
+});
+
 const activeFilter = ref("reader");
 
 const filteredPlugins = computed(() => {
@@ -127,6 +137,9 @@ defineEmits<{ close: [] }>();
           </span>
           <span class="plugin-id-line">
             <span class="plugin-id">{{ p.id }} · v{{ p.version }}</span>
+            <span v-if="setupErrors[p.id]" class="setup-error" :title="setupErrors[p.id]">
+              加载失败
+            </span>
             <span class="scene-badges">
               <span v-for="label in getSceneLabels(p.id)" :key="label" class="scene-badge">{{
                 label
@@ -199,6 +212,17 @@ defineEmits<{ close: [] }>();
 .plugin-id {
   font-size: 12px;
   color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.setup-error {
+  font-size: 11px;
+  font-weight: 600;
+  color: #dc2626;
+  background: rgba(220, 38, 38, 0.1);
+  padding: 1px 8px;
+  border-radius: 8px;
+  cursor: help;
   white-space: nowrap;
 }
 

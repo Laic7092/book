@@ -1,6 +1,6 @@
 import type { Component, App } from "vue";
 import type { ThemeRegistry } from "../core/theme-registry";
-import type { ReaderSettings } from "./settings/types";
+import type { ReaderSettings } from "../core/reader-settings";
 import type { ReaderSession } from "@book/reader-engine";
 import type { ServerClient } from "../utils/api";
 
@@ -36,6 +36,13 @@ export interface PluginEventMap {
 
 /** Brand property required on every Plugin for identity verification. */
 export const PLUGIN_BRAND = "__plugin" as const;
+
+/**
+ * Plugin API version: the contract version of `PluginContext`'s stable
+ * surface (see docs/plugin-contract.md §三). Bump on breaking changes only;
+ * adding events/hooks/UI registrations is minor and does not bump.
+ */
+export const PLUGIN_API_VERSION = 1 as const;
 
 export type EventHandler<T> = (payload: T) => unknown;
 
@@ -116,6 +123,13 @@ export interface HeaderAction {
 
 // ── PluginContext types ──
 
+// Stability tiers (docs/plugin-contract.md §四):
+//   稳定面 (stable) — storage / events / hooks / UI registrations / navigate / themes / server:
+//     signatures are guaranteed compatible within a major PLUGIN_API_VERSION.
+//   权力面 (power) — readerSession / injectIframeStyle / removeIframeStyle /
+//     registerContentTransformer: reach into engine internals, evolve freely,
+//     no compatibility promise; setup must degrade gracefully on failure.
+
 export interface PluginStorageAdapter {
   get<T>(key: string): Promise<T | undefined>;
   put<T>(key: string, value: T, createdAt?: number): Promise<void>;
@@ -150,6 +164,8 @@ export interface UISlots {
   setTheme(theme: string): void;
   /** Remove all inline theme CSS variables — falls back to index.css defaults. */
   clearTheme(): void;
+  // ── 权力面 (power API) — raw CSS injection into the reader iframe, not
+  //    covered by API version guarantees. ──
   /** Inject or update a <style> element in the reader iframe. Auto-cleaned on teardown. */
   injectIframeStyle(id: string, css: string): void;
   /** Remove an injected <style> from the reader iframe. */
@@ -169,20 +185,23 @@ export interface SetupHelpers {
 }
 
 export interface PluginContext {
+  /** 稳定面. */
   storage: PluginStorageAdapter;
+  /** 稳定面 (UI 注册类); `injectIframeStyle` 属权力面. */
   ui: UISlots;
+  /** 稳定面. */
   events: IEventBus<PluginEventMap>;
-  /** Filter hooks — plugins modify config before reader init. */
+  /** Filter hooks — plugins modify config before reader init. 稳定面. */
   hooks: HookRegistry;
-  /** ReaderSession getter — returns null before a book is opened. */
+  /** 权力面 (power API) — returns null before a book is opened. */
   readerSession: () => ReaderSession | null;
-  /** Register a content transformer applied to chapter HTML before rendering. */
+  /** 权力面 — transform chapter HTML before rendering. */
   registerContentTransformer(transformer: ContentTransformer): void;
-  /** Navigate to a route. */
+  /** 稳定面. */
   navigate: (url: string, replace?: boolean) => void;
-  /** Access Node capabilities (net, fs, …) through the proxy server. */
+  /** Access Node capabilities (net, fs, …) through the proxy server. 稳定面. */
   server: ServerClient;
-  /** Theme registry — register new themes or override builtin color schemes. */
+  /** Theme registry — register new themes or override builtin color schemes. 稳定面. */
   themes: ThemeRegistry;
 }
 
@@ -198,6 +217,8 @@ export interface Plugin {
   id: string;
   name: string;
   version: string;
+  /** PluginContext API version this plugin targets. Defaults to 1. Mismatch → setup rejected. */
+  apiVersion?: number;
   enabled?: boolean;
   core?: boolean;
 

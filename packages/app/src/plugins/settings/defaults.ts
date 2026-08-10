@@ -1,4 +1,4 @@
-import type { ReaderSettings } from "./types";
+import type { ReaderSettings } from "../../core/reader-settings";
 
 export const DEFAULT_SETTINGS: ReaderSettings = {
   fontSize: null,

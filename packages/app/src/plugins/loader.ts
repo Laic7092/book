@@ -34,6 +34,8 @@ interface PluginMeta {
 
 const metas: PluginMeta[] = [];
 const pluginLoaders = import.meta.glob<Record<string, unknown>>("./*/index.ts");
+// Template is documentation, not a loadable plugin — keep it out of the map.
+delete pluginLoaders["./_template/index.ts"];
 
 for (const meta of PLUGIN_METADATA) {
   if (!meta.loadOn || (Array.isArray(meta.loadOn) && meta.loadOn.length === 0)) continue;

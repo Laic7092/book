@@ -264,6 +264,11 @@ export function createStatsEngine(
 }
 
 // ── Module-level singleton accessor (set during plugin setup) ──
+//
+// Plugin-internal state sharing only: consumed exclusively by this plugin's
+// UI components (StatsBar/StatsPanel/StatsPage). Per docs/plugin-contract.md
+// §五.4, this must NOT be imported by other plugins — cross-plugin
+// communication only goes through ctx.events (or a future official channel).
 
 let _engine: ReturnType<typeof createStatsEngine> | null = null;
 

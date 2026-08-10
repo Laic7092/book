@@ -1,6 +1,6 @@
 import { ref, type Component } from "vue";
 import type { Plugin, FooterAction, BookshelfMenuAction, PluginBootstrap } from "../types";
-import { PLUGIN_BRAND } from "../types";
+import { PLUGIN_BRAND, PLUGIN_API_VERSION } from "../types";
 import { createPluginStorageAdapter } from "../context";
 import { createEntityStore } from "../store-factory";
 import {
@@ -77,6 +77,19 @@ export async function initializePlugins(bootstrap?: PluginBootstrap): Promise<vo
 async function setupPluginInternal(id: string, bootstrap: PluginBootstrap): Promise<void> {
   const mp = managedPlugins.get(id);
   if (!mp || !mp.plugin.setup) return;
+
+  // API version gate: a plugin targeting a different PluginContext version is
+  // rejected at setup (recorded as setupError, visible to the manager panel)
+  // instead of running against an unknown surface (docs/plugin-contract.md §三).
+  const apiVersion = mp.plugin.apiVersion ?? 1;
+  if (apiVersion !== PLUGIN_API_VERSION) {
+    const err = new Error(
+      `[Plugin ${id}] apiVersion ${apiVersion} does not match PLUGIN_API_VERSION ${PLUGIN_API_VERSION} — setup rejected`,
+    );
+    console.error(err.message);
+    mp.setupError = err;
+    return;
+  }
 
   try {
     const tracked = createTrackedContext(id, bootstrap);

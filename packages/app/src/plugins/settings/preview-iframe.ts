@@ -1,4 +1,4 @@
-import type { ReaderSettings } from "./types";
+import type { ReaderSettings } from "../../core/reader-settings";
 import { generateThemeCSS, generateTypographyCSS } from "../../utils/reader-css";
 import { BASE_CSS } from "@book/reader-engine";
 import { buildCustomColors } from "./index";
