@@ -1,7 +1,7 @@
 import { triggerStatsRefresh } from "./refresh";
 import { createStatsEngine, setStatsEngine } from "./engine";
-import type { Plugin } from "../types";
-import { PLUGIN_BRAND } from "../types";
+import type { Plugin } from "../../core/plugin-runtime/types";
+import { PLUGIN_BRAND } from "../../core/plugin-runtime/types";
 
 /** Count CJK characters (each = 1) plus Latin/digit word tokens. */
 function countWords(text: string): number {

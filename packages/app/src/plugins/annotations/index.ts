@@ -1,8 +1,8 @@
 import { ref } from "vue";
 // Async components — loaded on demand
-import type { Plugin } from "../types";
-import { PLUGIN_BRAND } from "../types";
-import { createEntityStore, type EntityStore } from "../store-factory";
+import type { Plugin } from "../../core/plugin-runtime/types";
+import { PLUGIN_BRAND } from "../../core/plugin-runtime/types";
+import { createEntityStore, type EntityStore } from "../../core/plugin-runtime/store-factory";
 import type { Annotation } from "../../core/types";
 // ── Module-level state ──
 

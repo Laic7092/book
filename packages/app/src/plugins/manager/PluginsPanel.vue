@@ -7,9 +7,10 @@ import {
   getAllPlugins,
   setPluginEnabled,
   pluginStateVersion,
-} from "../../plugins/manager/registry";
-import PLUGIN_METADATA from "../../plugins/plugin-metadata.json";
-import type { Plugin } from "../../plugins/types";
+  getPluginSetupErrors,
+} from "../../core/plugin-runtime/registry";
+import PLUGIN_METADATA from "../../core/plugin-runtime/plugin-metadata.json";
+import type { Plugin } from "../../core/plugin-runtime/types";
 
 // ── Scene metadata ──
 
@@ -63,14 +64,7 @@ const allPlugins = computed(() => {
 });
 
 // setup 失败 (含 apiVersion 不匹配) 时展示错误原因; 错误只影响该插件自身.
-const setupErrors = computed<Record<string, string>>(() => {
-  const result: Record<string, string> = {};
-  for (const p of allPlugins.value) {
-    const err = (p as Plugin & { setupError?: Error }).setupError;
-    if (err) result[p.id] = err.message;
-  }
-  return result;
-});
+const setupErrors = computed(() => getPluginSetupErrors());
 
 const activeFilter = ref("reader");
 

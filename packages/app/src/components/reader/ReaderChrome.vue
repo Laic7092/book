@@ -8,7 +8,7 @@ import {
   getFooterActions,
   getToolbarItems,
   pluginStateVersion,
-} from "../../plugins/manager/registry";
+} from "../../core/plugin-runtime/registry";
 
 defineProps<{
   bookTitle: string;

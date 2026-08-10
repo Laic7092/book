@@ -9,7 +9,7 @@ import LoadingSpinner from "../../components/ui/LoadingSpinner.vue";
 import EmptyState from "../../components/ui/EmptyState.vue";
 import AppIcon from "../../components/ui/AppIcon.vue";
 import { navigate } from "../../utils/router";
-import { pluginEvents } from "../manager/registry";
+import { pluginEvents } from "../../core/plugin-runtime/registry";
 
 const bookshelfStore = useBookshelfStore();
 

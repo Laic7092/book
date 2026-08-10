@@ -3,7 +3,7 @@ import { ref } from "vue";
 import type { Chapter } from "../../core/types";
 import TableOfContents from "./TableOfContents.vue";
 import { computed } from "vue";
-import { getModalComponents, pluginStateVersion } from "../../plugins/manager/registry";
+import { getModalComponents, pluginStateVersion } from "../../core/plugin-runtime/registry";
 
 const pluginModals = computed(() => {
   void pluginStateVersion.value;

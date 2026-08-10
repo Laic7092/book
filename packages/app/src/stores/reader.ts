@@ -1,11 +1,11 @@
 import { defineStore } from "pinia";
 import type { Book, Chapter } from "../core/types";
 import { ErrorCode, createReaderError } from "../core/errors";
-import { loadPluginsFor } from "../plugins/loader";
+import { loadPluginsFor } from "../core/plugin-runtime/loader";
 import { getParserForFormat, loadParserForFormat } from "@book/parser-core";
 import * as booksStore from "../storage/books";
 import { parseAndSaveBook } from "../storage/parse-save";
-import { pluginEvents } from "../plugins/context";
+import { pluginEvents } from "../core/plugin-runtime/context";
 import { validateBookId } from "../utils/validation";
 
 const REFLOWABLE_FORMATS = new Set(["epub", "txt", "fb2", "mobi", "azw3", "azw"]);

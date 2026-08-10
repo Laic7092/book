@@ -11,9 +11,9 @@
  *  完成后在 plugin-metadata.json 登记 (loadOn: app|bookshelf|reader).
  * ─────────────────────────────────────────────────────────────────────────────
  */
-import type { Plugin } from "../types";
-import { PLUGIN_BRAND, PLUGIN_API_VERSION } from "../types";
-import { createEntityStore, createSingletonStore } from "../store-factory";
+import type { Plugin } from "../../core/plugin-runtime/types";
+import { PLUGIN_BRAND, PLUGIN_API_VERSION } from "../../core/plugin-runtime/types";
+import { createEntityStore, createSingletonStore } from "../../core/plugin-runtime/store-factory";
 
 export const loadOn = "reader" as const;
 
@@ -38,6 +38,12 @@ export const examplePlugin: Plugin = {
     const items = createEntityStore<ExampleItem>(ctx.storage, "example", (i) => i.id);
     const prefs = createSingletonStore<{ lastItemId?: string }>(ctx.storage, "example-prefs");
     await prefs.load();
+
+    // ── 跨插件服务 (契约文档 §二.2) ──
+    // 有 API 要给别的插件用时 expose (teardown 时自动移除):
+    //   ctx.expose("example:api", { items });
+    // 需要别的插件的 API 时 require, 拿不到 (undefined) 必须优雅降级:
+    //   const other = ctx.require<{ refresh(): void }>("other:api");
 
     // ── 事件: 核心 emit, 插件 listen; 返回的 unsub 由 TrackedContext 自动清理 ──
     ctx.events.on("book:opened", ({ bookId }) => {

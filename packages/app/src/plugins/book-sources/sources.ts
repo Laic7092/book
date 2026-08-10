@@ -6,8 +6,8 @@
 
 import type { ServerClient } from "../../utils/api";
 import type { NetFetchInit } from "@book/contracts";
-import type { PluginStorageAdapter } from "../types";
-import { createPluginStorageAdapter } from "../context";
+import type { PluginStorageAdapter } from "../../core/plugin-runtime/types";
+import { createPluginStorageAdapter } from "../../core/plugin-runtime/context";
 import {
   parseSearchResults,
   parseBookInfo,

@@ -2,7 +2,7 @@
 // Uses factory pattern — storage and readerHost are injected via createStatsEngine().
 
 import type { ReadingSession, BookReadingStats } from "../../core/types";
-import type { PluginStorageAdapter } from "../types";
+import type { PluginStorageAdapter } from "../../core/plugin-runtime/types";
 import type { ReaderSession } from "@book/reader-engine";
 
 const SESSIONS_KEY = "sessions";

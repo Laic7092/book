@@ -1,6 +1,6 @@
 import { shallowRef, defineAsyncComponent } from "vue";
 import type { Component } from "vue";
-import { openDB, STORES } from "../storage/db";
+import { openDB, STORES } from "../../storage/db";
 import type {
   PluginContext,
   PluginStorageAdapter,
@@ -18,11 +18,11 @@ import type {
   HookMap,
   FilterHandler,
 } from "./types";
-import { themeRegistry } from "../core/theme-registry";
-import { currentSession } from "../stores/reader-session";
-import { navigate as routerNavigate } from "../utils/router";
-import { createServerClient } from "../utils/api";
-import { useUIStore } from "../stores/ui";
+import { themeRegistry } from "../theme-registry";
+import { currentSession } from "../../stores/reader-session";
+import { navigate as routerNavigate } from "../../utils/router";
+import { createServerClient } from "../../utils/api";
+import { useUIStore } from "../../stores/ui";
 
 // ── PluginStorageAdapter implementation ──
 
@@ -174,6 +174,22 @@ export class EventBus<T extends Record<string, unknown>> implements IEventBus<T>
 
 /** Global event bus. Core emits; plugins listen. */
 export const pluginEvents = new EventBus<PluginEventMap>();
+
+// ── Cross-plugin service registry (docs/plugin-contract.md §二.2) ──
+//
+// The only official channel for plugin-to-plugin *calls* (events are
+// fire-and-forget notifications). Exposed APIs are auto-removed on the
+// exposing plugin's teardown.
+
+const pluginServices = new Map<string, unknown>();
+
+export function exposeService(name: string, api: unknown): void {
+  pluginServices.set(name, api);
+}
+
+export function requireService<T>(name: string): T | undefined {
+  return pluginServices.get(name) as T | undefined;
+}
 
 // ── Filter hooks ──
 
@@ -423,6 +439,15 @@ export function createTrackedContext(id: string, _bootstrap: PluginBootstrap): T
       run: pluginHooks.run.bind(pluginHooks),
     },
     readerSession: () => currentSession.value,
+    expose(name, api) {
+      exposeService(name, api);
+      // Remove on teardown — but only if it is still ours: a later plugin
+      // may have re-exposed the same name after we were disabled.
+      cleanupFns.push(() => {
+        if (pluginServices.get(name) === api) pluginServices.delete(name);
+      });
+    },
+    require: <T>(name: string) => requireService<T>(name),
     addTeardown(fn: () => void | Promise<void>) {
       cleanupFns.push(fn);
     },

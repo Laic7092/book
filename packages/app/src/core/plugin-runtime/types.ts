@@ -1,8 +1,8 @@
 import type { Component, App } from "vue";
-import type { ThemeRegistry } from "../core/theme-registry";
-import type { ReaderSettings } from "../core/reader-settings";
+import type { ThemeRegistry } from "../theme-registry";
+import type { ReaderSettings } from "../reader-settings";
 import type { ReaderSession } from "@book/reader-engine";
-import type { ServerClient } from "../utils/api";
+import type { ServerClient } from "../../utils/api";
 
 /** Scene a plugin loads during. */
 export type Scene = "app" | "book-import" | "bookshelf" | "reader";
@@ -195,6 +195,13 @@ export interface PluginContext {
   hooks: HookRegistry;
   /** 权力面 (power API) — returns null before a book is opened. */
   readerSession: () => ReaderSession | null;
+  /**
+   * 稳定面 — cross-plugin service registry (docs/plugin-contract.md §二.2).
+   * `expose` publishes an API under a name (auto-removed on teardown);
+   * `require` returns it or undefined — callers must degrade gracefully.
+   */
+  expose: (name: string, api: unknown) => void;
+  require: <T>(name: string) => T | undefined;
   /** 权力面 — transform chapter HTML before rendering. */
   registerContentTransformer(transformer: ContentTransformer): void;
   /** 稳定面. */

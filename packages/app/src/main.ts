@@ -4,8 +4,8 @@ import App from "./App.vue";
 import "./styles/tokens.css";
 import "./index.css";
 
-import { setBootstrap } from "./plugins/manager/registry";
-import { loadPluginsFor } from "./plugins/loader";
+import { setBootstrap } from "./core/plugin-runtime/registry";
+import { loadPluginsFor } from "./core/plugin-runtime/loader";
 
 const app = createApp(App);
 app.use(createPinia());

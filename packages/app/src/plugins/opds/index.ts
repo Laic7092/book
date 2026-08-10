@@ -1,5 +1,5 @@
-import type { Plugin } from "../types";
-import { PLUGIN_BRAND } from "../types";
+import type { Plugin } from "../../core/plugin-runtime/types";
+import { PLUGIN_BRAND } from "../../core/plugin-runtime/types";
 import type { ServerClient } from "../../utils/api";
 
 let opdsServer: ServerClient | null = null;

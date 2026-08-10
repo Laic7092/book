@@ -25,7 +25,8 @@
 1. **核心不得 import 插件**（类型、值、常量都不行）。例外：无——插件是可选代码，核心的编译与运行必须与任何插件无关。
 2. **插件不得 import 其他插件**。跨插件通信只能走官方通道：
    - 核心事件总线（`ctx.events`）——单向通知；
-   - 未来如需要"服务调用"，先加官方机制（如 `ctx.expose`/`ctx.require`），不允许模块级全局。
+   - **服务注册（`ctx.expose` / `ctx.require`）**——服务调用。`expose` 在 teardown 时自动移除；`require` 拿不到时返回 `undefined`，调用方必须优雅降级；
+   - 不允许模块级全局（stats 的 `setStatsEngine` 是插件内部单例，未导出给其他插件，属合规）。
 3. **插件可以 import 核心**：`@book/reader-core` 类型、`core/` 下的类型与纯函数、`utils/` 的纯工具（如 `reader-css.ts`）。
 4. 插件私有代码（引擎、解析器、组件）一律留在插件目录内。
 
@@ -52,6 +53,7 @@
 | `ctx.hooks`                                  | filter hook（`HookMap`），按 priority 链式改配置                                              |
 | `ctx.ui` 注册类                              | modal / overlay / footer action / bookshelf widget+menu / toolbar item / header action / page |
 | `ctx.navigate` / `ctx.themes` / `ctx.server` | 路由、主题注册、Node 能力代理                                                                 |
+| `ctx.expose` / `ctx.require`                 | 跨插件服务注册（§二.2）；expose 随 teardown 移除，require 失败返回 `undefined`                |
 
 ### 权力面（Power API，随核心演进，不保证兼容；用前读本文件与 CHANGELOG）
 

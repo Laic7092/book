@@ -4,7 +4,7 @@ import {
   loadPluginStates,
   getAllPluginStates,
   pluginModuleLoaders,
-} from "./manager/registry";
+} from "./registry";
 import { PLUGIN_BRAND } from "./types";
 import type { Plugin, Scene } from "./types";
 import PLUGIN_METADATA from "./plugin-metadata.json";

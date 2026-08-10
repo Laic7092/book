@@ -3,7 +3,7 @@ import type { Book, Folder } from "../core/types";
 import { dbGetAll, STORES } from "../storage/db";
 import { getCoverBlob, deleteCoverBlob } from "../storage/books";
 import { parseAndSaveBook } from "../storage/parse-save";
-import { pluginEvents } from "../plugins/context";
+import { pluginEvents } from "../core/plugin-runtime/context";
 import * as booksStore from "../storage/books";
 import { useUIStore } from "./ui";
 import { truncateTitle } from "../utils/constants";

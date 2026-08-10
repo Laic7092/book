@@ -20,8 +20,8 @@ import {
   getBookshelfWidgets,
   getBookshelfMenuActions,
   pluginStateVersion,
-} from "../plugins/manager/registry";
-import { loadPluginsFor } from "../plugins/loader";
+} from "../core/plugin-runtime/registry";
+import { loadPluginsFor } from "../core/plugin-runtime/loader";
 import { currentRoute, navigate } from "../utils/router";
 
 loadPluginsFor("bookshelf");

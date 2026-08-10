@@ -1,5 +1,5 @@
-import type { Plugin } from "../types";
-import { PLUGIN_BRAND } from "../types";
+import type { Plugin } from "../../core/plugin-runtime/types";
+import { PLUGIN_BRAND } from "../../core/plugin-runtime/types";
 
 export const loadOn = "bookshelf" as const;
 

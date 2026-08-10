@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vite-plus/test";
 import { createStatsEngine } from "./engine";
-import type { PluginStorageAdapter } from "../types";
+import type { PluginStorageAdapter } from "../../core/plugin-runtime/types";
 
 /** In-memory adapter — same semantics as the IndexedDB one. */
 class MemoryAdapter implements PluginStorageAdapter {

@@ -3,7 +3,7 @@
  *
  * Lives in core (not in the settings plugin) because the reader's CSS
  * pipeline (`utils/reader-css.ts`) and the plugin event bus
- * (`plugins/types.ts` → `settings:changed`) both consume it — core must
+ * (`core/plugin-runtime/types.ts` → `settings:changed`) both consume it — core must
  * never import from a plugin. The settings plugin only *owns* the state:
  * defaults, persistence and the settings UI.
  */

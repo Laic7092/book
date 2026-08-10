@@ -1,8 +1,8 @@
 import { ref, type Component } from "vue";
-import type { Plugin, FooterAction, BookshelfMenuAction, PluginBootstrap } from "../types";
-import { PLUGIN_BRAND, PLUGIN_API_VERSION } from "../types";
-import { createPluginStorageAdapter } from "../context";
-import { createEntityStore } from "../store-factory";
+import type { Plugin, FooterAction, BookshelfMenuAction, PluginBootstrap } from "./types";
+import { PLUGIN_BRAND, PLUGIN_API_VERSION } from "./types";
+import { createPluginStorageAdapter } from "./context";
+import { createEntityStore } from "./store-factory";
 import {
   createTrackedContext,
   registeredModals,
@@ -15,8 +15,8 @@ import {
   registeredContentTransformers,
   registeredPages,
   type TrackedContext,
-} from "../context";
-import type { ContentTransformer, ToolbarItem, HeaderAction } from "../types";
+} from "./context";
+import type { ContentTransformer, ToolbarItem, HeaderAction } from "./types";
 
 // ── Internal state ──
 
@@ -91,14 +91,18 @@ async function setupPluginInternal(id: string, bootstrap: PluginBootstrap): Prom
     return;
   }
 
+  // `tracked` must outlive the try block: on failure we roll back whatever
+  // setup registered before throwing (the context is never stored, so
+  // teardownPlugin would never find it — UI/events would leak forever).
+  const tracked = createTrackedContext(id, bootstrap);
   try {
-    const tracked = createTrackedContext(id, bootstrap);
     await mp.plugin.setup(tracked, { onTeardown: (fn) => tracked.addTeardown(fn) });
     mp.setupError = undefined;
     pluginContexts.set(id, tracked);
   } catch (err) {
     console.error(`[Plugin ${id}] setup() failed:`, err);
     mp.setupError = err instanceof Error ? err : new Error(String(err));
+    await tracked.runCleanup();
   }
 }
 
@@ -233,6 +237,19 @@ export function getAllPlugins(): readonly Plugin[] {
   return [...managedPlugins.values()].map((mp) => mp.plugin);
 }
 
+/**
+ * Plugin id → setup error message. `setupError` lives on the managed entry
+ * (not on the Plugin object returned by getAllPlugins), so UI surfaces must
+ * read it through this accessor.
+ */
+export function getPluginSetupErrors(): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [id, mp] of managedPlugins) {
+    if (mp.setupError) result[id] = mp.setupError.message;
+  }
+  return result;
+}
+
 export function isPluginEnabled(id: string): boolean {
   return managedPlugins.get(id)?.enabled !== false;
 }
@@ -277,8 +294,8 @@ export function getContentTransformers(): ContentTransformer[] {
   return [...registeredContentTransformers.value];
 }
 
-export { applyContentTransformers } from "../context";
+export { applyContentTransformers } from "./context";
 
 // ── Plugin event bus (re-export for convenience) ──
 
-export { pluginEvents } from "../context";
+export { pluginEvents } from "./context";
