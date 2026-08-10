@@ -15,6 +15,7 @@ export class PdfParser implements BookParser {
   private static readonly SUPPORTED_MIME_TYPES = ["application/pdf", "application/x-pdf"];
 
   readonly format = "pdf";
+  readonly lazyExtractable = true;
 
   supportsFormat(mimeType: string): boolean {
     return PdfParser.SUPPORTED_MIME_TYPES.includes(mimeType);

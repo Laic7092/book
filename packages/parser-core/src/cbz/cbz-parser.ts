@@ -13,6 +13,7 @@ export class CbzParser implements BookParser {
   ];
 
   readonly format = "cbz";
+  readonly lazyExtractable = true;
 
   supportsFormat(mimeType: string): boolean {
     return CbzParser.SUPPORTED_MIME_TYPES.includes(mimeType);

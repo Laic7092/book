@@ -28,6 +28,7 @@ export class CbrParser implements BookParser {
   ];
 
   readonly format = "cbr";
+  readonly lazyExtractable = true;
 
   supportsFormat(mimeType: string): boolean {
     return CbrParser.SUPPORTED_MIME_TYPES.includes(mimeType);

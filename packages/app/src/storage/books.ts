@@ -9,10 +9,10 @@ import { getMimeType } from "@book/parser-core";
 
 const MAX_STORED_BOOKS = 20;
 
-// Only these formats can re-extract a chapter from stored raw data
-// (chapters carry a href and the parser implements extractChapterContent).
-// Evicting any other format clears content that can never be restored.
-const LAZY_EXTRACTABLE_FORMATS = new Set(["epub", "pdf", "cbz", "cbr"]);
+// Lazy-extraction capability is declared by each parser itself
+// (BookParser.lazyExtractable) — storage must not keep its own format list,
+// it would silently drift from the parsers' real capability and evict
+// content that can never be restored.
 
 const BLOB_URL_PATTERN = /blob:[^\s"'<>)]+/g;
 
@@ -70,7 +70,7 @@ async function evictChapters(): Promise<void> {
 
   const toEvict = books
     .slice(MAX_STORED_BOOKS)
-    .filter((b) => LAZY_EXTRACTABLE_FORMATS.has(b.format));
+    .filter((b) => getParserForFormat(b.format)?.lazyExtractable);
   if (toEvict.length === 0) return;
   await dbTransaction([STORES.CHAPTERS], "readwrite", async (stores) => {
     const chaptersStore = stores.get(STORES.CHAPTERS)!;

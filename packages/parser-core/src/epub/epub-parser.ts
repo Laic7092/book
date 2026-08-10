@@ -41,6 +41,7 @@ export class EpubParser implements BookParser {
 
   readonly format = "epub" as const;
   readonly requiresBrowser = true;
+  readonly lazyExtractable = true;
 
   private _entriesCache = new WeakMap<ArrayBuffer, CachedZipData>();
 

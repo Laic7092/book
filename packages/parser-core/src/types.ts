@@ -35,6 +35,13 @@ export interface BookParser {
   /** True when parsing needs browser APIs (DOMParser/document); such formats
    * must run on the main thread and the worker bails out before executing. */
   requiresBrowser?: boolean;
+  /**
+   * True when chapter content can be re-extracted from the stored raw data
+   * via `extractChapterContent` after the chapter's content has been evicted.
+   * Declared by the parser itself — storage must never maintain its own list
+   * of "lazy-extractable formats" (it would drift from this capability).
+   */
+  lazyExtractable?: boolean;
   supportsFormat(mimeType: string): boolean;
   parse(file: File): Promise<ParserResult>;
   parseStreaming?(file: File): AsyncGenerator<StreamingParseEvent>;
