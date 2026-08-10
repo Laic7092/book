@@ -2,7 +2,13 @@
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import type { ReaderSession } from "@book/reader-engine";
 import AppIcon from "../../components/ui/AppIcon.vue";
-import { setAutoAdvancing, setOnUserPageChange } from "./index";
+import {
+  setAutoAdvancing,
+  setOnUserPageChange,
+  setOnBookClosed,
+  loadIntervalSec,
+  saveIntervalSec,
+} from "./index";
 import { currentSession } from "../../stores/reader-session";
 
 const isPlaying = ref(false);
@@ -12,6 +18,10 @@ const progress = ref(0);
 let timer: number | null = null;
 let raf: number | null = null;
 let lastTick = 0;
+/** Scroll position we set last frame; -1 = no baseline yet. */
+let lastTarget = -1;
+/** True while a scroll-mode chapter transition is in flight. */
+let waitingForChapter = false;
 
 const PRESETS = [2, 3, 4, 5, 7, 10, 15];
 const interval = computed(() => intervalSec.value * 1000);
@@ -60,7 +70,24 @@ function scrollLoop() {
   const { scrollHeight, clientHeight, scrollTop } = html;
   const maxScroll = scrollHeight - clientHeight;
 
+  // User intervention: if the actual scroll position drifted from what we set
+  // last frame, the user is scrolling manually — pause instead of fighting
+  // them for the scrollbar.
+  if (lastTarget >= 0 && Math.abs(scrollTop - lastTarget) > 3) {
+    stop();
+    return;
+  }
+
   if (maxScroll <= 0 || scrollTop >= maxScroll - 1) {
+    // End of chapter — continue into the next one, or stop at the last.
+    const state = s.getState();
+    const nextChapter = state.chapters[state.currentChapterIndex + 1];
+    if (nextChapter && state.mode === "scroll") {
+      waitingForChapter = true;
+      raf = null; // cancel self; resumed by the chapter watch below
+      s.dispatch({ type: "GO_TO_CHAPTER", chapterId: nextChapter.id });
+      return;
+    }
     stop();
     return;
   }
@@ -71,6 +98,7 @@ function scrollLoop() {
   // the in-chapter progress. Dispatching a whole-document ratio here would
   // clobber the in-chapter anchor and get persisted by reading-progress.
   html.scrollTop = target;
+  lastTarget = target;
 
   progress.value = ((now % interval.value) / interval.value) * 100;
 
@@ -92,11 +120,13 @@ function start() {
   isPlaying.value = true;
   lastTick = Date.now();
   progress.value = 0;
+  lastTarget = -1;
 
   if (s.getState().mode === "scroll") {
     raf = requestAnimationFrame(scrollLoop);
   } else {
-    tickPagination(s);
+    // Wait a full interval before turning the first page (no immediate flip
+    // on resume, so pause/play and speed changes don't jump the reader).
     timer = window.setInterval(() => tickPagination(s), interval.value);
     raf = requestAnimationFrame(updateProgress);
   }
@@ -105,6 +135,7 @@ function start() {
 function stop() {
   isPlaying.value = false;
   progress.value = 0;
+  waitingForChapter = false;
   if (timer) {
     clearInterval(timer);
     timer = null;
@@ -120,12 +151,36 @@ function toggle() {
   else start();
 }
 
-watch(intervalSec, () => {
+watch(intervalSec, (v) => {
+  saveIntervalSec(v);
   if (isPlaying.value) {
     stop();
     start();
   }
 });
+
+// Resume scrolling once a scroll-mode chapter transition has finished
+// loading (GO_TO_CHAPTER puts the machine into "loading"; ready means the
+// new chapter's DOM is in the iframe).
+watch(
+  () => {
+    const s = currentSession.value;
+    if (!s) return null;
+    const st = s.getState();
+    return st.status === "ready" ? st.currentChapterIndex : st.status;
+  },
+  () => {
+    if (!waitingForChapter || !isPlaying.value) return;
+    const s = currentSession.value;
+    const st = s?.getState();
+    if (s && st && st.status === "ready" && st.mode === "scroll") {
+      waitingForChapter = false;
+      lastTarget = -1;
+      lastTick = Date.now();
+      raf = requestAnimationFrame(scrollLoop);
+    }
+  },
+);
 
 onMounted(() => {
   setOnUserPageChange(() => {
@@ -134,10 +189,17 @@ onMounted(() => {
       start();
     }
   });
+  setOnBookClosed(() => {
+    stop();
+  });
+  void loadIntervalSec().then((v) => {
+    if (v && PRESETS.includes(v)) intervalSec.value = v;
+  });
 });
 
 onUnmounted(() => {
   setOnUserPageChange(null);
+  setOnBookClosed(null);
   stop();
 });
 </script>
