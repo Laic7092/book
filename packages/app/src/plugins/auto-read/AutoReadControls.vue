@@ -6,14 +6,19 @@ import {
   setAutoAdvancing,
   setOnUserPageChange,
   setOnBookClosed,
-  loadIntervalSec,
-  saveIntervalSec,
+  loadAutoReadSettings,
+  saveAutoReadSettings,
+  DEFAULT_AUTO_READ_SETTINGS,
+  type AutoReadSettings,
 } from "./index";
 import { currentSession } from "../../stores/reader-session";
 
 const isPlaying = ref(false);
-const intervalSec = ref(5);
 const progress = ref(0);
+const settings = ref<AutoReadSettings>({ ...DEFAULT_AUTO_READ_SETTINGS });
+const showSettings = ref(false);
+const sleepRemainingSec = ref(0);
+const wrapRef = ref<HTMLElement | null>(null);
 
 let timer: number | null = null;
 let raf: number | null = null;
@@ -22,22 +27,52 @@ let lastTick = 0;
 let lastTarget = -1;
 /** True while a scroll-mode chapter transition is in flight. */
 let waitingForChapter = false;
+let sleepTick: number | null = null;
+let sleepDeadline = 0;
 
 const PRESETS = [2, 3, 4, 5, 7, 10, 15];
-const interval = computed(() => intervalSec.value * 1000);
+const SLEEP_OPTIONS = [0, 15, 30, 45, 60];
+const SPEED_OPTIONS: { label: string; value: AutoReadSettings["scrollSpeed"] }[] = [
+  { label: "慢", value: "slow" },
+  { label: "标准", value: "normal" },
+  { label: "快", value: "fast" },
+];
+/** Screens per interval — how far scroll mode travels per interval tick. */
+const SCROLL_FACTOR: Record<AutoReadSettings["scrollSpeed"], number> = {
+  slow: 0.5,
+  normal: 0.85,
+  fast: 1.2,
+};
+
+const interval = computed(() => settings.value.intervalSec * 1000);
 
 function prevPreset() {
-  const idx = PRESETS.indexOf(intervalSec.value);
-  intervalSec.value = PRESETS[(idx - 1 + PRESETS.length) % PRESETS.length];
+  const idx = PRESETS.indexOf(settings.value.intervalSec);
+  settings.value.intervalSec = PRESETS[(idx - 1 + PRESETS.length) % PRESETS.length];
 }
 
 function nextPreset() {
-  const idx = PRESETS.indexOf(intervalSec.value);
-  intervalSec.value = PRESETS[(idx + 1) % PRESETS.length];
+  const idx = PRESETS.indexOf(settings.value.intervalSec);
+  settings.value.intervalSec = PRESETS[(idx + 1) % PRESETS.length];
 }
 
 function tickPagination(s: ReaderSession) {
-  const prevPage = s.getState().page.current;
+  const state = s.getState();
+  if (state.status !== "ready") return;
+
+  // Chapter-end policy: stop before turning past the last page of a chapter
+  // (NEXT_PAGE would otherwise auto-advance into the next chapter).
+  if (
+    settings.value.chapterEnd === "stop" &&
+    state.page.total > 0 &&
+    state.page.current >= state.page.total - 1 &&
+    state.currentChapterIndex < state.chapters.length - 1
+  ) {
+    stop();
+    return;
+  }
+
+  const prevPage = state.page.current;
   setAutoAdvancing(true);
   s.dispatch({ type: "NEXT_PAGE" });
   requestAnimationFrame(() => {
@@ -79,10 +114,10 @@ function scrollLoop() {
   }
 
   if (maxScroll <= 0 || scrollTop >= maxScroll - 1) {
-    // End of chapter — continue into the next one, or stop at the last.
+    // End of chapter — continue into the next one (configurable), or stop.
     const state = s.getState();
     const nextChapter = state.chapters[state.currentChapterIndex + 1];
-    if (nextChapter && state.mode === "scroll") {
+    if (settings.value.chapterEnd === "auto" && nextChapter && state.mode === "scroll") {
       waitingForChapter = true;
       raf = null; // cancel self; resumed by the chapter watch below
       s.dispatch({ type: "GO_TO_CHAPTER", chapterId: nextChapter.id });
@@ -92,7 +127,7 @@ function scrollLoop() {
     return;
   }
 
-  const speed = (clientHeight * 0.85) / interval.value;
+  const speed = (clientHeight * SCROLL_FACTOR[settings.value.scrollSpeed]) / interval.value;
   const target = Math.min(scrollTop + speed * dt, maxScroll);
   // Setting scrollTop fires a scroll event; the host's handleScroll reports
   // the in-chapter progress. Dispatching a whole-document ratio here would
@@ -113,6 +148,28 @@ function updateProgress() {
   raf = requestAnimationFrame(updateProgress);
 }
 
+function armSleep() {
+  if (settings.value.sleepMinutes > 0) {
+    sleepDeadline = Date.now() + settings.value.sleepMinutes * 60_000;
+    sleepRemainingSec.value = Math.round((sleepDeadline - Date.now()) / 1000);
+    if (sleepTick === null) {
+      sleepTick = window.setInterval(() => {
+        const remain = Math.round((sleepDeadline - Date.now()) / 1000);
+        sleepRemainingSec.value = remain;
+        if (remain <= 0) {
+          stop();
+        }
+      }, 1000);
+    }
+  } else {
+    if (sleepTick !== null) {
+      clearInterval(sleepTick);
+      sleepTick = null;
+    }
+    sleepRemainingSec.value = 0;
+  }
+}
+
 function start() {
   if (raf !== null) return;
   const s = currentSession.value;
@@ -121,6 +178,7 @@ function start() {
   lastTick = Date.now();
   progress.value = 0;
   lastTarget = -1;
+  armSleep();
 
   if (s.getState().mode === "scroll") {
     raf = requestAnimationFrame(scrollLoop);
@@ -136,6 +194,11 @@ function stop() {
   isPlaying.value = false;
   progress.value = 0;
   waitingForChapter = false;
+  if (sleepTick !== null) {
+    clearInterval(sleepTick);
+    sleepTick = null;
+  }
+  sleepRemainingSec.value = 0;
   if (timer) {
     clearInterval(timer);
     timer = null;
@@ -151,13 +214,25 @@ function toggle() {
   else start();
 }
 
-watch(intervalSec, (v) => {
-  saveIntervalSec(v);
-  if (isPlaying.value) {
-    stop();
-    start();
-  }
-});
+watch(settings, (v) => saveAutoReadSettings(v), { deep: true });
+
+watch(
+  () => settings.value.intervalSec,
+  () => {
+    if (isPlaying.value) {
+      stop();
+      start();
+    }
+  },
+);
+
+// Re-arm the sleep timer while playing (no restart of the reading rhythm).
+watch(
+  () => settings.value.sleepMinutes,
+  () => {
+    if (isPlaying.value) armSleep();
+  },
+);
 
 // Resume scrolling once a scroll-mode chapter transition has finished
 // loading (GO_TO_CHAPTER puts the machine into "loading"; ready means the
@@ -182,6 +257,16 @@ watch(
   },
 );
 
+function onDocPointerDown(e: PointerEvent) {
+  if (wrapRef.value && !wrapRef.value.contains(e.target as Node)) {
+    showSettings.value = false;
+  }
+}
+
+function onDocKeydown(e: KeyboardEvent) {
+  if (e.key === "Escape") showSettings.value = false;
+}
+
 onMounted(() => {
   setOnUserPageChange(() => {
     if (isPlaying.value) {
@@ -192,47 +277,146 @@ onMounted(() => {
   setOnBookClosed(() => {
     stop();
   });
-  void loadIntervalSec().then((v) => {
-    if (v && PRESETS.includes(v)) intervalSec.value = v;
+  document.addEventListener("pointerdown", onDocPointerDown);
+  document.addEventListener("keydown", onDocKeydown);
+  void loadAutoReadSettings().then((s) => {
+    if (!s) return;
+    settings.value = {
+      intervalSec: PRESETS.includes(s.intervalSec)
+        ? s.intervalSec
+        : DEFAULT_AUTO_READ_SETTINGS.intervalSec,
+      chapterEnd: s.chapterEnd === "stop" ? "stop" : "auto",
+      sleepMinutes: SLEEP_OPTIONS.includes(s.sleepMinutes) ? s.sleepMinutes : 0,
+      scrollSpeed: s.scrollSpeed === "slow" || s.scrollSpeed === "fast" ? s.scrollSpeed : "normal",
+    };
   });
 });
 
 onUnmounted(() => {
   setOnUserPageChange(null);
   setOnBookClosed(null);
+  document.removeEventListener("pointerdown", onDocPointerDown);
+  document.removeEventListener("keydown", onDocKeydown);
   stop();
 });
 </script>
 
 <template>
-  <div class="auto-read" :class="{ playing: isPlaying }">
-    <button class="btn adj" title="Slower" @click="prevPreset">
-      <AppIcon name="minus" :size="14" />
-    </button>
-    <button class="btn display" title="Tap to cycle speed" @click="nextPreset">
-      {{ intervalSec }}<span class="unit">s</span>
-    </button>
-    <button class="btn adj" title="Faster" @click="nextPreset">
-      <AppIcon name="plus" :size="14" />
-    </button>
-    <div class="sep" />
-    <button class="btn play" title="Play / Pause" @click="toggle">
-      <AppIcon v-if="isPlaying" name="pause" :size="18" />
-      <AppIcon v-else name="play" :size="18" />
-      <svg v-if="isPlaying" class="progress-ring" viewBox="0 0 36 36">
-        <circle
-          cx="18"
-          cy="18"
-          r="15.5"
-          stroke-dasharray="97.4"
-          :stroke-dashoffset="97.4 * (1 - progress / 100)"
-        />
-      </svg>
-    </button>
+  <div ref="wrapRef" class="auto-read-wrap">
+    <div class="auto-read" :class="{ playing: isPlaying }">
+      <button class="btn adj" title="Slower" @click="prevPreset">
+        <AppIcon name="minus" :size="14" />
+      </button>
+      <button class="btn display" title="Tap to cycle speed" @click="nextPreset">
+        {{ settings.intervalSec }}<span class="unit">s</span>
+      </button>
+      <button class="btn adj" title="Faster" @click="nextPreset">
+        <AppIcon name="plus" :size="14" />
+      </button>
+      <div class="sep" />
+      <button class="btn play" title="Play / Pause" @click="toggle">
+        <AppIcon v-if="isPlaying" name="pause" :size="18" />
+        <AppIcon v-else name="play" :size="18" />
+        <svg v-if="isPlaying" class="progress-ring" viewBox="0 0 36 36">
+          <circle
+            cx="18"
+            cy="18"
+            r="15.5"
+            stroke-dasharray="97.4"
+            :stroke-dashoffset="97.4 * (1 - progress / 100)"
+          />
+        </svg>
+      </button>
+      <div class="sep" />
+      <button
+        class="btn gear"
+        title="Settings"
+        :class="{ active: showSettings }"
+        @click.stop="showSettings = !showSettings"
+      >
+        <AppIcon name="sliders" :size="15" />
+      </button>
+    </div>
+
+    <div v-if="showSettings" class="auto-read-popover" @click.stop>
+      <div class="pr-section">
+        <div class="pr-label">翻页间隔</div>
+        <div class="pr-options">
+          <button
+            v-for="p in PRESETS"
+            :key="p"
+            :class="['pr-btn', { active: settings.intervalSec === p }]"
+            @click="settings.intervalSec = p"
+          >
+            {{ p }}s
+          </button>
+        </div>
+      </div>
+
+      <div class="pr-section">
+        <div class="pr-label">
+          滚动速度
+          <span class="pr-hint">仅滚动模式</span>
+        </div>
+        <div class="pr-options">
+          <button
+            v-for="sp in SPEED_OPTIONS"
+            :key="sp.value"
+            :class="['pr-btn', { active: settings.scrollSpeed === sp.value }]"
+            @click="settings.scrollSpeed = sp.value"
+          >
+            {{ sp.label }}
+          </button>
+        </div>
+      </div>
+
+      <div class="pr-section">
+        <div class="pr-label">章尾行为</div>
+        <div class="pr-options">
+          <button
+            :class="['pr-btn', { active: settings.chapterEnd === 'auto' }]"
+            @click="settings.chapterEnd = 'auto'"
+          >
+            继续下一章
+          </button>
+          <button
+            :class="['pr-btn', { active: settings.chapterEnd === 'stop' }]"
+            @click="settings.chapterEnd = 'stop'"
+          >
+            读完停止
+          </button>
+        </div>
+      </div>
+
+      <div class="pr-section">
+        <div class="pr-label">
+          睡眠定时
+          <span v-if="sleepRemainingSec > 0" class="pr-remain">
+            {{ Math.floor(sleepRemainingSec / 60) }}:{{
+              String(sleepRemainingSec % 60).padStart(2, "0")
+            }}
+          </span>
+        </div>
+        <div class="pr-options">
+          <button
+            v-for="m in SLEEP_OPTIONS"
+            :key="m"
+            :class="['pr-btn', { active: settings.sleepMinutes === m }]"
+            @click="settings.sleepMinutes = m"
+          >
+            {{ m === 0 ? "关" : `${m}分` }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
+.auto-read-wrap {
+  position: relative;
+}
+
 .auto-read {
   display: flex;
   align-items: center;
@@ -301,6 +485,107 @@ onUnmounted(() => {
   height: 20px;
   background: var(--border-subtle, #ddd);
   margin: 0 2px;
+}
+
+.gear {
+  width: 26px;
+  height: 26px;
+  color: var(--text-secondary, #888);
+}
+
+.gear svg {
+  width: 15px;
+  height: 15px;
+}
+
+.gear.active {
+  color: var(--accent, #5b9aff);
+}
+
+.auto-read-popover {
+  position: absolute;
+  right: 46px;
+  bottom: 0;
+  width: 248px;
+  z-index: var(--z-overlay);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--bg-secondary, #fff);
+  border: 1px solid var(--border, #e0e0e0);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+}
+
+.auto-read-popover::after {
+  content: "";
+  position: absolute;
+  right: -7px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 7px solid transparent;
+  border-left-color: var(--bg-secondary, #fff);
+  filter: drop-shadow(1px 0 1px rgba(0, 0, 0, 0.12));
+}
+
+.pr-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pr-label {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary, #888);
+}
+
+.pr-hint {
+  font-weight: 400;
+  font-size: 10px;
+  color: var(--text-secondary, #aaa);
+}
+
+.pr-remain {
+  margin-left: auto;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent, #5b9aff);
+}
+
+.pr-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.pr-btn {
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border, #e0e0e0);
+  background: transparent;
+  color: var(--reader-text, #333);
+  font-size: 12px;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: all 150ms;
+}
+
+.pr-btn:hover {
+  border-color: var(--accent, #5b9aff);
+  color: var(--accent, #5b9aff);
+}
+
+.pr-btn.active {
+  background: var(--accent, #5b9aff);
+  border-color: var(--accent, #5b9aff);
+  color: var(--accent-text, #fff);
+  font-weight: 600;
 }
 
 .play {

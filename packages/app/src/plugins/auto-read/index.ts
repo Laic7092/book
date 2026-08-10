@@ -20,13 +20,33 @@ export function setOnBookClosed(cb: (() => void) | null) {
   _onBookClosed = cb;
 }
 
-// Speed preference persisted in the plugin's own storage partition.
-let _storage: PluginStorageAdapter | null = null;
-export function loadIntervalSec(): Promise<number | undefined> {
-  return _storage ? _storage.get<number>("intervalSec") : Promise.resolve(undefined);
+// ── Settings (persisted in the plugin's own storage partition) ──
+
+export interface AutoReadSettings {
+  /** Seconds per page turn (pagination) / per screen (scroll). */
+  intervalSec: number;
+  /** What to do at the end of a chapter while playing. */
+  chapterEnd: "auto" | "stop";
+  /** Sleep timer in minutes; 0 = off. */
+  sleepMinutes: number;
+  /** Scroll speed multiplier for scroll mode. */
+  scrollSpeed: "slow" | "normal" | "fast";
 }
-export function saveIntervalSec(v: number): void {
-  void _storage?.put("intervalSec", v);
+
+export const DEFAULT_AUTO_READ_SETTINGS: AutoReadSettings = {
+  intervalSec: 5,
+  chapterEnd: "auto",
+  sleepMinutes: 0,
+  scrollSpeed: "normal",
+};
+
+const SETTINGS_KEY = "settings";
+let _storage: PluginStorageAdapter | null = null;
+export function loadAutoReadSettings(): Promise<AutoReadSettings | undefined> {
+  return _storage ? _storage.get<AutoReadSettings>(SETTINGS_KEY) : Promise.resolve(undefined);
+}
+export function saveAutoReadSettings(settings: AutoReadSettings): void {
+  void _storage?.put(SETTINGS_KEY, settings);
 }
 
 export const autoReadPlugin: Plugin = {
