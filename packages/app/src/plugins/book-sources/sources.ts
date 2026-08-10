@@ -7,7 +7,6 @@
 import type { ServerClient } from "../../utils/api";
 import type { NetFetchInit } from "@book/contracts";
 import type { PluginStorageAdapter } from "../../core/plugin-runtime/types";
-import { createPluginStorageAdapter } from "../../core/plugin-runtime/context";
 import {
   parseSearchResults,
   parseBookInfo,
@@ -75,31 +74,6 @@ export interface SourceManager {
 }
 
 // ── Persistence ──
-
-/**
- * Legacy sources were stored under the plugin id "_book_sources" (a literal
- * string, not the plugin's real id "book-sources"). Migrate them into the
- * plugin's own storage partition once, when the imported list is first read.
- */
-const LEGACY_PLUGIN_ID = "_book_sources";
-let legacyMigrated = false;
-
-async function migrateLegacySources(storage: PluginStorageAdapter): Promise<void> {
-  if (legacyMigrated) return;
-  legacyMigrated = true;
-
-  const legacy = createPluginStorageAdapter(LEGACY_PLUGIN_ID);
-  const old = await legacy.getAll<LegadoSource>();
-  if (!old.length) return;
-
-  // Never overwrite data that was already saved under the new partition.
-  if ((await storage.getAll<LegadoSource>()).length) return;
-
-  for (const src of old) {
-    await storage.put(src.bookSourceUrl, src, Date.now());
-  }
-  await legacy.clear();
-}
 
 // ── Built-in source ──
 
@@ -175,7 +149,6 @@ export function createSourceManager(
 
   async function getImported(): Promise<LegadoSource[]> {
     if (!importedCache) {
-      await migrateLegacySources(storage);
       importedCache = await storage.getAll<LegadoSource>();
     }
     return importedCache;

@@ -425,11 +425,6 @@ export function resolveCfiToElement(cfi: string, contentRoot: Element): Element 
 }
 
 /**
- * LEGACY_FALLBACK_CFI — used for bookmarks migrated from the pre-CFI schema.
- */
-export const LEGACY_FALLBACK_CFI = "epubcfi(/6/1/2)";
-
-/**
  * Resolve a CFI to a DOM target within a content document.
  * @param cfi - The CFI string
  * @param contentRoot - Root element of the content document

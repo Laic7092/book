@@ -3,11 +3,7 @@ import { PLUGIN_BRAND } from "../../core/plugin-runtime/types";
 import { createEntityStore, type EntityStore } from "../../core/plugin-runtime/store-factory";
 import type { Bookmark } from "../../core/types";
 import { currentSession } from "../../stores/reader-session";
-import {
-  LEGACY_FALLBACK_CFI,
-  generateCfiFromElement,
-  generateCfiFromCharOffset,
-} from "../../utils/epub-cfi";
+import { generateCfiFromElement, generateCfiFromCharOffset } from "../../utils/epub-cfi";
 import { stripHtml } from "../../utils/validation";
 
 // ── Module-level state (DI via closure, no global setter) ──
@@ -18,24 +14,6 @@ let _store: EntityStore<Bookmark> | null = null;
 export function useBookmarkStore(): EntityStore<Bookmark> {
   if (!_store) throw new Error("[bookmarks] Plugin not initialized — setup() hasn't run yet");
   return _store;
-}
-
-// ── Legacy migration helpers ──
-
-interface LegacyBookmark {
-  id: string;
-  bookId: string;
-  chapterId: string;
-  title: string;
-  contentPreview: string;
-  position: number;
-  createdAt: number;
-  color?: string;
-  note?: string;
-}
-
-function isLegacyBookmark(bm: LegacyBookmark | Bookmark): bm is LegacyBookmark {
-  return typeof (bm as LegacyBookmark).position === "number" && !(bm as Bookmark).cfi;
 }
 
 // ── Bookmark creation ──
@@ -119,40 +97,13 @@ export async function addBookmarkFromHost(): Promise<void> {
   await _store.add(bookmark);
 }
 
-/** Load bookmarks for a specific book, with legacy migration. */
-export async function loadBookmarks(bookId: string): Promise<void> {
+/** Reload bookmarks from storage. */
+export async function loadBookmarks(): Promise<void> {
   const store = _store;
   if (!store) return;
 
   // Reload from storage to get the latest data
   await store.reload();
-
-  // Check for legacy bookmarks for this book that need migration
-  let needsMigration = false;
-  for (const item of store.items.value) {
-    if (item.bookId !== bookId) continue;
-    if (isLegacyBookmark(item as unknown as LegacyBookmark)) {
-      needsMigration = true;
-      break;
-    }
-  }
-
-  if (needsMigration) {
-    // Snapshot to avoid mid-iteration mutation
-    const snapshot = [...store.items.value];
-    for (const item of snapshot) {
-      if (item.bookId !== bookId) continue;
-      if (isLegacyBookmark(item as unknown as LegacyBookmark)) {
-        const legacy = item as unknown as LegacyBookmark;
-        const { position: _, ...rest } = legacy;
-        const migrated = { ...rest, cfi: LEGACY_FALLBACK_CFI } as Bookmark;
-        await store.remove(legacy.id);
-        await store.add(migrated);
-      }
-    }
-    // Reload after migration for a clean cache
-    await store.reload();
-  }
 }
 
 // ── Plugin registration ──
@@ -165,8 +116,8 @@ export const bookmarksPlugin: Plugin = {
   setup(ctx) {
     _store = createEntityStore<Bookmark>(ctx.storage, "bookmark", (b) => b.id);
 
-    ctx.events.on("book:opened", ({ bookId }) => {
-      void loadBookmarks(bookId);
+    ctx.events.on("book:opened", () => {
+      void loadBookmarks();
     });
     ctx.events.on("book:deleted", async ({ bookId }) => {
       const store = _store;
