@@ -5,6 +5,7 @@ import { createInitialState } from "@book/reader-core";
 import { getParserForFormat } from "@book/parser-core";
 import { currentSession } from "../stores/reader-session";
 import { useUIStore } from "../stores/ui";
+import { fetchChapterContent } from "../storage/chapter-content";
 import {
   applyContentTransformers,
   getOverlayComponents,
@@ -218,7 +219,7 @@ export function useReaderMachine(
       },
       navigateToCfi: (cfi, chapterId) => navigateToCfiLocation(cfi, chapterId),
       fetchChapter: async (bookId, chapterId, _signal) => {
-        const html = await booksStore.getChapterContent(bookId, chapterId);
+        const { html } = await fetchChapterContent(bookId, chapterId);
         const { getZip } = await import("../storage/raw-data");
         const rawData = await getZip(bookId);
         return { html, rawData };

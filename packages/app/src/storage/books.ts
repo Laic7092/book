@@ -1,13 +1,11 @@
-// Books storage module
+// Books storage module — pure CRUD, no parser knowledge.
+// Lazy re-extraction policy lives in chapter-content.ts; eviction policy in
+// parse-save.ts.
 
 import type { Book, Folder, ParsedBook } from "../core/types";
 import { STORES, dbPut, dbGet, dbGetAll, dbTransaction, dbDelete, dbGetAllFromIndex } from "./db";
-import type { BookParser } from "@book/parser-core";
-import { getParserForFormat, generateId } from "@book/parser-core";
-import { saveZip, getZip, deleteZip as deleteRawZip } from "./raw-data";
-import { getMimeType } from "@book/parser-core";
-
-const MAX_STORED_BOOKS = 20;
+import { saveZip, deleteZip as deleteRawZip } from "./raw-data";
+import { generateId } from "../utils/id";
 
 // Lazy-extraction capability is declared by each parser itself
 // (BookParser.lazyExtractable) — storage must not keep its own format list,
@@ -56,28 +54,19 @@ export async function deleteCoverBlob(bookId: string): Promise<void> {
   await dbDelete(STORES.COVERS, bookId);
 }
 
-/** In-flight dedup: prevents concurrent extraction of the same chapter */
-const extractionInProgress = new Map<string, Promise<string>>();
-
 /**
- * Evict chapter content for the least-recently-read books, keeping the most
- * recent MAX_STORED_BOOKS. Book metadata and raw zip data are preserved so
- * chapters can be lazily re-extracted when the book is re-opened.
+ * Clear chapter content for the given books (content becomes recoverable
+ * only if the book's parser can re-extract it — the caller decides policy;
+ * this function only executes the deletion).
  */
-async function evictChapters(): Promise<void> {
-  const books = await getAllBooks();
-  if (books.length <= MAX_STORED_BOOKS) return;
-
-  const toEvict = books
-    .slice(MAX_STORED_BOOKS)
-    .filter((b) => getParserForFormat(b.format)?.lazyExtractable);
-  if (toEvict.length === 0) return;
+export async function clearChapterContents(bookIds: string[]): Promise<void> {
+  if (bookIds.length === 0) return;
   await dbTransaction([STORES.CHAPTERS], "readwrite", async (stores) => {
     const chaptersStore = stores.get(STORES.CHAPTERS)!;
-    for (const book of toEvict) {
+    for (const bookId of bookIds) {
       const index = chaptersStore.index("bookId");
       await new Promise<void>((resolve, reject) => {
-        const req = index.openCursor(IDBKeyRange.only(book.id));
+        const req = index.openCursor(IDBKeyRange.only(bookId));
         req.onsuccess = () => {
           const cursor = req.result;
           if (cursor) {
@@ -101,7 +90,7 @@ async function evictChapters(): Promise<void> {
 /**
  * Save a parsed book to the database
  */
-export async function saveBook(parsedBook: ParsedBook, parser: BookParser): Promise<void> {
+export async function saveBook(parsedBook: ParsedBook, coverBlob?: Blob): Promise<void> {
   await dbTransaction([STORES.BOOKS, STORES.CHAPTERS], "readwrite", async (stores) => {
     const booksStore = stores.get(STORES.BOOKS)!;
     const chaptersStore = stores.get(STORES.CHAPTERS)!;
@@ -127,22 +116,10 @@ export async function saveBook(parsedBook: ParsedBook, parser: BookParser): Prom
     await saveZip(parsedBook.book.id, parsedBook.rawData, parsedBook.book.fileSize);
   }
 
-  // Cache cover image so bookshelf can display it without the parser
-  if (parsedBook.book.coverUrl && parsedBook.rawData && parser.extractResource) {
-    try {
-      const data = await parser.extractResource(parsedBook.rawData, parsedBook.book.coverUrl);
-      if (data) {
-        const mimeType = getMimeType(parsedBook.book.coverUrl);
-        const blob = new Blob([data], { type: mimeType });
-        await saveCoverBlob(parsedBook.book.id, blob);
-      }
-    } catch {
-      // Non-critical: bookshelf will fall back to gradient cover
-    }
+  // Cover blob is prepared by the caller (parse-save.ts) — storage only stores it.
+  if (coverBlob) {
+    await saveCoverBlob(parsedBook.book.id, coverBlob);
   }
-
-  // Prune chapter content for least-recently-read books beyond the limit
-  void evictChapters();
 }
 
 /**
@@ -266,33 +243,23 @@ interface StoredChapter {
 }
 
 /**
- * Get chapter content. If not yet extracted, extracts lazily from stored zip.
+ * Get a chapter's stored record (content may be empty after eviction;
+ * href is the re-extraction handle). Pure read — no parser involvement;
+ * lazy re-extraction is orchestrated in chapter-content.ts.
  */
-export async function getChapterContent(
+export async function getChapter(
   bookId: string,
   chapterId: string,
-): Promise<string | undefined> {
+): Promise<{ content?: string; href?: string } | undefined> {
   const chapter = await dbGet<StoredChapter>(STORES.CHAPTERS, [bookId, chapterId]);
-
   if (!chapter) return undefined;
-
-  if (chapter.content) return chapter.content;
-
-  if (chapter.href) {
-    const book = await getBook(bookId);
-    const parser = book ? getParserForFormat(book.format) : null;
-    if (parser?.extractChapterContent) {
-      return lazyExtractChapterContent(bookId, chapterId, chapter.href, parser);
-    }
-  }
-
-  return chapter.content;
+  return { content: chapter.content || undefined, href: chapter.href };
 }
 
 /**
- * Update chapter content after lazy extraction
+ * Store chapter content after lazy extraction (see chapter-content.ts).
  */
-async function updateChapterContent(
+export async function updateChapterContent(
   bookId: string,
   chapterId: string,
   content: string,
@@ -302,48 +269,6 @@ async function updateChapterContent(
     if (chapter.content && chapter.content !== content) revokeBlobUrls(chapter.content);
     chapter.content = content;
     await dbPut(STORES.CHAPTERS, chapter);
-  }
-}
-
-/**
- * Lazily extract a single chapter's content from stored zip data
- */
-async function lazyExtractChapterContent(
-  bookId: string,
-  chapterId: string,
-  href: string,
-  parser: BookParser,
-): Promise<string> {
-  const key = `${bookId}:${chapterId}`;
-
-  const inflight = extractionInProgress.get(key);
-  if (inflight) return inflight;
-
-  const promise = (async () => {
-    const rawData = await getZip(bookId);
-    if (!rawData) {
-      throw new Error(
-        "Chapter content not available. The book data has been cleared from local storage. Please re-import the book.",
-      );
-    }
-    const content = await parser.extractChapterContent!(rawData, {
-      id: chapterId,
-      href,
-    });
-    if (!content) {
-      throw new Error(
-        "Chapter content not available. The book data has been cleared from local storage. Please re-import the book.",
-      );
-    }
-    await updateChapterContent(bookId, chapterId, content);
-    return content;
-  })();
-
-  extractionInProgress.set(key, promise);
-  try {
-    return await promise;
-  } finally {
-    extractionInProgress.delete(key);
   }
 }
 

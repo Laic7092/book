@@ -4,7 +4,7 @@ import type { SearchResult } from "../../core/types";
 import type { ReaderState } from "@book/reader-core";
 import type { ReaderSession } from "@book/reader-engine";
 import { useDocumentMarker } from "../../composables/useDocumentMarker";
-import * as booksStore from "../../storage/books";
+import { fetchChapterContent } from "../../storage/chapter-content";
 import { useUIStore } from "../../stores/ui";
 
 const uiStore = useUIStore();
@@ -121,7 +121,7 @@ export function useReaderSearch(getSession: () => ReaderSession | null) {
 
     searchResults.value = await searchInBook(bookId, searchQuery.value, state.chapters, {
       getChapterContent: (_bookId: string, chapterId: string) =>
-        booksStore.getChapterContent(bookId, chapterId),
+        fetchChapterContent(bookId, chapterId).then((r) => r.html),
     });
   };
 

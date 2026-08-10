@@ -1,4 +1,4 @@
-import { getParserForFileAuto, getParseWorker } from "@book/parser-core";
+import { getParserForFileAuto, getParseWorker, getParserForFormat } from "@book/parser-core";
 import { mapParserResult } from "../core/types";
 import { assertValidBookFile } from "../utils/validation";
 import { getMimeType } from "@book/parser-core";
@@ -9,6 +9,25 @@ import type { Book, Chapter } from "../core/types";
 export interface ParseAndSaveResult {
   book: Book;
   chapters: Chapter[];
+}
+
+/** Eviction policy lives in the orchestration layer, not in storage. */
+const MAX_STORED_BOOKS = 20;
+
+/**
+ * Prune chapter content for the least-recently-read books beyond the limit.
+ * Only books whose parser declares lazyExtractable may be pruned (their
+ * content can be re-extracted from the stored raw zip); clearing any other
+ * format would lose content forever.
+ */
+async function evictIfNeeded(): Promise<void> {
+  const books = await booksStore.getAllBooks();
+  if (books.length <= MAX_STORED_BOOKS) return;
+  const toEvict = books
+    .slice(MAX_STORED_BOOKS)
+    .filter((b) => getParserForFormat(b.format)?.lazyExtractable);
+  if (toEvict.length === 0) return;
+  await booksStore.clearChapterContents(toEvict.map((b) => b.id));
 }
 
 export async function parseAndSaveBook(
@@ -41,7 +60,22 @@ export async function parseAndSaveBook(
   // Try worker first; DOMParser-dependent formats fall back to main thread
   const result = await getParseWorker().parse(file, parser);
   const parsedBook = mapParserResult(result, parser.format, file.size, contentHash);
-  await booksStore.saveBook(parsedBook, parser);
+
+  // Cover extraction is the orchestrator's job — storage only stores the blob.
+  let coverBlob: Blob | undefined;
+  if (parsedBook.book.coverUrl && parsedBook.rawData && parser.extractResource) {
+    try {
+      const data = await parser.extractResource(parsedBook.rawData, parsedBook.book.coverUrl);
+      if (data) {
+        coverBlob = new Blob([data], { type: getMimeType(parsedBook.book.coverUrl) });
+      }
+    } catch {
+      // Non-critical: bookshelf will fall back to gradient cover
+    }
+  }
+
+  await booksStore.saveBook(parsedBook, coverBlob);
+  await evictIfNeeded();
 
   return { book: parsedBook.book, chapters: parsedBook.chapters };
 }
@@ -103,6 +137,8 @@ async function consumeStreamingEvents(
           const mimeType = getMimeType(book.coverUrl);
           await booksStore.saveCoverBlob(book.id, new Blob([event.coverData], { type: mimeType }));
         }
+        // Note: streaming imports do not run eviction (kept as-is); the
+        // non-streaming path handles it via evictIfNeeded after saveBook.
         break;
       }
     }
