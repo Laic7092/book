@@ -30,7 +30,8 @@ const sceneCount = new Map<string, number>();
 
 for (const meta of PLUGIN_METADATA) {
   if (!meta.loadOn) continue;
-  pluginSceneMap.set(meta.dir, meta.loadOn);
+  // Key by pluginId: p.id from getAllPlugins() is the pluginId, and dir may differ.
+  pluginSceneMap.set(meta.pluginId ?? meta.dir, meta.loadOn);
   const scenes = Array.isArray(meta.loadOn) ? meta.loadOn : [meta.loadOn];
   for (const s of scenes) {
     sceneCount.set(s, (sceneCount.get(s) ?? 0) + 1);

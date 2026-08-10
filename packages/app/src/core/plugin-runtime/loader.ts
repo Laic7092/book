@@ -33,13 +33,15 @@ interface PluginMeta {
 }
 
 const metas: PluginMeta[] = [];
-const pluginLoaders = import.meta.glob<Record<string, unknown>>("./*/index.ts");
+// Runtime lives in core/plugin-runtime/, plugins in src/plugins/ — glob must
+// traverse up two levels or it matches nothing and every plugin vanishes.
+const pluginLoaders = import.meta.glob<Record<string, unknown>>("../../plugins/*/index.ts");
 // Template is documentation, not a loadable plugin — keep it out of the map.
-delete pluginLoaders["./_template/index.ts"];
+delete pluginLoaders["../../plugins/_template/index.ts"];
 
 for (const meta of PLUGIN_METADATA) {
   if (!meta.loadOn || (Array.isArray(meta.loadOn) && meta.loadOn.length === 0)) continue;
-  const loader = pluginLoaders[`./${meta.dir}/index.ts`];
+  const loader = pluginLoaders[`../../plugins/${meta.dir}/index.ts`];
   if (!loader) continue;
   metas.push({
     loadOn: meta.loadOn,
@@ -64,7 +66,7 @@ async function ensureSceneMap(): Promise<void> {
 
   for (const meta of metas) {
     if (!meta.pluginId) continue;
-    const loader = pluginLoaders[`./${meta.dir}/index.ts`];
+    const loader = pluginLoaders[`../../plugins/${meta.dir}/index.ts`];
     if (!loader) continue;
 
     const effectiveEnabled = states?.[meta.pluginId] ?? meta.defaultEnabled ?? true;
