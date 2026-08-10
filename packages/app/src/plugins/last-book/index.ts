@@ -1,8 +1,6 @@
 import type { Plugin } from "../../core/plugin-runtime/types";
 import { PLUGIN_BRAND } from "../../core/plugin-runtime/types";
 
-export const loadOn = "bookshelf" as const;
-
 const LAST_BOOK_KEY = "lastBookId";
 
 export const lastBookPlugin: Plugin = {

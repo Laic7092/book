@@ -25,6 +25,8 @@ const keyword = ref("");
 const builtInSources = ref<LegadoSource[]>([]);
 const importedSources = ref<LegadoSource[]>([]);
 const activeSource = ref<LegadoSource | null>(null);
+/** Source that produced the currently selected book (survives all-source search). */
+const selectedSource = ref<LegadoSource | null>(null);
 const searchResults = ref<BookSearchItem[]>([]);
 const selectedBook = ref<BookSearchItem | null>(null);
 const bookInfo = ref<Record<string, string>>({});
@@ -50,15 +52,37 @@ onMounted(async () => {
 // ✦ Search
 
 async function doSearch() {
-  if (!activeSource.value || !keyword.value.trim()) return;
+  const kw = keyword.value.trim();
+  if (!kw || isLoading.value) return;
   isLoading.value = true;
   error.value = "";
   searchResults.value = [];
   stage.value = "search";
   try {
-    searchResults.value = await manager.search(activeSource.value, keyword.value.trim());
-    if (searchResults.value.length === 0) error.value = "没有找到匹配的书籍";
-    stage.value = "results";
+    if (activeSource.value) {
+      searchResults.value = await manager.search(activeSource.value, kw);
+      if (searchResults.value.length === 0) error.value = "没有找到匹配的书籍";
+      stage.value = "results";
+    } else {
+      // All-source mode: search every source in parallel, merge + dedupe by URL.
+      const sources = manager.getAll();
+      const settled = await Promise.allSettled(sources.map((s) => manager.search(s, kw)));
+      const merged: BookSearchItem[] = [];
+      const seen = new Set<string>();
+      for (let i = 0; i < settled.length; i++) {
+        const r = settled[i];
+        if (r.status !== "fulfilled") continue;
+        const src = sources[i];
+        for (const item of r.value) {
+          if (seen.has(item.bookUrl)) continue;
+          seen.add(item.bookUrl);
+          merged.push({ ...item, source: src.bookSourceName });
+        }
+      }
+      searchResults.value = merged;
+      if (merged.length === 0) error.value = "所有书源都没有找到匹配的书籍";
+      stage.value = "results";
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : "搜索失败";
     stage.value = "sources";
@@ -70,8 +94,11 @@ async function doSearch() {
 // ✦ Detail
 
 async function showDetail(book: BookSearchItem) {
-  if (!activeSource.value) return;
   selectedBook.value = book;
+  // In all-source mode activeSource is null — pin the source that produced this
+  // result so detail/import still work.
+  selectedSource.value =
+    activeSource.value ?? manager.getAll().find((s) => s.bookSourceName === book.source) ?? null;
   isLoading.value = true;
   error.value = "";
   bookInfo.value = {};
@@ -79,8 +106,8 @@ async function showDetail(book: BookSearchItem) {
   stage.value = "detail";
   try {
     const [info, chs] = await Promise.all([
-      manager.getBookInfo(activeSource.value, book.bookUrl).catch(() => ({})),
-      manager.getChapters(activeSource.value, book.bookUrl),
+      manager.getBookInfo(selectedSource.value!, book.bookUrl).catch(() => ({})),
+      manager.getChapters(selectedSource.value!, book.bookUrl),
     ]);
     bookInfo.value = info;
     chapters.value = chs;
@@ -94,8 +121,8 @@ async function showDetail(book: BookSearchItem) {
 // ✦ Import
 
 async function importBook() {
-  if (!activeSource.value || chapters.value.length === 0) return;
-  const src = activeSource.value;
+  const src = selectedSource.value;
+  if (!src || chapters.value.length === 0) return;
   const book = selectedBook.value!;
   importingId.value = book.bookUrl;
   stage.value = "importing";
@@ -193,7 +220,7 @@ async function deleteSource(src: LegadoSource) {
 
 // ✦ Select source for search
 
-function selectSource(src: LegadoSource) {
+function selectSource(src: LegadoSource | null) {
   activeSource.value = src;
   keyword.value = "";
   searchResults.value = [];
@@ -220,6 +247,7 @@ const stageTitle = computed(() => {
 function goHome() {
   stage.value = "sources";
   activeSource.value = null;
+  selectedSource.value = null;
   keyword.value = "";
   searchResults.value = [];
   selectedBook.value = null;
@@ -249,7 +277,15 @@ function goBack() {
       <!-- Active source picker -->
       <div class="source-section">
         <div class="section-label">选择书源</div>
-        <div v-if="!activeSource" class="source-warn">请选择一个书源开始搜索</div>
+        <div v-if="!activeSource" class="source-warn">
+          选择一个书源搜索,或使用「全部书源」同时搜索
+        </div>
+
+        <!-- All-source mode -->
+        <div class="source-card" :class="{ active: !activeSource }" @click="selectSource(null)">
+          <div class="source-name">全部书源</div>
+          <div class="source-url">同时搜索所有已启用的书源</div>
+        </div>
 
         <template v-if="builtInSources.length">
           <div class="section-sub">内置书源</div>
@@ -297,8 +333,8 @@ function goBack() {
         </template>
       </div>
 
-      <!-- Search bar (shown when a source is selected) -->
-      <div v-if="activeSource" class="search-bar">
+      <!-- Search bar -->
+      <div class="search-bar">
         <input
           v-model="keyword"
           class="search-input"
@@ -370,6 +406,7 @@ function goBack() {
           <div class="book-meta">
             <span class="book-title">{{ book.name }}</span>
             <span class="book-author">{{ book.author || "未知作者" }}</span>
+            <span v-if="book.source" class="book-source">{{ book.source }}</span>
           </div>
           <AppIcon name="chevron-right" class="chevron" :size="14" />
         </div>
@@ -760,6 +797,16 @@ function goBack() {
 .book-author {
   font-size: 12px;
   color: var(--text-secondary);
+}
+
+.book-source {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent);
+  background: var(--accent-soft, #eef2ff);
+  padding: 1px 8px;
+  border-radius: 8px;
+  align-self: flex-start;
 }
 
 .chevron {

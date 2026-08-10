@@ -140,6 +140,43 @@ function parseLegadoUrl(raw: string): RequestConfig {
 
 // ── Factory ──
 
+/**
+ * Apply a Legado `ruleContent.replaceRegex` chain to extracted text.
+ * Supports "##pattern##replacement" chains (and a single "pattern##replacement"
+ * fallback); `\n`/`\t` escapes in the JSON are interpreted literally.
+ */
+function applyReplaceRegex(text: string, replaceRegex?: string): string {
+  if (!replaceRegex) return text;
+  let result = text;
+
+  const chain = replaceRegex.match(/##([\s\S]*?)##([\s\S]*?)(?=##|$)/g);
+  if (chain) {
+    for (const pair of chain) {
+      const m = /^##([\s\S]*?)##([\s\S]*)$/.exec(pair);
+      if (!m) continue;
+      try {
+        result = result.replace(
+          new RegExp(m[1], "g"),
+          m[2].replace(/\\n/g, "\n").replace(/\\t/g, "\t"),
+        );
+      } catch {
+        /* invalid regex — skip this pair */
+      }
+    }
+    return result;
+  }
+
+  const plain = replaceRegex.match(/^([\s\S]*?)##([\s\S]*)$/);
+  if (plain) {
+    try {
+      result = result.replace(new RegExp(plain[1], "g"), plain[2]);
+    } catch {
+      /* invalid regex — ignore */
+    }
+  }
+  return result;
+}
+
 export function createSourceManager(
   server: ServerClient,
   storage: PluginStorageAdapter,
@@ -241,26 +278,47 @@ export function createSourceManager(
     },
 
     async getChapters(source: LegadoSource, bookUrl: string): Promise<BookChapter[]> {
-      const html = await fetchHtml(bookUrl);
       const listRule = source.ruleToc.chapterList;
-      if (listRule.startsWith(":")) {
-        const chapters = getChapterList(
-          html,
-          listRule,
-          source.ruleToc.chapterName,
-          source.ruleToc.chapterUrl,
-        );
-        for (const ch of chapters) ch.url = resolveUrl(source, ch.url);
-        return chapters;
+      const nextRule = source.ruleToc.nextTocUrl;
+      const all: BookChapter[] = [];
+      const seen = new Set<string>();
+      let currentUrl = bookUrl;
+
+      // nextTocUrl pagination: keep fetching "next page" TOCs until exhausted.
+      for (let page = 0; page < 50; page++) {
+        const html = await fetchHtml(currentUrl);
+        let chapters: BookChapter[];
+        if (listRule.startsWith(":")) {
+          chapters = getChapterList(
+            html,
+            listRule,
+            source.ruleToc.chapterName,
+            source.ruleToc.chapterUrl,
+          );
+        } else {
+          chapters = parseChapterList(
+            html,
+            listRule,
+            source.ruleToc.chapterName,
+            source.ruleToc.chapterUrl,
+          );
+        }
+        for (const ch of chapters) {
+          ch.url = resolveUrl(source, ch.url);
+          if (!seen.has(ch.url)) {
+            seen.add(ch.url);
+            all.push(ch);
+          }
+        }
+
+        if (!nextRule) break;
+        const nextPath = querySingle(new DOMParser().parseFromString(html, "text/html"), nextRule);
+        if (!nextPath) break;
+        const nextUrl = new URL(nextPath, currentUrl).href;
+        if (nextUrl === currentUrl) break; // guard against self-referencing pagination
+        currentUrl = nextUrl;
       }
-      const chapters = parseChapterList(
-        html,
-        listRule,
-        source.ruleToc.chapterName,
-        source.ruleToc.chapterUrl,
-      );
-      for (const ch of chapters) ch.url = resolveUrl(source, ch.url);
-      return chapters;
+      return all;
     },
 
     async getChapterContent(source: LegadoSource, chapterUrl: string): Promise<string> {
@@ -295,7 +353,7 @@ export function createSourceManager(
       }
 
       // Standard HTML cleanup
-      return content
+      const cleaned = content
         .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
         .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
         .replace(/&nbsp;/g, " ")
@@ -309,6 +367,9 @@ export function createSourceManager(
         .replace(/&[a-z]+;/g, "")
         .replace(/\n{3,}/g, "\n\n")
         .trim();
+
+      // Legado per-source content cleanup regex (##pattern##replacement chains).
+      return applyReplaceRegex(cleaned, source.ruleContent.replaceRegex);
     },
   };
 }

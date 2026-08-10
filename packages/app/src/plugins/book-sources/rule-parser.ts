@@ -14,6 +14,8 @@
 export interface RuleSeg {
   css: string;
   index?: number;
+  /** Legado `text.keyword` — match elements whose own text contains keyword. */
+  text?: string;
 }
 
 export interface ParsedRule {
@@ -34,6 +36,8 @@ export interface BookSearchItem {
   bookUrl: string;
   summary?: string;
   kind?: string;
+  /** Name of the source that produced this result (filled by the caller when merging). */
+  source?: string;
 }
 
 export interface BookChapter {
@@ -56,6 +60,7 @@ function detectType(rule: string): "jsoup" | "xpath" | "regex-allinone" {
 export function parseRule(raw: string): ParsedRule | null {
   if (!raw) return null;
   let rule = raw.trim();
+  if (!rule) return null;
 
   // Strip trailing regex transform  ##pat##replacement
   let regex: [RegExp, string] | undefined;
@@ -81,19 +86,27 @@ export function parseRule(raw: string): ParsedRule | null {
     return { type, steps: [], extractor: "text", regexPattern: rule.slice(1), regex };
   }
 
-  // JSOUP / CSS mode
+  // JSOUP / CSS mode — support repeated @css: steps (e.g. @css:div.list@css:a.title@href)
   if (rule.startsWith("@css:")) {
     const rest = rule.slice(5);
-    const atPos = rest.lastIndexOf("@");
-    if (atPos > 0) {
-      return {
-        type,
-        steps: [{ css: rest.slice(0, atPos).trim() }],
-        extractor: rest.slice(atPos + 1).trim() || "text",
-        regex,
-      };
+    const segs = rest
+      .split(/@css:/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const steps: RuleSeg[] = [];
+    let extractor = "text";
+    for (let i = 0; i < segs.length; i++) {
+      let seg = segs[i];
+      if (i === segs.length - 1) {
+        const atPos = seg.lastIndexOf("@");
+        if (atPos > 0 && isExtractor(seg.slice(atPos + 1))) {
+          extractor = seg.slice(atPos + 1);
+          seg = seg.slice(0, atPos);
+        }
+      }
+      if (seg) steps.push({ css: seg.trim() });
     }
-    return { type, steps: [{ css: rest.trim() }], extractor: "text", regex };
+    return { type, steps, extractor, regex };
   }
 
   // JSOUP-style: split by @
@@ -135,9 +148,14 @@ function parseSegment(s: string): RuleSeg | null {
   }
 
   if (type === "text") {
-    // text keyword matching not implemented in simplified edition
+    // text.keyword.N — keyword match on the element's own text (Legado).
+    // `text.0` keeps meaning "index 0" for backward compatibility.
+    const keyword = parts
+      .slice(1)
+      .filter((p) => isNaN(parseInt(p, 10)))
+      .join(".");
     const idxVal = parts.map((p) => parseInt(p, 10)).find((n) => !isNaN(n));
-    return { css: "*", index: idxVal };
+    return { css: "*", text: keyword || undefined, index: idxVal };
   }
 
   const name = parts
@@ -437,12 +455,18 @@ function applySteps(root: ParentNode, steps: RuleSeg[]): Element[] {
     return [];
   }
 
+  function matchText(elements: Element[], text?: string): Element[] {
+    if (!text) return elements;
+    return elements.filter((el) => el.textContent?.includes(text) ?? false);
+  }
+
   const firstStep = steps[0];
   if (firstStep.css === ":scope > *") {
     current = Array.from(root.children) as Element[];
   } else {
     current = Array.from(root.querySelectorAll(firstStep.css));
   }
+  current = matchText(current, firstStep.text);
 
   if (firstStep.index !== undefined) {
     const idx = firstStep.index < 0 ? current.length + firstStep.index : firstStep.index;
@@ -459,11 +483,12 @@ function applySteps(root: ParentNode, steps: RuleSeg[]): Element[] {
         next.push(...Array.from(el.querySelectorAll(step.css)));
       }
     }
+    const filtered = matchText(next, step.text);
     if (step.index !== undefined) {
-      const idx = step.index < 0 ? next.length + step.index : step.index;
-      current = idx >= 0 && idx < next.length ? [next[idx]] : [];
+      const idx = step.index < 0 ? filtered.length + step.index : step.index;
+      current = idx >= 0 && idx < filtered.length ? [filtered[idx]] : [];
     } else {
-      current = next;
+      current = filtered;
     }
   }
 

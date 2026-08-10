@@ -171,6 +171,11 @@ function setSpeed(delta: number) {
   }
 }
 
+/** Voice switched mid-playback — restart the current sentence with the new voice. */
+function onVoiceChange() {
+  if (state.value === "playing") speakSentence(currentSentenceIndex.value);
+}
+
 function toggleExpanded() {
   expanded.value = !expanded.value;
 }
@@ -267,6 +272,13 @@ watch(speed, (val) => {
       >
         <AppIcon name="close" :size="16" />
       </button>
+    </div>
+
+    <!-- Voice picker -->
+    <div v-if="voices.length > 1" class="voice-row">
+      <select v-model="selectedVoice" class="voice-select" @change="onVoiceChange">
+        <option v-for="v in voices" :key="v.name" :value="v">{{ v.name }} ({{ v.lang }})</option>
+      </select>
     </div>
 
     <!-- Sentence display -->
@@ -409,6 +421,28 @@ watch(speed, (val) => {
 .close-btn:hover {
   background: var(--hover-bg, rgba(0, 0, 0, 0.06));
   color: var(--reader-text, #333);
+}
+
+/* ── Voice picker ── */
+.voice-row {
+  display: flex;
+  align-items: center;
+}
+
+.voice-select {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle, #e0e0e0);
+  background: var(--bg-secondary, #fafafa);
+  color: var(--reader-text, #333);
+  outline: none;
+}
+
+.voice-select:focus {
+  border-color: var(--accent);
 }
 
 /* ── Sentence display ── */
