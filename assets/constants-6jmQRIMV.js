@@ -1,1 +1,0 @@
-var e=3e3,t=.3,n=.7,r=100*1024*1024,i=[`.txt`,`.epub`,`.pdf`,`.cbz`,`.fb2`,`.html`,`.htm`,`.docx`,`.cbr`,`.mobi`,`.azw3`,`.azw`];function a(e,t=10){if(e.length<=t)return e;let n=e.slice(0,t),r=n.lastIndexOf(` `);return r>t-5?n.slice(0,r)+`…`:n.trimEnd()+`…`}function o(e,t){return{title:a(e),message:t}}export{e as a,n as i,r as n,o,t as r,a as s,i as t};
