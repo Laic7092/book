@@ -30,7 +30,7 @@ Open the dev server URL in your browser. Import EPUB/PDF/CBZ/CBR/TXT/FB2/DOCX/MO
 
 ## Architecture
 
-The project is a pnpm workspace monorepo with 5 packages under `packages/`:
+The project is a pnpm workspace monorepo with 6 packages under `packages/`:
 
 ```
 packages/
@@ -39,6 +39,7 @@ packages/
   reader-core/    Pure reader state machine (framework-agnostic reducer)
   reader-engine/  Iframe-based rendering engine (reflowable + fixed-layout hosts)
   server/         Hono server for OPDS catalogs and filesystem access
+  contracts/      Shared wire contracts between app and server
 ```
 
 ### Plugin system
@@ -56,7 +57,8 @@ Plugins have access to reactive IndexedDB storage, a typed event bus, filter hoo
 1. **Parse** — parser extracts chapters and content from the file
 2. **Store** — book metadata and chapters saved to IndexedDB
 3. **Render** — chapter HTML passes through content transformers → resource injection → iframe
-4. **Paginate** — offscreen iframe measures block positions, pages computed and LRU-cached (capacity 10)
+4. **Paginate** — the iframe renders in CSS multi-column layout (`column-width`, `column-fill: auto`); page count is computed from `body.scrollWidth / viewportWidth` (pure math in `reader-engine/src/layout.ts`), re-measured via `ResizeObserver` when content/fonts settle
+5. **Scroll mode** — chapters are wrapped in `.scroll-chapter` containers; in-chapter progress and viewport-top anchor are computed by `reader-engine/src/scroll-progress.ts`, with `IntersectionObserver` sentinels pre-loading adjacent chapters
 
 ### Format support
 
@@ -83,7 +85,7 @@ Push to `main` triggers GitHub Actions: `pnpm install` → `pnpm build` → depl
 - **Vue 3** with Composition API, Pinia state management
 - **Vite** with vite-plus CLI (oxc linting + formatting + typecheck)
 - **TypeScript** (ES2023, bundler module resolution, `verbatimModuleSyntax`)
-- **IndexedDB** for offline storage (4 object stores)
+- **IndexedDB** for offline storage (books, chapters, raw zips, plugin data, covers, folders)
 - **Hono** server for OPDS proxying and local file access
 - **PWA** via `vite-plugin-pwa` (auto-update register strategy)
 

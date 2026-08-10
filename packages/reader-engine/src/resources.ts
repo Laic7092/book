@@ -1,5 +1,30 @@
-import { getMimeType } from "@book/parser-core";
-import type { BookParser } from "@book/parser-core";
+// ── Mime types for resource blobs (local copy so the engine has no parser deps) ──
+
+const MIME_TYPES: Record<string, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  gif: "image/gif",
+  svg: "image/svg+xml",
+  webp: "image/webp",
+  bmp: "image/bmp",
+  css: "text/css",
+  woff: "font/woff",
+  woff2: "font/woff2",
+  ttf: "font/ttf",
+  otf: "font/otf",
+};
+
+function getMimeType(pathOrExt: string, fallback = "application/octet-stream"): string {
+  const ext = pathOrExt.split(".").pop()?.toLowerCase();
+  return MIME_TYPES[ext || ""] || fallback;
+}
+
+/** Resource extractor injected by the app (wraps a parser's extractResource). */
+export type ResourceExtractor = (
+  rawData: ArrayBuffer,
+  path: string,
+) => Promise<ArrayBuffer | undefined>;
 
 export interface ResourceInfo {
   id: string;
@@ -187,15 +212,15 @@ async function resolveMissingResources(
   rawData: ArrayBuffer | undefined,
   paths: string[],
   resourceUrls: Map<string, string>,
-  parser: BookParser,
+  extractResource: ResourceExtractor,
 ): Promise<void> {
-  if (!rawData || !parser.extractResource) return;
+  if (!rawData) return;
   const missingPaths = paths.filter((p) => !resourceUrls.has(p));
   if (missingPaths.length === 0) return;
   const results = await Promise.all(
     missingPaths.map(async (path) => ({
       path,
-      data: await parser.extractResource!(rawData, path),
+      data: await extractResource(rawData, path),
     })),
   );
   for (const { path, data } of results) {
@@ -298,13 +323,13 @@ export interface ResolvedChapter {
 export async function resolveChapterResources(
   rawHtml: string,
   rawData: ArrayBuffer | undefined,
-  parser: BookParser,
+  extractResource: ResourceExtractor,
   resourceUrls: Map<string, string>,
 ): Promise<ResolvedChapter> {
   const doc = new DOMParser().parseFromString(rawHtml, "text/html");
   const resourcePaths = collectResourcePaths(doc);
-  if (resourcePaths.length > 0) {
-    await resolveMissingResources(rawData, resourcePaths, resourceUrls, parser);
+  if (resourcePaths.length > 0 && rawData) {
+    await resolveMissingResources(rawData, resourcePaths, resourceUrls, extractResource);
   }
   if (resourceUrls.size > 0) {
     const rewrittenDoc = rewriteResourcePaths(rawHtml, resourceUrls);

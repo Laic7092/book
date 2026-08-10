@@ -57,7 +57,7 @@ export type ReaderEffect =
   | { type: "FETCH_CHAPTER"; bookId: string; chapterId: string }
   | { type: "SCROLL_PROGRESS_UPDATED"; progress: number; anchor?: number }
   | { type: "PAGE_POSITION_CHANGED"; page: number }
-  | { type: "MODE_CHANGED"; mode: "paginated" | "scroll" }
+  | { type: "MODE_CHANGED"; mode: "pagination" | "scroll" }
   | { type: "CHAPTER_DID_CHANGE"; chapterId: string; previousChapterId: string | null }
   | { type: "PAGE_DID_CHANGE"; page: number; totalPages: number; chapterId: string }
   | { type: "CONTENT_DID_LOAD"; chapterId: string }
@@ -129,7 +129,7 @@ function initReducer(
     state: next,
     effects: [
       { type: "FETCH_CHAPTER", bookId: action.bookId, chapterId },
-      { type: "MODE_CHANGED", mode: action.mode === "pagination" ? "paginated" : "scroll" },
+      { type: "MODE_CHANGED", mode: action.mode },
     ],
   };
 }
@@ -358,9 +358,7 @@ function setModeReducer(
 
   return {
     state: next,
-    effects: [
-      { type: "MODE_CHANGED", mode: action.mode === "pagination" ? "paginated" : "scroll" },
-    ],
+    effects: [{ type: "MODE_CHANGED", mode: action.mode }],
   };
 }
 

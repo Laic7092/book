@@ -1,5 +1,4 @@
 import { type ReaderEffect, type Chapter } from "@book/reader-core";
-import { getParserForFormat } from "@book/parser-core";
 import { Engine, type EngineOptions } from "./engine";
 import { BASE_CSS } from "./styles";
 import {
@@ -41,7 +40,6 @@ export class ReflowableHost extends Engine {
   private scrollHandlerRef: ((e: Event) => void) | null = null;
   private rafId: number | null = null;
   private transformContent: ReflowableHostOptions["transformContent"];
-  private bookFormat = "";
   private resourceUrls = new Map<string, string>();
   private injectedResources = new Map<string, ResourceInfo>();
   private scrollObserver: IntersectionObserver | null = null;
@@ -74,9 +72,7 @@ export class ReflowableHost extends Engine {
       pendingTarget: number | null;
     }>,
     initialScroll?: Partial<{ progress: number }>,
-    format = "",
   ): void {
-    this.bookFormat = format;
     super.init(bookId, chapters, chapterIndex, mode, initialPage, initialScroll);
   }
 
@@ -222,7 +218,10 @@ export class ReflowableHost extends Engine {
         }
         break;
       default:
-        await this.runGenericEffect(effect);
+        // No DOM side effect for this effect; the app layer observes it via
+        // onEffect (see Engine.runEffects — every non-FETCH effect reaches
+        // the onEffect callback after runEffect).
+        break;
     }
   }
 
@@ -238,9 +237,13 @@ export class ReflowableHost extends Engine {
   ): Promise<string> {
     let processed = html;
 
-    const parser = getParserForFormat(this.bookFormat);
-    if (parser && parser.extractResource) {
-      const resolved = await resolveChapterResources(html, rawData, parser, this.resourceUrls);
+    if (this.extractResource && rawData) {
+      const resolved = await resolveChapterResources(
+        html,
+        rawData,
+        this.extractResource,
+        this.resourceUrls,
+      );
       if (resolved.resources.length > 0) {
         injectResources(this.iframeDoc, resolved.resources, this.injectedResources);
       }
@@ -503,7 +506,7 @@ export class ReflowableHost extends Engine {
     }
   }
 
-  private restructureForMode(mode: "paginated" | "scroll", chapterId: string): void {
+  private restructureForMode(mode: "pagination" | "scroll", chapterId: string): void {
     if (mode === "scroll") {
       this.loadedChapterIds.clear();
       this.loadedChapterIds.add(chapterId);

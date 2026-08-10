@@ -2,6 +2,7 @@ import { ref, computed, shallowRef, watch, onMounted, onUnmounted, type Ref } fr
 import { ReflowableHost, computePageFromOffset, computeAnchorScrollTop } from "@book/reader-engine";
 import type { ReaderState, ReaderAction, ReaderEffect } from "@book/reader-core";
 import { createInitialState } from "@book/reader-core";
+import { getParserForFormat } from "@book/parser-core";
 import { currentSession } from "../stores/reader-session";
 import { useUIStore } from "../stores/ui";
 import {
@@ -178,7 +179,6 @@ export function useReaderMachine(
         config.mode,
         config.initialPage,
         config.initialScroll,
-        bookFormat.value,
       );
     });
   }
@@ -222,6 +222,10 @@ export function useReaderMachine(
         const { getZip } = await import("../storage/raw-data");
         const rawData = await getZip(bookId);
         return { html, rawData };
+      },
+      extractResource: async (rawData, path) => {
+        const parser = getParserForFormat(bookFormat.value);
+        return parser?.extractResource?.(rawData, path);
       },
       transformContent: (html, bookId, chapterId) =>
         applyContentTransformers(html, { bookId, chapterId }),

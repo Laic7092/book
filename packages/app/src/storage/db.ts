@@ -1,11 +1,13 @@
 const DB_NAME = "reader-db";
-const DB_VERSION = 11;
+const DB_VERSION = 12;
 
 export const STORES = {
   BOOKS: "books",
   CHAPTERS: "chapters",
   ZIPS: "zips",
   PLUGIN_STORE: "plugin_store",
+  COVERS: "covers",
+  FOLDERS: "folders",
 } as const;
 
 export type StoreName = (typeof STORES)[keyof typeof STORES];
@@ -45,6 +47,7 @@ export async function openDB(): Promise<IDBDatabase> {
 
     request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
       const db = (event.target as IDBOpenDBRequest).result;
+      const tx = (event.target as IDBOpenDBRequest).transaction;
 
       // Books store
       if (!db.objectStoreNames.contains(STORES.BOOKS)) {
@@ -71,6 +74,22 @@ export async function openDB(): Promise<IDBDatabase> {
         });
         ps.createIndex("pluginId", "pluginId", { unique: false });
         ps.createIndex("createdAt", "createdAt", { unique: false });
+      }
+
+      // v12: dedicated stores for covers and folders. Core data previously
+      // lived in plugin_store under the fake plugin ids "_covers"/"_folders",
+      // which coupled the storage layer to the plugin schema and forced
+      // deleteBook to scan the whole plugin store with fuzzy key matching.
+      if (!db.objectStoreNames.contains(STORES.COVERS)) {
+        db.createObjectStore(STORES.COVERS, { keyPath: "bookId" });
+      }
+      if (!db.objectStoreNames.contains(STORES.FOLDERS)) {
+        db.createObjectStore(STORES.FOLDERS, { keyPath: "id" });
+      }
+
+      // Migrate legacy data out of plugin_store (runs once on upgrade from <12).
+      if (event.oldVersion < 12 && tx && db.objectStoreNames.contains("plugin_store")) {
+        migrateLegacyCoversAndFolders(tx);
       }
     };
   });
@@ -177,4 +196,42 @@ export async function dbGetAllFromIndex<T>(
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
+}
+
+/**
+ * v12 migration: move core data out of plugin_store (where it lived under the
+ * fake plugin ids "_covers"/"_folders") into the dedicated covers/folders
+ * stores. Runs inside the versionchange transaction, so it is atomic with the
+ * upgrade; legacy records are deleted after being copied.
+ */
+function migrateLegacyCoversAndFolders(tx: IDBTransaction): void {
+  const ps = tx.objectStore("plugin_store");
+  const covers = tx.objectStore(STORES.COVERS);
+  const folders = tx.objectStore(STORES.FOLDERS);
+
+  const req = ps.openCursor();
+  req.onsuccess = () => {
+    const cursor = req.result;
+    if (!cursor) return;
+    const rec = cursor.value as {
+      pluginId: string;
+      key: string;
+      value: unknown;
+      createdAt?: number;
+    };
+    if (rec.pluginId === "_covers") {
+      covers.put({
+        bookId: rec.key,
+        blob: rec.value as Blob,
+        createdAt: rec.createdAt ?? Date.now(),
+      });
+      cursor.delete();
+    } else if (rec.pluginId === "_folders") {
+      for (const folder of rec.value as import("../core/types").Folder[]) {
+        folders.put(folder);
+      }
+      cursor.delete();
+    }
+    cursor.continue();
+  };
 }

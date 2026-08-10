@@ -72,6 +72,13 @@ export const annotationsPlugin: Plugin = {
     ctx.events.on("chapter:changed", ({ chapterId }) => {
       _currentChapterId.value = chapterId;
     });
+    ctx.events.on("book:deleted", async ({ bookId }) => {
+      const store = _store;
+      if (!store) return;
+      for (const a of store.items.value) {
+        if (a.bookId === bookId) await store.remove(a.id);
+      }
+    });
 
     ctx.ui.registerModal("annotations", () => import("./AnnotationsPanel.vue"));
     ctx.ui.registerOverlay("annotations", () => import("./AnnotationOverlay.vue"));

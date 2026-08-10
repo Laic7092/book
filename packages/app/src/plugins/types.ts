@@ -18,7 +18,7 @@ export interface PluginEventMap {
   "page:changed": { bookId: string; chapterId: string; page: number; totalPages: number };
   "settings:changed": { changes: Partial<ReaderSettings> };
   "content:loaded": { bookId: string; chapterId: string };
-  "mode:changed": { bookId: string; mode: "paginated" | "scroll" };
+  "mode:changed": { bookId: string; mode: "pagination" | "scroll" };
   "scroll:progress": { bookId: string; progress: number; anchor?: number };
   "reader:init": { bookId: string };
   "reader:mounted": { bookId: string };

@@ -153,8 +153,11 @@ export class FixedHost extends Engine {
 
   // ── Protected: effect handling ──
 
-  protected async runEffect(effect: ReaderEffect): Promise<void> {
-    await this.runGenericEffect(effect);
+  protected async runEffect(_effect: ReaderEffect): Promise<void> {
+    // Fixed-layout rendering is delegated to the surface/renderer, which
+    // drives the machine itself (goToPage/PAGE_COUNT_UPDATED); there are no
+    // DOM side effects to apply here. The app observes every effect via
+    // onEffect (see Engine.runEffects).
   }
 
   // ── Chapter fetching with surface integration ──

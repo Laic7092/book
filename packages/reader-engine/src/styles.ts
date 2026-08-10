@@ -61,10 +61,10 @@ export const BASE_CSS = `
     text-align: center;
   }
 
-  html[data-mode="paginated"] {
+  html[data-mode="pagination"] {
     overflow: hidden;
   }
-  html[data-mode="paginated"] body.reader-content {
+  html[data-mode="pagination"] body.reader-content {
     column-width: calc(100dvw - 2 * var(--page-margin, 24px));
     column-gap: calc(2 * var(--page-margin, 24px));
     column-fill: auto;

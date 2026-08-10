@@ -11,7 +11,6 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@book/parser-core": "workspace:*",
     "@book/reader-core": "workspace:*"
   }
 }

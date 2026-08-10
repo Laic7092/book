@@ -168,6 +168,13 @@ export const bookmarksPlugin: Plugin = {
     ctx.events.on("book:opened", ({ bookId }) => {
       void loadBookmarks(bookId);
     });
+    ctx.events.on("book:deleted", async ({ bookId }) => {
+      const store = _store;
+      if (!store) return;
+      for (const b of store.items.value) {
+        if (b.bookId === bookId) await store.remove(b.id);
+      }
+    });
 
     ctx.ui.registerModal("bookmarks", () => import("./BookmarksPanel.vue"));
     ctx.ui.registerFooterAction({

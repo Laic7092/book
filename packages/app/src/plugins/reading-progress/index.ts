@@ -65,6 +65,9 @@ export const readingProgressPlugin: Plugin = {
     ctx.events.on("mode:changed", ({ bookId, mode }) => {
       if (mode === "scroll") void save(bookId);
     });
+    ctx.events.on("book:deleted", async ({ bookId }) => {
+      await ctx.storage.delete(progressKey(bookId));
+    });
     ctx.events.on(
       "reader:unmounted",
       ({ bookId, chapterId, chapterIndex, mode, page, scrollProgress, scrollAnchor }) => {

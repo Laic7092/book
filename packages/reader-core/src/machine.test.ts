@@ -66,7 +66,7 @@ describe("INIT", () => {
       bookId: "book1",
       chapterId: "ch1",
     });
-    expect(result.effects).toContainEqual({ type: "MODE_CHANGED", mode: "paginated" });
+    expect(result.effects).toContainEqual({ type: "MODE_CHANGED", mode: "pagination" });
   });
 
   test("scroll mode emits MODE_CHANGED with scroll", () => {
@@ -548,7 +548,7 @@ describe("SET_MODE", () => {
 
     expect(result.state.mode).toBe("pagination");
     expect(result.state.status).toBe("ready");
-    expect(result.effects).toContainEqual({ type: "MODE_CHANGED", mode: "paginated" });
+    expect(result.effects).toContainEqual({ type: "MODE_CHANGED", mode: "pagination" });
     expect(result.effects).not.toContainEqual(expect.objectContaining({ type: "FETCH_CHAPTER" }));
   });
 

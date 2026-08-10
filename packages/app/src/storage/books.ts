@@ -9,8 +9,6 @@ import { getMimeType } from "@book/parser-core";
 
 const MAX_STORED_BOOKS = 20;
 
-const PLUGIN_ID = "_covers";
-
 // Only these formats can re-extract a chapter from stored raw data
 // (chapters carry a href and the parser implements extractChapterContent).
 // Evicting any other format clears content that can never be restored.
@@ -32,36 +30,30 @@ function revokeBlobUrls(html: string): void {
   }
 }
 
-interface CoverEntry {
-  pluginId: string;
-  key: string;
-  value: Blob;
+interface CoverRecord {
+  bookId: string;
+  blob: Blob;
   createdAt: number;
-}
-
-function key(bookId: string): string {
-  return bookId;
 }
 
 /** Save a cover Blob for the given book. */
 export async function saveCoverBlob(bookId: string, blob: Blob): Promise<void> {
-  await dbPut(STORES.PLUGIN_STORE, {
-    pluginId: PLUGIN_ID,
-    key: key(bookId),
-    value: blob,
+  await dbPut(STORES.COVERS, {
+    bookId,
+    blob,
     createdAt: Date.now(),
-  } as CoverEntry);
+  } satisfies CoverRecord);
 }
 
 /** Retrieve the cover Blob for a book, or null if not cached. */
 export async function getCoverBlob(bookId: string): Promise<Blob | null> {
-  const entry = await dbGet<CoverEntry>(STORES.PLUGIN_STORE, [PLUGIN_ID, key(bookId)]);
-  return entry?.value ?? null;
+  const entry = await dbGet<CoverRecord>(STORES.COVERS, bookId);
+  return entry?.blob ?? null;
 }
 
 /** Delete the cached cover Blob for a book. */
 export async function deleteCoverBlob(bookId: string): Promise<void> {
-  await dbDelete(STORES.PLUGIN_STORE, [PLUGIN_ID, key(bookId)]);
+  await dbDelete(STORES.COVERS, bookId);
 }
 
 /** In-flight dedup: prevents concurrent extraction of the same chapter */
@@ -201,35 +193,9 @@ export async function deleteBook(bookId: string): Promise<void> {
   // Delete raw zip data (OPFS + IDB fallback)
   await deleteRawZip(bookId);
 
-  // Also clean up plugin_store entries for this book (any plugin)
-  await dbTransaction([STORES.PLUGIN_STORE], "readwrite", async (stores) => {
-    const ps = stores.get(STORES.PLUGIN_STORE)!;
-
-    // Delete known cover entry directly
-    ps.delete(["_covers", bookId]);
-
-    // Scan remaining entries for bookId references using a cursor (O(1) memory)
-    await new Promise<void>((resolve, reject) => {
-      const req = ps.openCursor();
-      req.onsuccess = () => {
-        const cursor = req.result;
-        if (cursor) {
-          const record = cursor.value as {
-            pluginId: string;
-            key: string;
-            value?: { bookId?: string };
-          };
-          if (record.value?.bookId === bookId || record.key.includes(bookId)) {
-            cursor.delete();
-          }
-          cursor.continue();
-        } else {
-          resolve();
-        }
-      };
-      req.onerror = () => reject(req.error);
-    });
-  });
+  // Remove the cached cover (exact key). Plugins clean up their own data by
+  // listening to the "book:deleted" event — no plugin-store scan here.
+  await deleteCoverBlob(bookId);
 }
 
 /**
@@ -394,31 +360,22 @@ export async function getChapterIds(bookId: string): Promise<string[]> {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Folder helpers (stored in plugin_store under _folders token)
+// Folder helpers (dedicated folders store)
 // ══════════════════════════════════════════════════════════════════════════════
 
-const FOLDERS_PLUGIN_ID = "_folders";
-const FOLDERS_KEY = "index";
-
-interface FolderEntry {
-  pluginId: string;
-  key: string;
-  value: Folder[];
-  createdAt: number;
-}
-
 async function readFolders(): Promise<Folder[]> {
-  const entry = await dbGet<FolderEntry>(STORES.PLUGIN_STORE, [FOLDERS_PLUGIN_ID, FOLDERS_KEY]);
-  return entry?.value ?? [];
+  const all = await dbGetAll<Folder>(STORES.FOLDERS);
+  return all.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 }
 
 async function writeFolders(folders: Folder[]): Promise<void> {
-  await dbPut(STORES.PLUGIN_STORE, {
-    pluginId: FOLDERS_PLUGIN_ID,
-    key: FOLDERS_KEY,
-    value: folders,
-    createdAt: Date.now(),
-  } as FolderEntry);
+  await dbTransaction([STORES.FOLDERS], "readwrite", async (stores) => {
+    const store = stores.get(STORES.FOLDERS)!;
+    store.clear();
+    for (const folder of folders) {
+      store.put(folder);
+    }
+  });
 }
 
 export async function getAllFolders(): Promise<Folder[]> {

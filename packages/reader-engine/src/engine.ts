@@ -23,6 +23,12 @@ export interface EngineOptions {
     chapterId: string,
     signal?: AbortSignal,
   ) => Promise<{ html: string | undefined; rawData?: ArrayBuffer }>;
+  /**
+   * Extract a binary resource (image/font/css) from the book's raw data.
+   * Injected by the app from the parser registry — the engine has no
+   * knowledge of parsers.
+   */
+  extractResource?: (rawData: ArrayBuffer, path: string) => Promise<ArrayBuffer | undefined>;
 }
 
 export abstract class Engine {
@@ -32,12 +38,14 @@ export abstract class Engine {
   private onReady: (() => void) | undefined;
   protected onEffect: ((effect: ReaderEffect) => void | Promise<void>) | undefined;
   protected fetchChapter: EngineOptions["fetchChapter"];
+  protected extractResource: EngineOptions["extractResource"];
   private fetchAbortController: AbortController | null = null;
 
   constructor(options: EngineOptions) {
     this.onReady = options.onReady;
     this.onEffect = options.onEffect;
     this.fetchChapter = options.fetchChapter;
+    this.extractResource = options.extractResource;
     this.state = this.machine.getState();
     this.unsub = this.machine.subscribe((s) => {
       this.state = s;
@@ -105,23 +113,32 @@ export abstract class Engine {
 
   protected async runEffects(effects: ReaderEffect[]): Promise<void> {
     for (const effect of effects) {
-      await this.runEffect(effect);
+      if (effect.type === "FETCH_CHAPTER") {
+        // Content loading is the engine's own job (hosts override
+        // fetchAndLoadChapter for DOM integration); it is never surfaced to
+        // the app layer.
+        await this.runGenericEffect(effect);
+      } else {
+        // Two non-overlapping consumers, neither may swallow the other's
+        // signal: the host renders DOM side effects (runEffect), the app
+        // observes every effect through onEffect. Before this split,
+        // reflowable-host consumed MODE_CHANGED/PAGE_POSITION_CHANGED and
+        // the app never saw them — e.g. the "mode:changed" plugin event
+        // was emitted by translateEffect but could never fire.
+        await this.runEffect(effect);
+        await Promise.resolve(this.onEffect?.(effect));
+      }
     }
   }
 
   protected abstract runEffect(effect: ReaderEffect): void | Promise<void>;
 
+  /** FETCH_CHAPTER handling; without a fetchChapter, forward to onEffect. */
   protected async runGenericEffect(effect: ReaderEffect): Promise<void> {
-    switch (effect.type) {
-      case "FETCH_CHAPTER":
-        if (this.fetchChapter) {
-          await this.fetchAndLoadChapter(effect.bookId, effect.chapterId);
-        } else {
-          await Promise.resolve(this.onEffect?.(effect));
-        }
-        break;
-      default:
-        await Promise.resolve(this.onEffect?.(effect));
+    if (effect.type === "FETCH_CHAPTER" && this.fetchChapter) {
+      await this.fetchAndLoadChapter(effect.bookId, effect.chapterId);
+    } else {
+      await Promise.resolve(this.onEffect?.(effect));
     }
   }
 
