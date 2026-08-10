@@ -8,7 +8,7 @@ import { parseAndSaveBook } from "../storage/parse-save";
 import { pluginEvents } from "../plugins/context";
 import { validateBookId } from "../utils/validation";
 
-const REFLOWABLE_FORMATS = new Set(["epub", "txt", "fb2", "html", "docx", "mobi", "azw3", "azw"]);
+const REFLOWABLE_FORMATS = new Set(["epub", "txt", "fb2", "mobi", "azw3", "azw"]);
 
 export interface ReaderState {
   currentBook: Book | null;

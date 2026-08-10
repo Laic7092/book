@@ -49,12 +49,6 @@ registerParserLoader("cbz", ["cbz"], () =>
 registerParserLoader("fb2", ["fb2"], () =>
   import("./fb2/fb2-parser").then((m) => new m.Fb2Parser()),
 );
-registerParserLoader("html", ["html", "htm"], () =>
-  import("./html/html-parser").then((m) => new m.HtmlParser()),
-);
-registerParserLoader("docx", ["docx"], () =>
-  import("./docx/docx-parser").then((m) => new m.DocxParser()),
-);
 registerParserLoader("cbr", ["cbr"], () =>
   import("./cbr/cbr-parser").then((m) => new m.CbrParser()),
 );

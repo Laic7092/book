@@ -9,7 +9,7 @@ pnpm install
 vp dev packages/app
 ```
 
-Open the dev server URL in your browser. Import EPUB/PDF/CBZ/CBR/TXT/FB2/DOCX/MOBI files to start reading.
+Open the dev server URL in your browser. Import EPUB/PDF/CBZ/CBR/TXT/FB2/MOBI files to start reading.
 
 ### Dev commands
 
@@ -72,9 +72,7 @@ All formats use lazy-loaded parsers registered in `packages/parser-core/src/inde
 | CBR           | `.cbr`                   |
 | MOBI/AZW3/AZW | `.mobi`, `.azw3`, `.azw` |
 | FB2           | `.fb2`                   |
-| DOCX          | `.docx`                  |
 | TXT           | `.txt`                   |
-| HTML          | `.html`, `.htm`          |
 
 ## Deployment
 
