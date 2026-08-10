@@ -84,9 +84,6 @@ importers:
 
   packages/reader-engine:
     dependencies:
-      '@book/parser-core':
-        specifier: workspace:*
-        version: link:../parser-core
       '@book/reader-core':
         specifier: workspace:*
         version: link:../reader-core
