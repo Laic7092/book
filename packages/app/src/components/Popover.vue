@@ -8,8 +8,9 @@ const props = withDefaults(
      * renders without positioning — the caller styles it via `style`/`:deep`. */
     x?: number;
     y?: number;
-    /** Expansion direction relative to the anchor. */
-    placement?: "bottom-left" | "bottom-right" | "top-left" | "top-right";
+    /** Expansion direction relative to the anchor. "center" renders a
+     * viewport-centered dialog (x/y ignored — pure CSS centering). */
+    placement?: "bottom-left" | "bottom-right" | "top-left" | "top-right" | "center";
     zIndex?: number;
     closeOnClickOutside?: boolean;
     closeOnEscape?: boolean;
@@ -29,7 +30,20 @@ const emit = defineEmits<{
 const style = computed(() => {
   const { x, y, placement, zIndex } = props;
   const s: Record<string, string> = { zIndex: String(zIndex) };
-  if (x === undefined || y === undefined) return s;
+  const anchored = x !== undefined && y !== undefined;
+
+  if (placement === "center") {
+    // Viewport-centered dialog: use the `translate` CSS property for the
+    // -50%/-50% centering so `transform` stays free for the pop-fade
+    // enter/leave animation (the two properties compose, no conflict).
+    s.position = "fixed";
+    s.left = "50%";
+    s.top = "50%";
+    s.translate = "-50% -50%";
+    return s;
+  }
+
+  if (!anchored) return s;
   s.position = "fixed";
   switch (placement) {
     case "bottom-right":

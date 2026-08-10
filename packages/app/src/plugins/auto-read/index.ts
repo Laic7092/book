@@ -9,6 +9,9 @@ let _autoAdvancing = false;
 export function setAutoAdvancing(v: boolean) {
   _autoAdvancing = v;
 }
+export function isAutoAdvancing(): boolean {
+  return _autoAdvancing;
+}
 
 let _onUserPageChange: (() => void) | null = null;
 export function setOnUserPageChange(cb: (() => void) | null) {

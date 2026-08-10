@@ -2,6 +2,7 @@
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import type { ReaderSession } from "@book/reader-engine";
 import AppIcon from "../../components/ui/AppIcon.vue";
+import Popover from "../../components/Popover.vue";
 import {
   setAutoAdvancing,
   setOnUserPageChange,
@@ -9,9 +10,12 @@ import {
   loadAutoReadSettings,
   saveAutoReadSettings,
   DEFAULT_AUTO_READ_SETTINGS,
+  isAutoAdvancing,
   type AutoReadSettings,
 } from "./index";
 import { currentSession } from "../../stores/reader-session";
+import { useUIStore } from "../../stores/ui";
+import { pluginEvents } from "../../core/plugin-runtime/context";
 
 const isPlaying = ref(false);
 const progress = ref(0);
@@ -19,6 +23,10 @@ const settings = ref<AutoReadSettings>({ ...DEFAULT_AUTO_READ_SETTINGS });
 const showSettings = ref(false);
 const sleepRemainingSec = ref(0);
 const wrapRef = ref<HTMLElement | null>(null);
+
+// Global reader chrome visibility — the popover must hide/show with the
+// header/footer/toolbar (effectiveShowControls), same as any in-toolbar UI.
+const uiStore = useUIStore();
 
 let timer: number | null = null;
 let raf: number | null = null;
@@ -29,6 +37,8 @@ let lastTarget = -1;
 let waitingForChapter = false;
 let sleepTick: number | null = null;
 let sleepDeadline = 0;
+/** Unsubscriber for the page-turn dismissal (see onMounted). */
+let unsubPageTurn: (() => void) | null = null;
 
 const PRESETS = [2, 3, 4, 5, 7, 10, 15];
 const SLEEP_OPTIONS = [0, 15, 30, 45, 60];
@@ -257,15 +267,9 @@ watch(
   },
 );
 
-function onDocPointerDown(e: PointerEvent) {
-  if (wrapRef.value && !wrapRef.value.contains(e.target as Node)) {
-    showSettings.value = false;
-  }
-}
-
-function onDocKeydown(e: KeyboardEvent) {
-  if (e.key === "Escape") showSettings.value = false;
-}
+// ── Popover: controlled via the shared Popover component ──
+// placement="center" renders a viewport-centered dialog; outside-click and
+// Escape close are handled by Popover itself (emitted as @close).
 
 onMounted(() => {
   setOnUserPageChange(() => {
@@ -277,8 +281,13 @@ onMounted(() => {
   setOnBookClosed(() => {
     stop();
   });
-  document.addEventListener("pointerdown", onDocPointerDown);
-  document.addEventListener("keydown", onDocKeydown);
+  // Clicks inside the reader iframe never reach the document, so Popover's
+  // closeOnClickOutside can't see them — treat a user-initiated page turn
+  // (tap on the book) as "clicked outside": dismiss the popover.
+  // Auto-read's own page turns are flagged and ignored.
+  unsubPageTurn = pluginEvents.on("page:changed", () => {
+    if (!isAutoAdvancing()) showSettings.value = false;
+  });
   void loadAutoReadSettings().then((s) => {
     if (!s) return;
     settings.value = {
@@ -295,8 +304,7 @@ onMounted(() => {
 onUnmounted(() => {
   setOnUserPageChange(null);
   setOnBookClosed(null);
-  document.removeEventListener("pointerdown", onDocPointerDown);
-  document.removeEventListener("keydown", onDocKeydown);
+  unsubPageTurn?.();
   stop();
 });
 </script>
@@ -338,77 +346,97 @@ onUnmounted(() => {
       </button>
     </div>
 
-    <div v-if="showSettings" class="auto-read-popover" @click.stop>
-      <div class="pr-section">
-        <div class="pr-label">翻页间隔</div>
-        <div class="pr-options">
-          <button
-            v-for="p in PRESETS"
-            :key="p"
-            :class="['pr-btn', { active: settings.intervalSec === p }]"
-            @click="settings.intervalSec = p"
-          >
-            {{ p }}s
-          </button>
-        </div>
-      </div>
+    <Teleport to="body">
+      <Popover
+        :open="showSettings && uiStore.effectiveShowControls"
+        placement="center"
+        style="
+          width: min(400px, calc(100vw - 24px));
+          max-height: calc(100vh - 48px);
+          overflow-y: auto;
+        "
+        @close="showSettings = false"
+      >
+        <div class="ar-content">
+          <div class="ar-header">
+            <span class="ar-title">自动阅读设置</span>
+            <button class="ar-close" @click="showSettings = false" aria-label="关闭设置">
+              <AppIcon name="close" :size="16" />
+            </button>
+          </div>
 
-      <div class="pr-section">
-        <div class="pr-label">
-          滚动速度
-          <span class="pr-hint">仅滚动模式</span>
-        </div>
-        <div class="pr-options">
-          <button
-            v-for="sp in SPEED_OPTIONS"
-            :key="sp.value"
-            :class="['pr-btn', { active: settings.scrollSpeed === sp.value }]"
-            @click="settings.scrollSpeed = sp.value"
-          >
-            {{ sp.label }}
-          </button>
-        </div>
-      </div>
+          <div class="ar-section">
+            <div class="ar-label">翻页间隔</div>
+            <div class="ar-options">
+              <button
+                v-for="p in PRESETS"
+                :key="p"
+                :class="['chip', { active: settings.intervalSec === p }]"
+                @click="settings.intervalSec = p"
+              >
+                {{ p }}s
+              </button>
+            </div>
+          </div>
 
-      <div class="pr-section">
-        <div class="pr-label">章尾行为</div>
-        <div class="pr-options">
-          <button
-            :class="['pr-btn', { active: settings.chapterEnd === 'auto' }]"
-            @click="settings.chapterEnd = 'auto'"
-          >
-            继续下一章
-          </button>
-          <button
-            :class="['pr-btn', { active: settings.chapterEnd === 'stop' }]"
-            @click="settings.chapterEnd = 'stop'"
-          >
-            读完停止
-          </button>
-        </div>
-      </div>
+          <div class="ar-section">
+            <div class="ar-label">
+              滚动速度
+              <span class="ar-hint">仅滚动模式</span>
+            </div>
+            <div class="ar-options">
+              <button
+                v-for="sp in SPEED_OPTIONS"
+                :key="sp.value"
+                :class="['chip', { active: settings.scrollSpeed === sp.value }]"
+                @click="settings.scrollSpeed = sp.value"
+              >
+                {{ sp.label }}
+              </button>
+            </div>
+          </div>
 
-      <div class="pr-section">
-        <div class="pr-label">
-          睡眠定时
-          <span v-if="sleepRemainingSec > 0" class="pr-remain">
-            {{ Math.floor(sleepRemainingSec / 60) }}:{{
-              String(sleepRemainingSec % 60).padStart(2, "0")
-            }}
-          </span>
+          <div class="ar-section">
+            <div class="ar-label">章尾行为</div>
+            <div class="ar-options">
+              <button
+                :class="['chip', { active: settings.chapterEnd === 'auto' }]"
+                @click="settings.chapterEnd = 'auto'"
+              >
+                继续下一章
+              </button>
+              <button
+                :class="['chip', { active: settings.chapterEnd === 'stop' }]"
+                @click="settings.chapterEnd = 'stop'"
+              >
+                读完停止
+              </button>
+            </div>
+          </div>
+
+          <div class="ar-section">
+            <div class="ar-label">
+              睡眠定时
+              <span v-if="sleepRemainingSec > 0" class="ar-remain">
+                {{ Math.floor(sleepRemainingSec / 60) }}:{{
+                  String(sleepRemainingSec % 60).padStart(2, "0")
+                }}
+              </span>
+            </div>
+            <div class="ar-options">
+              <button
+                v-for="m in SLEEP_OPTIONS"
+                :key="m"
+                :class="['chip', { active: settings.sleepMinutes === m }]"
+                @click="settings.sleepMinutes = m"
+              >
+                {{ m === 0 ? "关" : `${m}分` }}
+              </button>
+            </div>
+          </div>
         </div>
-        <div class="pr-options">
-          <button
-            v-for="m in SLEEP_OPTIONS"
-            :key="m"
-            :class="['pr-btn', { active: settings.sleepMinutes === m }]"
-            @click="settings.sleepMinutes = m"
-          >
-            {{ m === 0 ? "关" : `${m}分` }}
-          </button>
-        </div>
-      </div>
-    </div>
+      </Popover>
+    </Teleport>
   </div>
 </template>
 
@@ -421,23 +449,27 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 2px;
-  height: 36px;
-  padding: 0 4px;
-  border-radius: 18px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  backdrop-filter: blur(4px);
+  height: 40px;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-full);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-sm);
   -webkit-tap-highlight-color: transparent;
   user-select: none;
   touch-action: none;
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 .auto-read:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-md);
 }
 
 .auto-read.playing {
-  border-color: var(--accent, #5b9aff);
-  box-shadow: 0 2px 12px rgba(91, 154, 255, 0.3);
+  border-color: var(--accent-muted);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .btn {
@@ -446,17 +478,26 @@ onUnmounted(() => {
   justify-content: center;
   border: none;
   background: transparent;
-  color: var(--reader-text, #333);
+  color: var(--reader-text);
   cursor: pointer;
   padding: 0;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
+  font-family: var(--font-ui);
   -webkit-tap-highlight-color: transparent;
+}
+
+.btn:hover {
+  background: var(--hover-bg);
 }
 
 .adj {
   width: 28px;
   height: 28px;
-  color: var(--text-secondary, #888);
+  color: var(--text-secondary);
+}
+
+.adj:hover {
+  color: var(--reader-text);
 }
 
 .adj svg {
@@ -465,32 +506,33 @@ onUnmounted(() => {
 }
 
 .display {
-  width: 36px;
+  width: 38px;
   height: 28px;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.5px;
 }
 
 .unit {
   font-size: 10px;
-  font-weight: 400;
+  font-weight: var(--weight-normal);
   margin-left: 1px;
+  color: var(--text-secondary);
 }
 
 .sep {
   width: 1px;
   height: 20px;
-  background: var(--border-subtle, #ddd);
+  background: var(--border-subtle);
   margin: 0 2px;
 }
 
 .gear {
   width: 26px;
   height: 26px;
-  color: var(--text-secondary, #888);
+  color: var(--text-secondary);
 }
 
 .gear svg {
@@ -499,100 +541,19 @@ onUnmounted(() => {
 }
 
 .gear.active {
-  color: var(--accent, #5b9aff);
-}
-
-.auto-read-popover {
-  position: absolute;
-  right: 46px;
-  bottom: 0;
-  width: 248px;
-  z-index: var(--z-overlay);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 14px;
-  border-radius: 14px;
-  background: var(--bg-secondary, #fff);
-  border: 1px solid var(--border, #e0e0e0);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
-}
-
-.auto-read-popover::after {
-  content: "";
-  position: absolute;
-  right: -7px;
-  top: 50%;
-  transform: translateY(-50%);
-  border: 7px solid transparent;
-  border-left-color: var(--bg-secondary, #fff);
-  filter: drop-shadow(1px 0 1px rgba(0, 0, 0, 0.12));
-}
-
-.pr-section {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.pr-label {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary, #888);
-}
-
-.pr-hint {
-  font-weight: 400;
-  font-size: 10px;
-  color: var(--text-secondary, #aaa);
-}
-
-.pr-remain {
-  margin-left: auto;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: var(--accent, #5b9aff);
-}
-
-.pr-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.pr-btn {
-  padding: 5px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--border, #e0e0e0);
-  background: transparent;
-  color: var(--reader-text, #333);
-  font-size: 12px;
-  font-family: var(--font-ui);
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  transition: all 150ms;
-}
-
-.pr-btn:hover {
-  border-color: var(--accent, #5b9aff);
-  color: var(--accent, #5b9aff);
-}
-
-.pr-btn.active {
-  background: var(--accent, #5b9aff);
-  border-color: var(--accent, #5b9aff);
-  color: var(--accent-text, #fff);
-  font-weight: 600;
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .play {
   position: relative;
   width: 30px;
   height: 30px;
-  color: var(--accent, #5b9aff);
+  color: var(--accent);
+}
+
+.play:hover {
+  background: var(--accent-soft);
 }
 
 .play svg:not(.progress-ring) {
@@ -612,9 +573,103 @@ onUnmounted(() => {
 
 .progress-ring circle {
   fill: none;
-  stroke: var(--accent, #5b9aff);
+  stroke: var(--accent);
   stroke-width: 2.5;
   stroke-linecap: round;
   transition: stroke-dashoffset 100ms linear;
+}
+
+/* ── Settings popover content (shell styles come from Popover.vue) ── */
+
+.ar-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-2);
+}
+
+.ar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.ar-title {
+  font-size: 10px;
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-family: var(--font-ui);
+}
+
+.ar-close {
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ar-close:hover {
+  background: var(--hover-bg);
+  color: var(--reader-text);
+}
+
+.ar-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ar-label {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: 10px;
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-family: var(--font-ui);
+}
+
+.ar-hint {
+  font-weight: var(--weight-normal);
+  font-size: 10px;
+  color: var(--text-tertiary);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.ar-remain {
+  margin-left: auto;
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.ar-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+@media (max-width: 480px) {
+  .auto-read {
+    height: 36px;
+  }
+
+  .display {
+    width: 34px;
+  }
 }
 </style>
