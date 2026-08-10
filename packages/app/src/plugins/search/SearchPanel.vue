@@ -7,33 +7,43 @@ import { getSearchApi } from ".";
 
 const emit = defineEmits<{ (e: "close"): void }>();
 
-const api = getSearchApi()!;
+// Destructure to setup top level so the template auto-unwraps the refs
+// (template unwrapping only applies to top-level refs, not nested properties).
+const {
+  searchQuery,
+  searchResults,
+  hasHighlights,
+  doSearch,
+  clearHighlights,
+  navigateToResult,
+  reset,
+} = getSearchApi()!;
 
 let _closeByNavigation = false;
 
 async function handleResultClick(result: SearchResult) {
   _closeByNavigation = true;
-  api.navigateToResult(result);
+  navigateToResult(result);
 }
 
 onUnmounted(() => {
   if (!_closeByNavigation) {
-    api.reset();
+    reset();
   }
 });
 
 let searchDebounceTimer: number | null = null;
 
 function handleSearchInput(value: string) {
-  api.searchQuery = value;
+  searchQuery.value = value;
   if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
   searchDebounceTimer = window.setTimeout(() => {
-    api.doSearch();
+    doSearch();
   }, 300);
 }
 
 function highlightMatch(context: string): string {
-  const query = api.searchQuery;
+  const query = searchQuery.value;
   if (!query) return context;
   const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const regex = new RegExp(`(${escaped})`, "gi");
@@ -47,23 +57,21 @@ function highlightMatch(context: string): string {
       <div class="search-box-wrapper">
         <div class="search-row">
           <input
-            :value="api.searchQuery"
+            :value="searchQuery"
             @input="handleSearchInput(($event.target as HTMLInputElement).value)"
             type="text"
             placeholder="Search in book..."
             class="search-input"
           />
-          <button class="search-submit" @click="api.doSearch()" aria-label="Search">
+          <button class="search-submit" @click="doSearch()" aria-label="Search">
             <AppIcon name="search" :size="16" />
           </button>
         </div>
-        <div class="search-results-info" v-if="api.searchResults.length > 0">
+        <div class="search-results-info" v-if="searchResults.length > 0">
           <span class="results-count"
-            >{{ api.searchResults.length }} result{{
-              api.searchResults.length !== 1 ? "s" : ""
-            }}</span
+            >{{ searchResults.length }} result{{ searchResults.length !== 1 ? "s" : "" }}</span
           >
-          <button class="clear-highlights" @click="api.clearHighlights()" v-if="api.hasHighlights">
+          <button class="clear-highlights" @click="clearHighlights()" v-if="hasHighlights">
             Clear
           </button>
         </div>
@@ -71,7 +79,7 @@ function highlightMatch(context: string): string {
     </template>
     <ul class="search-results">
       <li
-        v-for="(result, i) in api.searchResults"
+        v-for="(result, i) in searchResults"
         :key="i"
         class="search-result"
         @click.stop="handleResultClick(result)"
@@ -83,9 +91,7 @@ function highlightMatch(context: string): string {
         <p class="result-context" v-html="highlightMatch(result.context)"></p>
       </li>
     </ul>
-    <p v-if="api.searchResults.length === 0 && api.searchQuery" class="no-results">
-      No results found
-    </p>
+    <p v-if="searchResults.length === 0 && searchQuery" class="no-results">No results found</p>
   </ModalPanel>
 </template>
 

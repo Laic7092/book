@@ -10,7 +10,7 @@ import * as booksStore from "../storage/books";
 import { navigate } from "../utils/router";
 import { TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../utils/constants";
 import { currentSession } from "../stores/reader-session";
-import { pluginEvents, pluginHooks } from "../core/plugin-runtime/context";
+import { pluginHooks } from "../core/plugin-runtime/context";
 import type { InitConfig } from "../core/plugin-runtime/types";
 import { PdfRenderer } from "@book/parser-core/pdf-renderer";
 import type { PdfOutlineItem } from "@book/parser-core";

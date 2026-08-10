@@ -15,13 +15,25 @@ import { createPreviewIframe, type PreviewIframe } from "./preview-iframe";
 import { getSettingsState, getFontStore } from "./index";
 import { DEFAULT_SETTINGS } from "./defaults";
 import type { CustomFontFace } from "./types";
+import type { EntityStore } from "../../core/plugin-runtime/store-factory";
 
-const state = getSettingsState();
-if (!state) throw new Error("TypographyPanel: settings plugin not initialized");
+// TS does not propagate null-narrowing from top-level guards into nested
+// functions, so resolve non-null values through small helper functions.
+function requireSettingsState() {
+  const s = getSettingsState();
+  if (!s) throw new Error("TypographyPanel: settings plugin not initialized");
+  return s;
+}
+
+function requireFontStore(): EntityStore<CustomFontFace> {
+  const s = getFontStore();
+  if (!s) throw new Error("TypographyPanel: font store not initialized");
+  return s;
+}
+
+const state = requireSettingsState();
 const settings = state.settings;
-
-const fontStore = getFontStore();
-if (!fontStore) throw new Error("TypographyPanel: font store not initialized");
+const fontStore = requireFontStore();
 
 const emit = defineEmits<{
   (e: "close"): void;
@@ -153,7 +165,11 @@ function resetSettings() {
           <span>启用自定义排版</span>
           <span class="toggle-desc">覆盖书籍原始排版，应用以下自定义设置</span>
         </label>
-        <ToggleSwitch v-model="settings.customTypography" label="启用自定义排版" />
+        <ToggleSwitch
+          :model-value="settings.customTypography ?? false"
+          @update:model-value="(v) => state.update({ customTypography: v })"
+          label="启用自定义排版"
+        />
       </div>
     </div>
 

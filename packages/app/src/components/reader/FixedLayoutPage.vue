@@ -120,7 +120,6 @@ defineExpose({
   zoomWidth,
   rotate,
   destroy,
-  getDocument: () => null,
 } satisfies Partial<FixedLayoutSurface>);
 </script>
 

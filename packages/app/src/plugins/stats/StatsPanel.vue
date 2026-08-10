@@ -24,7 +24,7 @@ const estimatedRemaining = computed(() => {
 onMounted(async () => {
   const bookId = getSession?.getState().bookId;
   if (bookId) {
-    stats.value = await eng.getStats(bookId);
+    stats.value = (await eng.getStats(bookId)) ?? null;
   }
 });
 

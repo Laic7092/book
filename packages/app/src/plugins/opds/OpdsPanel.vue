@@ -146,12 +146,12 @@ const formatLabel = (type: string, title?: string): string => {
     </div>
 
     <!-- Breadcrumb -->
-    <div v-if="hasContent" class="opds-breadcrumb">
+    <div v-if="hasContent()" class="opds-breadcrumb">
       <button v-if="navStack.length > 1" class="opds-back-btn" @click="goBack">
         <AppIcon name="arrow-left" :size="14" />
       </button>
       <span class="opds-breadcrumb-label">{{ feedTitle }}</span>
-      <span v-if="!isLoading && hasContent" class="opds-breadcrumb-count"
+      <span v-if="!isLoading && hasContent()" class="opds-breadcrumb-count"
         >{{ entries.length + navLinks.length }} item{{
           entries.length + navLinks.length !== 1 ? "s" : ""
         }}</span

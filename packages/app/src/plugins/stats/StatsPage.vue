@@ -76,10 +76,6 @@ const inProgressBooks = computed(
 const allHours = Array.from({ length: 24 }, (_, i) => i);
 const maxHourCount = computed(() => Math.max(1, ...activeHourTotals.value.values()));
 
-const totalChaptersAcrossBooks = computed(() =>
-  allStats.value.reduce((s, st) => s + st.chaptersCompleted, 0),
-);
-
 async function load() {
   loading.value = true;
   try {

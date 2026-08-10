@@ -4,6 +4,7 @@ import type { Annotation } from "../../core/types";
 import ModalPanel from "../../components/modals/ModalPanel.vue";
 import EmptyState from "../../components/ui/EmptyState.vue";
 import FilterBar from "../../components/ui/FilterBar.vue";
+import type { FilterItem } from "../../components/ui/FilterBar.vue";
 import AppIcon from "../../components/ui/AppIcon.vue";
 import { formatRelativeShort } from "../../utils/time";
 import { useAnnotationStore, useAnnotationFilters } from "./index";
@@ -29,11 +30,11 @@ function handleDelete(id: string) {
 type Filter = "all" | "highlight" | "underline";
 const filter = ref<Filter>("all");
 
-const FILTER_ITEMS = [
+const FILTER_ITEMS: FilterItem[] = [
   { key: "all", label: "All" },
   { key: "highlight", label: "Highlights" },
   { key: "underline", label: "Underlines" },
-] as const;
+];
 
 // Derive book-scoped annotations from the full entity store cache
 const annotations = computed(() =>

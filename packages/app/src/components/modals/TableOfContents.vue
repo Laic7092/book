@@ -4,8 +4,8 @@ import type { Chapter } from "../../core/types";
 import ModalPanel from "./ModalPanel.vue";
 
 const props = defineProps<{
-  chapters: Chapter[];
-  currentChapterId: string | null;
+  chapters?: Chapter[];
+  currentChapterId?: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -20,20 +20,15 @@ const isMounted = ref(false);
 
 // Filter chapters: show only those in NCX/Nav TOC (with fallback for books without TOC)
 const visibleChapters = computed(() => {
-  const tocChapters = props.chapters.filter((c) => c.inToc === true);
+  const tocChapters = (props.chapters ?? []).filter((c) => c.inToc === true);
   // If no chapters have inToc=true (old data or books without NCX), show all chapters
-  return tocChapters.length > 0 ? tocChapters : props.chapters;
+  return tocChapters.length > 0 ? tocChapters : (props.chapters ?? []);
 });
 
 function handleTocClick(chapterId: string) {
   emit("select-chapter", chapterId);
   emit("close");
 }
-
-const currentChapterIndex = computed(() => {
-  if (!props.currentChapterId) return -1;
-  return visibleChapters.value.findIndex((c) => c.id === props.currentChapterId);
-});
 
 function scrollToCurrentChapter() {
   if (!props.currentChapterId || hasScrolledToCurrent.value || !isMounted.value) return;
@@ -81,9 +76,9 @@ function setRef(el: HTMLElement | null, chapterId: string) {
       No chapters available
     </div>
     <ul v-else class="toc-list">
-      <li v-for="(ch, index) in visibleChapters" :key="ch.id">
+      <li v-for="ch in visibleChapters" :key="ch.id">
         <button
-          :ref="(el: HTMLElement | null) => setRef(el, ch.id)"
+          :ref="(el) => setRef(el as HTMLElement | null, ch.id)"
           :class="['toc-item', { active: ch.id === currentChapterId }]"
           @click.stop="handleTocClick(ch.id)"
         >

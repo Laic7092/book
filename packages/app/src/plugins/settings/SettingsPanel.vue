@@ -8,8 +8,15 @@ import { themeRegistry } from "../../core/theme-registry";
 import { fileToBase64 } from "../../utils/file";
 import { ref } from "vue";
 
-const state = getSettingsState();
-if (!state) throw new Error("SettingsPanel: settings plugin not initialized");
+// TS does not propagate null-narrowing from top-level guards into nested
+// functions, so resolve the non-null state through a helper.
+function requireSettingsState() {
+  const s = getSettingsState();
+  if (!s) throw new Error("SettingsPanel: settings plugin not initialized");
+  return s;
+}
+
+const state = requireSettingsState();
 const settings = state.settings;
 
 function themePreviewBg(themeId: string): string {

@@ -9,7 +9,9 @@ const uiStore = useUIStore();
 const api = computed(() => getSearchApi());
 
 // Suppress header/footer/toolbar when search highlights are active
-const active = computed(() => !!(api.value?.hasHighlights && api.value?.searchResults.length));
+const active = computed(
+  () => !!api.value?.hasHighlights.value && api.value.searchResults.value.length > 0,
+);
 watch(
   active,
   (val) => {
@@ -22,7 +24,7 @@ function handlePrevMatch() {
   const s = getSearchApi();
   const idx = s?.goToPreviousMatch();
   if (idx !== undefined && s?.searchResults) {
-    s.navigateToResult(s.searchResults[idx]);
+    s.navigateToResult(s.searchResults.value[idx]);
   }
 }
 
@@ -30,7 +32,7 @@ function handleNextMatch() {
   const s = getSearchApi();
   const idx = s?.goToNextMatch();
   if (idx !== undefined && s?.searchResults) {
-    s.navigateToResult(s.searchResults[idx]);
+    s.navigateToResult(s.searchResults.value[idx]);
   }
 }
 
@@ -46,14 +48,14 @@ onUnmounted(() => {
 
 const currentLabel = computed(() => {
   const a = api.value;
-  if (!a || a.searchResults.length === 0) return "";
-  return `${(a.currentResultIndex ?? -1) + 1} / ${a.searchResults.length}`;
+  if (!a || a.searchResults.value.length === 0) return "";
+  return `${(a.currentResultIndex.value ?? -1) + 1} / ${a.searchResults.value.length}`;
 });
 </script>
 
 <template>
   <div
-    v-if="api?.hasHighlights && api?.searchResults.length"
+    v-if="api?.hasHighlights.value && api.searchResults.value.length"
     class="search-nav-overlay"
     :class="{ 'with-controls': uiStore.showControls }"
   >

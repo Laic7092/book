@@ -12,7 +12,13 @@ export const READING_MODE_OPTIONS = [
 ] as const;
 
 // Font options for typography settings UI
-export const FONT_OPTIONS = [
+export interface FontOption {
+  label: string;
+  value: string;
+  preview: string;
+}
+
+export const FONT_OPTIONS: FontOption[] = [
   { label: "Literata", value: "Literata, Georgia, serif", preview: "Literata" },
   { label: "Cormorant", value: "Cormorant, Georgia, serif", preview: "Cormorant" },
   {
@@ -22,7 +28,7 @@ export const FONT_OPTIONS = [
   },
   { label: "System", value: "system-ui, -apple-system, sans-serif", preview: "system-ui" },
   { label: "Mono", value: "JetBrains Mono, Consolas, monospace", preview: "JetBrains Mono" },
-] as const;
+];
 
 // Contrast options for dark mode
 export const CONTRAST_OPTIONS = [

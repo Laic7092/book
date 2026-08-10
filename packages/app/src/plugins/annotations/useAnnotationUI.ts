@@ -248,6 +248,25 @@ export function useAnnotationUI() {
     applyAnnotations();
   }
 
+  function handleCancelNote() {
+    showNoteInput.value = false;
+    showToolbar.value = true;
+  }
+
+  async function handleUpdateNote(note: string) {
+    const ann = popoverAnnotation.value;
+    if (!ann) return;
+    await store.update(ann.id, { note, updatedAt: Date.now() });
+    applyAnnotations();
+  }
+
+  async function handleUpdateColor(color: string) {
+    const ann = popoverAnnotation.value;
+    if (!ann) return;
+    await store.update(ann.id, { color, updatedAt: Date.now() });
+    applyAnnotations();
+  }
+
   function handleDismissPopover() {
     showPopover.value = false;
   }
@@ -263,6 +282,9 @@ export function useAnnotationUI() {
     handleUnderline,
     handleAddNote,
     handleSaveNote,
+    handleCancelNote,
+    handleUpdateNote,
+    handleUpdateColor,
     handleDeleteAnnotation,
     handleDismissPopover,
   };

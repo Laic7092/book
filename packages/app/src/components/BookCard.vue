@@ -14,7 +14,7 @@ defineProps<{
 const emit = defineEmits<{
   open: [];
   delete: [event: Event];
-  "move-folder": [event: Event];
+  "move-folder": [event: MouseEvent];
 }>();
 </script>
 
