@@ -67,29 +67,6 @@ function onAnimationEnd() {
   </Teleport>
 </template>
 
-<style>
-/* Shared modal shell — used by all plugin panels via .modal-content-inner / .modal-body */
-.modal-content-inner {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-  min-height: 0;
-}
-
-.modal-body {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  min-height: 0;
-  overscroll-behavior-y: contain;
-}
-
-.modal-body.scroll-body {
-  scrollbar-width: thin;
-}
-</style>
-
 <style scoped>
 .modal-overlay {
   position: fixed;

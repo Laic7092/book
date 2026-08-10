@@ -2,7 +2,9 @@
 import { ref, onMounted, computed } from "vue";
 import type { BookReadingStats } from "../../core/types";
 import { formatDuration, formatRelativeTime, formatHour } from "../../utils/time";
-import ModalHeader from "../../components/modals/ModalHeader.vue";
+import ModalPanel from "../../components/modals/ModalPanel.vue";
+import EmptyState from "../../components/ui/EmptyState.vue";
+import ProgressBar from "../../components/ui/ProgressBar.vue";
 import { getStatsEngine } from "./engine";
 
 const eng = getStatsEngine();
@@ -32,140 +34,111 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="modal-content-inner">
-    <ModalHeader title="Reading Statistics" @close="emit('close')" />
-    <div class="modal-body scroll-body">
-      <div v-if="stats" class="stats-content">
-        <div class="stats-summary">
-          <div class="stat-item primary">
-            <div class="stat-value">{{ formatDuration(stats.totalReadingTime) }}</div>
-            <div class="stat-label">Total Reading Time</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-value">{{ stats.totalSessions }}</div>
-            <div class="stat-label">Sessions</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-value">{{ formatDuration(stats.averageSessionTime) }}</div>
-            <div class="stat-label">Avg Session</div>
-          </div>
+  <ModalPanel title="Reading Statistics" body-padding="16px 20px 24px" @close="emit('close')">
+    <div v-if="stats" class="stats-content">
+      <div class="stats-summary">
+        <div class="stat-item primary">
+          <div class="stat-value">{{ formatDuration(stats.totalReadingTime) }}</div>
+          <div class="stat-label">Total Reading Time</div>
         </div>
+        <div class="stat-item">
+          <div class="stat-value">{{ stats.totalSessions }}</div>
+          <div class="stat-label">Sessions</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">{{ formatDuration(stats.averageSessionTime) }}</div>
+          <div class="stat-label">Avg Session</div>
+        </div>
+      </div>
 
-        <div class="stats-card">
-          <h4 class="stats-card-title">Progress</h4>
-          <div class="progress-grid">
-            <div class="progress-item">
-              <div class="progress-number">{{ stats.chaptersCompleted }}</div>
-              <div class="progress-label">of {{ totalChapters }} chapters</div>
-            </div>
-            <div class="progress-bar-container">
-              <div class="progress-bar">
-                <div
-                  class="progress-fill"
-                  :style="{
-                    width:
-                      totalChapters > 0
-                        ? `${(stats.chaptersCompleted / totalChapters) * 100}%`
-                        : '0%',
-                  }"
-                ></div>
-              </div>
-              <div class="progress-percentage">
-                {{
-                  totalChapters > 0
-                    ? Math.round((stats.chaptersCompleted / totalChapters) * 100)
-                    : 0
-                }}%
-              </div>
-            </div>
-            <div v-if="estimatedRemaining > 0" class="progress-eta">
-              ~{{ formatDuration(estimatedRemaining) }} remaining at your pace
+      <div class="stats-card">
+        <h4 class="stats-card-title">Progress</h4>
+        <div class="progress-grid">
+          <div class="progress-item">
+            <div class="progress-number">{{ stats.chaptersCompleted }}</div>
+            <div class="progress-label">of {{ totalChapters }} chapters</div>
+          </div>
+          <div class="progress-bar-container">
+            <ProgressBar
+              :value="totalChapters > 0 ? (stats.chaptersCompleted / totalChapters) * 100 : 0"
+              size="lg"
+            />
+            <div class="progress-percentage">
+              {{
+                totalChapters > 0 ? Math.round((stats.chaptersCompleted / totalChapters) * 100) : 0
+              }}%
             </div>
           </div>
-        </div>
-
-        <div class="stats-card">
-          <h4 class="stats-card-title">Reading Speed</h4>
-          <div class="speed-grid">
-            <div class="stat-item">
-              <div class="stat-value">{{ stats.readingSpeed }}</div>
-              <div class="stat-label">words/min</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-value">{{ stats.wordsRead.toLocaleString() }}</div>
-              <div class="stat-label">words read</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="stats-card" v-if="stats.activeHours.length > 0">
-          <h4 class="stats-card-title">Active Hours</h4>
-          <div class="hours-grid">
-            <div
-              v-for="(count, hour) in stats.activeHours"
-              :key="hour"
-              class="hour-item"
-              :title="`${formatHour(hour)}: ${count} sessions`"
-            >
-              <div
-                class="hour-bar"
-                :style="{
-                  height: `${Math.max(3, (count / maxHourCount) * 24)}px`,
-                  opacity: count > 0 ? 0.85 : 0.12,
-                }"
-              ></div>
-              <span class="hour-label">{{ formatHour(hour) }}</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="stats-card">
-          <h4 class="stats-card-title">Reading History</h4>
-          <div class="history-grid">
-            <div class="history-item">
-              <span class="history-label">First read</span>
-              <span class="history-value">{{
-                stats.firstReadAt ? formatRelativeTime(stats.firstReadAt) : "—"
-              }}</span>
-            </div>
-            <div class="history-item">
-              <span class="history-label">Last read</span>
-              <span class="history-value">{{
-                stats.lastReadAt ? formatRelativeTime(stats.lastReadAt) : "—"
-              }}</span>
-            </div>
+          <div v-if="estimatedRemaining > 0" class="progress-eta">
+            ~{{ formatDuration(estimatedRemaining) }} remaining at your pace
           </div>
         </div>
       </div>
-      <div v-else class="no-stats">
-        <div class="no-stats-icon">
-          <svg
-            width="48"
-            height="48"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-          >
-            <path d="M12 20V10M18 20V4M6 20v-4" />
-          </svg>
+
+      <div class="stats-card">
+        <h4 class="stats-card-title">Reading Speed</h4>
+        <div class="speed-grid">
+          <div class="stat-item">
+            <div class="stat-value">{{ stats.readingSpeed }}</div>
+            <div class="stat-label">words/min</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value">{{ stats.wordsRead.toLocaleString() }}</div>
+            <div class="stat-label">words read</div>
+          </div>
         </div>
-        <p>No reading data yet</p>
-        <p class="no-stats-hint">Start reading to track your progress</p>
+      </div>
+
+      <div class="stats-card" v-if="stats.activeHours.length > 0">
+        <h4 class="stats-card-title">Active Hours</h4>
+        <div class="hours-grid">
+          <div
+            v-for="(count, hour) in stats.activeHours"
+            :key="hour"
+            class="hour-item"
+            :title="`${formatHour(hour)}: ${count} sessions`"
+          >
+            <div
+              class="hour-bar"
+              :style="{
+                height: `${Math.max(3, (count / maxHourCount) * 24)}px`,
+                opacity: count > 0 ? 0.85 : 0.12,
+              }"
+            ></div>
+            <span class="hour-label">{{ formatHour(hour) }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="stats-card">
+        <h4 class="stats-card-title">Reading History</h4>
+        <div class="history-grid">
+          <div class="history-item">
+            <span class="history-label">First read</span>
+            <span class="history-value">{{
+              stats.firstReadAt ? formatRelativeTime(stats.firstReadAt) : "—"
+            }}</span>
+          </div>
+          <div class="history-item">
+            <span class="history-label">Last read</span>
+            <span class="history-value">{{
+              stats.lastReadAt ? formatRelativeTime(stats.lastReadAt) : "—"
+            }}</span>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
+    <EmptyState
+      v-else
+      icon="chart"
+      :icon-size="48"
+      title="No reading data yet"
+      description="Start reading to track your progress"
+    />
+  </ModalPanel>
 </template>
 
 <style scoped>
-.modal-body {
-  padding: 16px 20px 24px;
-}
-
-.modal-stats .stats-content {
-  padding: 20px;
-}
-
 .stats-summary {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -251,21 +224,6 @@ const emit = defineEmits<{
   gap: 12px;
 }
 
-.progress-bar {
-  flex: 1;
-  height: 8px;
-  background: var(--border);
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 4px;
-  transition: width 0.3s ease;
-}
-
 .progress-percentage {
   font-size: 13px;
   font-weight: 600;
@@ -336,26 +294,5 @@ const emit = defineEmits<{
   font-size: 14px;
   font-weight: 500;
   color: var(--reader-text);
-}
-
-.no-stats {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  text-align: center;
-  color: var(--text-secondary);
-}
-
-.no-stats-icon {
-  margin-bottom: 16px;
-  opacity: 0.5;
-}
-
-.no-stats-hint {
-  font-size: 13px;
-  margin-top: 8px;
-  color: var(--text-secondary);
 }
 </style>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Book } from "../core/types";
+import AppIcon from "./ui/AppIcon.vue";
 
 defineProps<{
   book: Book;
@@ -43,16 +44,7 @@ const emit = defineEmits<{
       aria-label="Move to folder"
       tabindex="0"
     >
-      <svg
-        width="12"
-        height="12"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-      >
-        <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2v11z" />
-      </svg>
+      <AppIcon name="folder" :size="12" />
     </button>
     <button
       class="btn-delete"
@@ -61,17 +53,7 @@ const emit = defineEmits<{
       aria-label="Delete book"
       tabindex="0"
     >
-      <svg
-        width="13"
-        height="13"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-      >
-        <path d="M18 6L6 18M6 6l12 12" />
-      </svg>
+      <AppIcon name="close" :size="13" />
     </button>
   </div>
 </template>

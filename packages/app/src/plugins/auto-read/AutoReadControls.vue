@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import type { ReaderSession } from "@book/reader-engine";
+import AppIcon from "../../components/ui/AppIcon.vue";
 import { setAutoAdvancing, setOnUserPageChange } from "./index";
 import { currentSession } from "../../stores/reader-session";
 
@@ -144,39 +145,18 @@ onUnmounted(() => {
 <template>
   <div class="auto-read" :class="{ playing: isPlaying }">
     <button class="btn adj" title="Slower" @click="prevPreset">
-      <svg viewBox="0 0 16 16">
-        <path
-          d="M4 8h8"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          fill="none"
-        />
-      </svg>
+      <AppIcon name="minus" :size="14" />
     </button>
     <button class="btn display" title="Tap to cycle speed" @click="nextPreset">
       {{ intervalSec }}<span class="unit">s</span>
     </button>
     <button class="btn adj" title="Faster" @click="nextPreset">
-      <svg viewBox="0 0 16 16">
-        <path
-          d="M8 4v8M4 8h8"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          fill="none"
-        />
-      </svg>
+      <AppIcon name="plus" :size="14" />
     </button>
     <div class="sep" />
     <button class="btn play" title="Play / Pause" @click="toggle">
-      <svg v-if="isPlaying" viewBox="0 0 20 20">
-        <rect x="5" y="3.5" width="3.5" height="13" rx="1" fill="currentColor" />
-        <rect x="11.5" y="3.5" width="3.5" height="13" rx="1" fill="currentColor" />
-      </svg>
-      <svg v-else viewBox="0 0 20 20">
-        <path d="M6 4.5v11l9-5.5L6 4.5z" fill="currentColor" />
-      </svg>
+      <AppIcon v-if="isPlaying" name="pause" :size="18" />
+      <AppIcon v-else name="play" :size="18" />
       <svg v-if="isPlaying" class="progress-ring" viewBox="0 0 36 36">
         <circle
           cx="18"

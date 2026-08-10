@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, nextTick, computed, watch } from "vue";
 import type { Chapter } from "../../core/types";
-import ModalHeader from "./ModalHeader.vue";
+import ModalPanel from "./ModalPanel.vue";
 
 const props = defineProps<{
   chapters: Chapter[];
@@ -13,7 +13,7 @@ const emit = defineEmits<{
   (e: "close"): void;
 }>();
 
-const tocListRef = ref<HTMLElement | null>(null);
+const panelRef = ref<InstanceType<typeof ModalPanel> | null>(null);
 const activeItemRefs = ref<Record<string, HTMLElement>>({});
 const hasScrolledToCurrent = ref(false);
 const isMounted = ref(false);
@@ -39,10 +39,10 @@ function scrollToCurrentChapter() {
   if (!props.currentChapterId || hasScrolledToCurrent.value || !isMounted.value) return;
 
   const activeEl = activeItemRefs.value[props.currentChapterId];
-  if (activeEl && tocListRef.value) {
+  const listEl = panelRef.value?.bodyEl;
+  if (activeEl && listEl) {
     hasScrolledToCurrent.value = true;
-    tocListRef.value.scrollTop =
-      activeEl.offsetTop - tocListRef.value.offsetHeight / 2 + activeEl.offsetHeight / 2;
+    listEl.scrollTop = activeEl.offsetTop - listEl.offsetHeight / 2 + activeEl.offsetHeight / 2;
   }
 }
 
@@ -76,27 +76,24 @@ function setRef(el: HTMLElement | null, chapterId: string) {
 </script>
 
 <template>
-  <div class="modal-content-inner">
-    <ModalHeader title="Contents" @close="emit('close')" />
-    <div ref="tocListRef" class="modal-body scroll-body">
-      <div v-if="!Array.isArray(chapters) || chapters.length === 0" class="no-chapters">
-        No chapters available
-      </div>
-      <ul v-else class="toc-list">
-        <li v-for="(ch, index) in visibleChapters" :key="ch.id">
-          <button
-            :ref="(el: HTMLElement | null) => setRef(el, ch.id)"
-            :class="['toc-item', { active: ch.id === currentChapterId }]"
-            @click.stop="handleTocClick(ch.id)"
-          >
-            <!-- <span class="toc-number">{{ index + 1 }}</span> -->
-            <span class="toc-title">{{ ch.title }}</span>
-          </button>
-          <div style="margin: 0 8px; border: 1px solid rgba(0, 0, 0, 0.2)"></div>
-        </li>
-      </ul>
+  <ModalPanel ref="panelRef" title="Contents" @close="emit('close')">
+    <div v-if="!Array.isArray(chapters) || chapters.length === 0" class="no-chapters">
+      No chapters available
     </div>
-  </div>
+    <ul v-else class="toc-list">
+      <li v-for="(ch, index) in visibleChapters" :key="ch.id">
+        <button
+          :ref="(el: HTMLElement | null) => setRef(el, ch.id)"
+          :class="['toc-item', { active: ch.id === currentChapterId }]"
+          @click.stop="handleTocClick(ch.id)"
+        >
+          <!-- <span class="toc-number">{{ index + 1 }}</span> -->
+          <span class="toc-title">{{ ch.title }}</span>
+        </button>
+        <div style="margin: 0 8px; border: 1px solid rgba(0, 0, 0, 0.2)"></div>
+      </li>
+    </ul>
+  </ModalPanel>
 </template>
 
 <style scoped>
@@ -146,18 +143,6 @@ function setRef(el: HTMLElement | null, chapterId: string) {
   background: var(--accent);
   color: var(--accent-text);
   font-weight: 500;
-}
-
-.toc-item.active .toc-number {
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.toc-number {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  min-width: 28px;
-  font-feature-settings: "tnum";
 }
 
 .toc-title {

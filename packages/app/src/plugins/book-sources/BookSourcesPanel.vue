@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
-import ModalHeader from "../../components/modals/ModalHeader.vue";
+import ModalPanel from "../../components/modals/ModalPanel.vue";
+import LoadingSpinner from "../../components/ui/LoadingSpinner.vue";
+import ProgressBar from "../../components/ui/ProgressBar.vue";
+import AppIcon from "../../components/ui/AppIcon.vue";
 import { useBookshelfStore } from "../../stores/bookshelf";
 import { useUIStore } from "../../stores/ui";
 import { getSourceManager } from "./index";
@@ -235,236 +238,189 @@ function goBack() {
 </script>
 
 <template>
-  <div class="modal-content-inner">
-    <ModalHeader :title="stageTitle" @close="$emit('close')">
-      <template #prefix>
-        <button v-if="stage !== 'sources'" class="back-btn" @click="goBack" aria-label="返回">
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-          >
-            <polyline points="15 18 9 12 15 6" />
-          </svg>
-        </button>
-      </template>
-    </ModalHeader>
+  <ModalPanel :title="stageTitle" body-padding="20px" @close="$emit('close')">
+    <template #prefix>
+      <button v-if="stage !== 'sources'" class="back-btn" @click="goBack" aria-label="返回">
+        <AppIcon name="chevron-left" :size="16" />
+      </button>
+    </template>
+    <!-- ═══════ SOURCE MANAGEMENT ═══════ -->
+    <template v-if="stage === 'sources'">
+      <!-- Active source picker -->
+      <div class="source-section">
+        <div class="section-label">选择书源</div>
+        <div v-if="!activeSource" class="source-warn">请选择一个书源开始搜索</div>
 
-    <div class="modal-body scroll-body" style="padding: 20px">
-      <!-- ═══════ SOURCE MANAGEMENT ═══════ -->
-      <template v-if="stage === 'sources'">
-        <!-- Active source picker -->
-        <div class="source-section">
-          <div class="section-label">选择书源</div>
-          <div v-if="!activeSource" class="source-warn">请选择一个书源开始搜索</div>
-
-          <template v-if="builtInSources.length">
-            <div class="section-sub">内置书源</div>
-            <div
-              v-for="src in builtInSources"
-              :key="src.bookSourceUrl"
-              class="source-card"
-              :class="{ active: activeSource?.bookSourceUrl === src.bookSourceUrl }"
-              @click="selectSource(src)"
-            >
-              <div class="source-name">{{ src.bookSourceName }}</div>
-              <div class="source-url">{{ src.bookSourceUrl }}</div>
-            </div>
-          </template>
-
-          <template v-if="importedSources.length">
-            <div class="section-sub" style="margin-top: 12px">导入的书源</div>
-            <div
-              v-for="src in importedSources"
-              :key="src.bookSourceUrl"
-              class="source-card"
-              :class="{ active: activeSource?.bookSourceUrl === src.bookSourceUrl }"
-              @click="selectSource(src)"
-            >
-              <div class="source-row">
-                <div class="source-name">{{ src.bookSourceName }}</div>
-                <button
-                  v-if="confirmDeleteUrl === src.bookSourceUrl"
-                  class="delete-btn"
-                  @click.stop="deleteSource(src)"
-                >
-                  确认删除
-                </button>
-                <button
-                  v-else
-                  class="delete-btn subtle"
-                  @click.stop="confirmDeleteUrl = src.bookSourceUrl"
-                >
-                  删除
-                </button>
-              </div>
-              <div class="source-url">{{ src.bookSourceUrl }}</div>
-              <div v-if="src.bookSourceGroup" class="source-group">{{ src.bookSourceGroup }}</div>
-            </div>
-          </template>
-        </div>
-
-        <!-- Search bar (shown when a source is selected) -->
-        <div v-if="activeSource" class="search-bar">
-          <input
-            v-model="keyword"
-            class="search-input"
-            placeholder="输入书名搜索..."
-            @keydown.enter="doSearch"
-          />
-          <button class="search-btn" :disabled="!keyword.trim() || isLoading" @click="doSearch">
-            <svg
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.5"
-            >
-              <circle cx="11" cy="11" r="8" />
-              <path d="M21 21l-4.35-4.35" />
-            </svg>
-            搜索
-          </button>
-        </div>
-
-        <!-- Import controls -->
-        <div class="import-section">
-          <button class="import-toggle" @click="showImport = !showImport">
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-            导入书源
-          </button>
-
-          <div v-if="showImport" class="import-panel">
-            <div class="import-row">
-              <input
-                v-model="importUrl"
-                class="import-input"
-                placeholder="书源 JSON URL（支持 yckceo 等源站）"
-                @keydown.enter="doImportSource"
-              />
-              <button
-                class="import-submit"
-                :disabled="!importUrl.trim() || isImporting"
-                @click="doImportSource"
-              >
-                导入
-              </button>
-            </div>
-            <div class="import-file-row">
-              <label class="file-label">
-                从文件导入
-                <input type="file" accept=".json" hidden @change="handleFileImport" />
-              </label>
-            </div>
-          </div>
-        </div>
-      </template>
-
-      <!-- ═══════ LOADING ═══════ -->
-      <div v-if="isLoading" class="loading-state">
-        <div class="spinner"></div>
-        <p>正在获取数据...</p>
-      </div>
-
-      <!-- ═══════ SEARCH RESULTS ═══════ -->
-      <template v-if="stage === 'results' && !isLoading">
-        <p v-if="error" class="error-msg">{{ error }}</p>
-        <div v-else class="book-list">
+        <template v-if="builtInSources.length">
+          <div class="section-sub">内置书源</div>
           <div
-            v-for="book in searchResults"
-            :key="book.bookUrl"
-            class="book-row"
-            @click="showDetail(book)"
+            v-for="src in builtInSources"
+            :key="src.bookSourceUrl"
+            class="source-card"
+            :class="{ active: activeSource?.bookSourceUrl === src.bookSourceUrl }"
+            @click="selectSource(src)"
           >
-            <div class="book-cover-thumb">
-              <img
-                v-if="book.coverUrl"
-                :src="book.coverUrl"
-                :alt="book.name"
-                class="thumb-img"
-                @error="book.coverUrl = undefined"
-              />
-              <span v-else class="thumb-placeholder">{{ book.name.charAt(0) }}</span>
-            </div>
-            <div class="book-meta">
-              <span class="book-title">{{ book.name }}</span>
-              <span class="book-author">{{ book.author || "未知作者" }}</span>
-            </div>
-            <svg
-              class="chevron"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
-          </div>
-        </div>
-      </template>
-
-      <!-- ═══════ BOOK DETAIL ═══════ -->
-      <template v-if="stage === 'detail' && !isLoading">
-        <p v-if="error" class="error-msg">{{ error }}</p>
-        <template v-else>
-          <div class="book-detail-header">
-            <div class="detail-cover">
-              <img
-                v-if="bookInfo.coverUrl || selectedBook?.coverUrl"
-                :src="bookInfo.coverUrl || selectedBook!.coverUrl"
-                :alt="selectedBook?.name"
-                @error="(e: any) => (e.target.style.display = 'none')"
-              />
-              <span v-else class="detail-placeholder">{{ selectedBook?.name.charAt(0) }}</span>
-            </div>
-            <div class="detail-meta">
-              <h3>{{ bookInfo.name || selectedBook?.name }}</h3>
-              <p class="detail-author">
-                {{ bookInfo.author || selectedBook?.author || "未知作者" }}
-              </p>
-              <p v-if="bookInfo.kind" class="detail-kind">{{ bookInfo.kind }}</p>
-              <button class="import-btn" :disabled="chapters.length === 0" @click="importBook">
-                导入全部 ({{ chapters.length }} 章)
-              </button>
-            </div>
-          </div>
-          <p v-if="bookInfo.intro" class="detail-intro">{{ bookInfo.intro }}</p>
-          <div class="chapter-list">
-            <div v-for="(ch, i) in chapters" :key="i" class="chapter-item">
-              <span class="chapter-index">{{ i + 1 }}</span>
-              <span class="chapter-name">{{ ch.name }}</span>
-            </div>
+            <div class="source-name">{{ src.bookSourceName }}</div>
+            <div class="source-url">{{ src.bookSourceUrl }}</div>
           </div>
         </template>
-      </template>
 
-      <!-- ═══════ IMPORTING ═══════ -->
-      <div v-if="stage === 'importing'" class="importing-state">
-        <div class="spinner"></div>
-        <p>正在下载并导入...</p>
-        <div class="progress-bar">
-          <div class="progress-fill" :style="{ width: importProgress + '%' }"></div>
-        </div>
-        <p class="import-hint">{{ importProgress }}% · {{ chapters.length }} 章</p>
+        <template v-if="importedSources.length">
+          <div class="section-sub" style="margin-top: 12px">导入的书源</div>
+          <div
+            v-for="src in importedSources"
+            :key="src.bookSourceUrl"
+            class="source-card"
+            :class="{ active: activeSource?.bookSourceUrl === src.bookSourceUrl }"
+            @click="selectSource(src)"
+          >
+            <div class="source-row">
+              <div class="source-name">{{ src.bookSourceName }}</div>
+              <button
+                v-if="confirmDeleteUrl === src.bookSourceUrl"
+                class="delete-btn"
+                @click.stop="deleteSource(src)"
+              >
+                确认删除
+              </button>
+              <button
+                v-else
+                class="delete-btn subtle"
+                @click.stop="confirmDeleteUrl = src.bookSourceUrl"
+              >
+                删除
+              </button>
+            </div>
+            <div class="source-url">{{ src.bookSourceUrl }}</div>
+            <div v-if="src.bookSourceGroup" class="source-group">{{ src.bookSourceGroup }}</div>
+          </div>
+        </template>
       </div>
+
+      <!-- Search bar (shown when a source is selected) -->
+      <div v-if="activeSource" class="search-bar">
+        <input
+          v-model="keyword"
+          class="search-input"
+          placeholder="输入书名搜索..."
+          @keydown.enter="doSearch"
+        />
+        <button class="search-btn" :disabled="!keyword.trim() || isLoading" @click="doSearch">
+          <AppIcon name="search" :size="15" :stroke-width="2.5" />
+          搜索
+        </button>
+      </div>
+
+      <!-- Import controls -->
+      <div class="import-section">
+        <button class="import-toggle" @click="showImport = !showImport">
+          <AppIcon name="plus" :size="14" />
+          导入书源
+        </button>
+
+        <div v-if="showImport" class="import-panel">
+          <div class="import-row">
+            <input
+              v-model="importUrl"
+              class="import-input"
+              placeholder="书源 JSON URL（支持 yckceo 等源站）"
+              @keydown.enter="doImportSource"
+            />
+            <button
+              class="import-submit"
+              :disabled="!importUrl.trim() || isImporting"
+              @click="doImportSource"
+            >
+              导入
+            </button>
+          </div>
+          <div class="import-file-row">
+            <label class="file-label">
+              从文件导入
+              <input type="file" accept=".json" hidden @change="handleFileImport" />
+            </label>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- ═══════ LOADING ═══════ -->
+    <LoadingSpinner v-if="isLoading" size="md" label="正在获取数据..." block />
+
+    <!-- ═══════ SEARCH RESULTS ═══════ -->
+    <template v-if="stage === 'results' && !isLoading">
+      <p v-if="error" class="error-msg">{{ error }}</p>
+      <div v-else class="book-list">
+        <div
+          v-for="book in searchResults"
+          :key="book.bookUrl"
+          class="book-row"
+          @click="showDetail(book)"
+        >
+          <div class="book-cover-thumb">
+            <img
+              v-if="book.coverUrl"
+              :src="book.coverUrl"
+              :alt="book.name"
+              class="thumb-img"
+              @error="book.coverUrl = undefined"
+            />
+            <span v-else class="thumb-placeholder">{{ book.name.charAt(0) }}</span>
+          </div>
+          <div class="book-meta">
+            <span class="book-title">{{ book.name }}</span>
+            <span class="book-author">{{ book.author || "未知作者" }}</span>
+          </div>
+          <AppIcon name="chevron-right" class="chevron" :size="14" />
+        </div>
+      </div>
+    </template>
+
+    <!-- ═══════ BOOK DETAIL ═══════ -->
+    <template v-if="stage === 'detail' && !isLoading">
+      <p v-if="error" class="error-msg">{{ error }}</p>
+      <template v-else>
+        <div class="book-detail-header">
+          <div class="detail-cover">
+            <img
+              v-if="bookInfo.coverUrl || selectedBook?.coverUrl"
+              :src="bookInfo.coverUrl || selectedBook!.coverUrl"
+              :alt="selectedBook?.name"
+              @error="(e: any) => (e.target.style.display = 'none')"
+            />
+            <span v-else class="detail-placeholder">{{ selectedBook?.name.charAt(0) }}</span>
+          </div>
+          <div class="detail-meta">
+            <h3>{{ bookInfo.name || selectedBook?.name }}</h3>
+            <p class="detail-author">
+              {{ bookInfo.author || selectedBook?.author || "未知作者" }}
+            </p>
+            <p v-if="bookInfo.kind" class="detail-kind">{{ bookInfo.kind }}</p>
+            <button class="import-btn" :disabled="chapters.length === 0" @click="importBook">
+              导入全部 ({{ chapters.length }} 章)
+            </button>
+          </div>
+        </div>
+        <p v-if="bookInfo.intro" class="detail-intro">{{ bookInfo.intro }}</p>
+        <div class="chapter-list">
+          <div v-for="(ch, i) in chapters" :key="i" class="chapter-item">
+            <span class="chapter-index">{{ i + 1 }}</span>
+            <span class="chapter-name">{{ ch.name }}</span>
+          </div>
+        </div>
+      </template>
+    </template>
+
+    <!-- ═══════ IMPORTING ═══════ -->
+    <div v-if="stage === 'importing'" class="importing-state">
+      <LoadingSpinner size="md" bare />
+      <p>正在下载并导入...</p>
+      <div class="progress-bar">
+        <ProgressBar :value="importProgress" size="md" />
+      </div>
+      <p class="import-hint">{{ importProgress }}% · {{ chapters.length }} 章</p>
     </div>
-  </div>
+  </ModalPanel>
 </template>
 
 <style scoped>
@@ -711,7 +667,6 @@ function goBack() {
 }
 
 /* Loading */
-.loading-state,
 .importing-state {
   display: flex;
   flex-direction: column;
@@ -729,34 +684,9 @@ function goBack() {
   margin: 0;
 }
 
-.spinner {
-  width: 28px;
-  height: 28px;
-  border: 2px solid var(--border);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 .progress-bar {
   width: 200px;
   height: 6px;
-  background: var(--bg-tertiary);
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 3px;
-  transition: width 0.3s ease;
 }
 
 .error-msg {

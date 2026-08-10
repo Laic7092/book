@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted } from "vue";
-import ModalHeader from "../../components/modals/ModalHeader.vue";
+import ModalPanel from "../../components/modals/ModalPanel.vue";
+import ToggleSwitch from "../../components/ui/ToggleSwitch.vue";
+import AppIcon from "../../components/ui/AppIcon.vue";
+import { fileToBase64 } from "../../utils/file";
 import {
   FONT_OPTIONS,
   LINE_HEIGHT_PRESETS,
@@ -64,15 +67,6 @@ async function handleFontUpload(e: Event) {
     uploading.value = false;
     input.value = "";
   }
-}
-
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
 }
 
 async function deleteFont(font: CustomFontFace) {
@@ -148,255 +142,209 @@ function resetSettings() {
 </script>
 
 <template>
-  <div class="modal-content-inner">
-    <ModalHeader title="自定义排版" @close="emit('close')">
-      <template #extra>
-        <div ref="previewContainerRef" class="preview-card"></div>
-      </template>
-    </ModalHeader>
+  <ModalPanel title="自定义排版" body-padding="16px 20px 24px" @close="emit('close')">
+    <template #extra>
+      <div ref="previewContainerRef" class="preview-card"></div>
+    </template>
+    <!-- 自定义排版开关 -->
+    <div class="setting-section">
+      <div class="toggle-row">
+        <label class="toggle-label">
+          <span>启用自定义排版</span>
+          <span class="toggle-desc">覆盖书籍原始排版，应用以下自定义设置</span>
+        </label>
+        <ToggleSwitch v-model="settings.customTypography" label="启用自定义排版" />
+      </div>
+    </div>
 
-    <div class="modal-body">
-      <!-- 自定义排版开关 -->
-      <div class="setting-section">
-        <div class="toggle-row">
-          <label class="toggle-label">
-            <span>启用自定义排版</span>
-            <span class="toggle-desc">覆盖书籍原始排版，应用以下自定义设置</span>
-          </label>
+    <!-- 排版设置（受开关控制） -->
+    <div class="typography-group" v-if="settings.customTypography">
+      <!-- 字体 -->
+      <div class="setting-row">
+        <label class="setting-label">字体</label>
+        <div class="font-options">
           <button
-            :class="['toggle-switch', { active: settings.customTypography }]"
-            @click="state.update({ customTypography: !settings.customTypography })"
-            :aria-checked="settings.customTypography"
-            role="switch"
+            v-for="font in FONT_OPTIONS"
+            :key="font.value"
+            :class="['font-btn', { active: settings.fontFamily.includes(font.value) }]"
+            @click="state.update({ fontFamily: font.value })"
+            :style="{ fontFamily: font.preview || font.value }"
           >
-            <span class="toggle-knob"></span>
+            {{ font.label }}
           </button>
         </div>
       </div>
 
-      <!-- 排版设置（受开关控制） -->
-      <div class="typography-group" v-if="settings.customTypography">
-        <!-- 字体 -->
-        <div class="setting-row">
-          <label class="setting-label">字体</label>
-          <div class="font-options">
-            <button
-              v-for="font in FONT_OPTIONS"
-              :key="font.value"
-              :class="['font-btn', { active: settings.fontFamily.includes(font.value) }]"
-              @click="state.update({ fontFamily: font.value })"
-              :style="{ fontFamily: font.preview || font.value }"
-            >
-              {{ font.label }}
-            </button>
-          </div>
-        </div>
-
-        <!-- 自定义字体 -->
-        <div class="setting-row">
-          <label class="setting-label">自定义字体</label>
-          <div class="custom-font-list" v-if="customFonts.length > 0">
-            <div
-              v-for="font in customFonts"
-              :key="font.id"
-              :class="['custom-font-item', { active: settings.customFontFamily === font.name }]"
-              @click="selectFont(font)"
-            >
-              <span class="custom-font-name">{{ font.name }}</span>
-              <span class="custom-font-format">{{ font.format }}</span>
-              <div class="custom-font-actions">
-                <button class="font-delete-btn" @click.stop="deleteFont(font)" title="删除字体">
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                  >
-                    <path
-                      d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"
-                    />
-                  </svg>
-                </button>
-              </div>
+      <!-- 自定义字体 -->
+      <div class="setting-row">
+        <label class="setting-label">自定义字体</label>
+        <div class="custom-font-list" v-if="customFonts.length > 0">
+          <div
+            v-for="font in customFonts"
+            :key="font.id"
+            :class="['custom-font-item', { active: settings.customFontFamily === font.name }]"
+            @click="selectFont(font)"
+          >
+            <span class="custom-font-name">{{ font.name }}</span>
+            <span class="custom-font-format">{{ font.format }}</span>
+            <div class="custom-font-actions">
+              <button class="font-delete-btn" @click.stop="deleteFont(font)" title="删除字体">
+                <AppIcon name="trash" :size="14" />
+              </button>
             </div>
           </div>
-          <div class="font-upload-row">
-            <input
-              ref="fontInputRef"
-              type="file"
-              accept=".ttf,.otf,.woff,.woff2"
-              style="display: none"
-              @change="handleFontUpload"
-            />
-            <button class="font-upload-btn" :disabled="uploading" @click="fontInputRef?.click()">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" />
-              </svg>
-              <span>{{ uploading ? "上传中..." : "上传字体" }}</span>
-            </button>
-            <button v-if="settings.customFontFamily" class="font-clear-btn" @click="clearFont">
-              恢复默认
-            </button>
-          </div>
-          <p class="font-hint">支持 TTF、OTF、WOFF、WOFF2 格式</p>
         </div>
-
-        <!-- 行距 -->
-        <div class="setting-row">
-          <label class="setting-label">
-            <span>行距</span>
-            <span class="setting-value">{{ settings.lineHeight.toFixed(1) }}</span>
-          </label>
-          <div class="lh-options">
-            <button
-              v-for="height in LINE_HEIGHT_PRESETS"
-              :key="height"
-              :class="['lh-btn', { active: Math.abs(settings.lineHeight - height) < 0.05 }]"
-              @click="state.update({ lineHeight: height })"
-            >
-              {{ height }}
-            </button>
-          </div>
-        </div>
-
-        <!-- 边距 -->
-        <div class="setting-row">
-          <label class="setting-label">
-            <span>页边距</span>
-            <span class="setting-value">{{ settings.margin }}px</span>
-          </label>
-          <div class="margin-options">
-            <button
-              v-for="margin in MARGIN_PRESETS"
-              :key="margin"
-              :class="['margin-btn', { active: settings.margin === margin }]"
-              @click="state.update({ margin: margin })"
-            >
-              {{ margin }}
-            </button>
-          </div>
-        </div>
-
-        <!-- 对齐 -->
-        <div class="setting-row">
-          <label class="setting-label">对齐</label>
-          <div class="align-options">
-            <button
-              v-for="align in TEXT_ALIGN_OPTIONS"
-              :key="align.value"
-              :class="['align-btn', { active: settings.textAlign === align.value }]"
-              @click="state.update({ textAlign: align.value })"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                <rect v-if="align.value === 'left'" x="3" y="5" width="18" height="2" />
-                <rect v-if="align.value === 'left'" x="3" y="9" width="14" height="2" />
-                <rect v-if="align.value === 'left'" x="3" y="13" width="16" height="2" />
-                <rect v-if="align.value === 'left'" x="3" y="17" width="12" height="2" />
-                <rect v-if="align.value === 'center'" x="3" y="5" width="18" height="2" />
-                <rect v-if="align.value === 'center'" x="5" y="9" width="14" height="2" />
-                <rect v-if="align.value === 'center'" x="4" y="13" width="16" height="2" />
-                <rect v-if="align.value === 'center'" x="6" y="17" width="12" height="2" />
-                <rect v-if="align.value === 'justify'" x="3" y="5" width="18" height="2" />
-                <rect v-if="align.value === 'justify'" x="3" y="9" width="18" height="2" />
-                <rect v-if="align.value === 'justify'" x="3" y="13" width="18" height="2" />
-                <rect v-if="align.value === 'justify'" x="3" y="17" width="14" height="2" />
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        <!-- 暗色对比度 -->
-        <div v-if="settings.theme === 'dark'" class="setting-row">
-          <label class="setting-label">
-            <span>暗色对比度</span>
-            <span class="setting-value">{{ settings.contrast || "normal" }}</span>
-          </label>
-          <div class="contrast-options">
-            <button
-              v-for="option in CONTRAST_OPTIONS"
-              :key="option.value"
-              :class="['contrast-btn', { active: settings.contrast === option.value }]"
-              @click="state.update({ contrast: option.value })"
-            >
-              {{ option.label }}
-            </button>
-          </div>
-        </div>
-
-        <!-- 字间距 -->
-        <div class="setting-row">
-          <label class="setting-label">
-            <span>字间距</span>
-            <span class="setting-value">{{ settings.letterSpacing || 0 }}em</span>
-          </label>
+        <div class="font-upload-row">
           <input
-            type="range"
-            min="-0.05"
-            max="0.2"
-            step="0.01"
-            :value="settings.letterSpacing || 0"
-            @input="
-              state.update({ letterSpacing: Number(($event.target as HTMLInputElement).value) })
-            "
-            class="range-input"
+            ref="fontInputRef"
+            type="file"
+            accept=".ttf,.otf,.woff,.woff2"
+            style="display: none"
+            @change="handleFontUpload"
           />
+          <button class="font-upload-btn" :disabled="uploading" @click="fontInputRef?.click()">
+            <AppIcon name="upload" :size="16" />
+            <span>{{ uploading ? "上传中..." : "上传字体" }}</span>
+          </button>
+          <button v-if="settings.customFontFamily" class="font-clear-btn" @click="clearFont">
+            恢复默认
+          </button>
         </div>
+        <p class="font-hint">支持 TTF、OTF、WOFF、WOFF2 格式</p>
+      </div>
 
-        <!-- 段落间距 -->
-        <div class="setting-row">
-          <label class="setting-label">
-            <span>段落间距</span>
-            <span class="setting-value">{{ settings.paragraphSpacing || 1.2 }}em</span>
-          </label>
-          <input
-            type="range"
-            min="0.8"
-            max="2.0"
-            step="0.1"
-            :value="settings.paragraphSpacing || 1.2"
-            @input="
-              state.update({ paragraphSpacing: Number(($event.target as HTMLInputElement).value) })
-            "
-            class="range-input"
-          />
+      <!-- 行距 -->
+      <div class="setting-row">
+        <label class="setting-label">
+          <span>行距</span>
+          <span class="setting-value">{{ settings.lineHeight.toFixed(1) }}</span>
+        </label>
+        <div class="lh-options">
+          <button
+            v-for="height in LINE_HEIGHT_PRESETS"
+            :key="height"
+            :class="['lh-btn', { active: Math.abs(settings.lineHeight - height) < 0.05 }]"
+            @click="state.update({ lineHeight: height })"
+          >
+            {{ height }}
+          </button>
         </div>
       </div>
 
-      <!-- 重置 -->
-      <div class="setting-section">
-        <button class="reset-btn" @click="resetSettings">
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
+      <!-- 边距 -->
+      <div class="setting-row">
+        <label class="setting-label">
+          <span>页边距</span>
+          <span class="setting-value">{{ settings.margin }}px</span>
+        </label>
+        <div class="margin-options">
+          <button
+            v-for="margin in MARGIN_PRESETS"
+            :key="margin"
+            :class="['margin-btn', { active: settings.margin === margin }]"
+            @click="state.update({ margin: margin })"
           >
-            <path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8" />
-            <path d="M3 3v5h5" />
-          </svg>
-          <span>重置为默认</span>
-        </button>
+            {{ margin }}
+          </button>
+        </div>
+      </div>
+
+      <!-- 对齐 -->
+      <div class="setting-row">
+        <label class="setting-label">对齐</label>
+        <div class="align-options">
+          <button
+            v-for="align in TEXT_ALIGN_OPTIONS"
+            :key="align.value"
+            :class="['align-btn', { active: settings.textAlign === align.value }]"
+            @click="state.update({ textAlign: align.value })"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <rect v-if="align.value === 'left'" x="3" y="5" width="18" height="2" />
+              <rect v-if="align.value === 'left'" x="3" y="9" width="14" height="2" />
+              <rect v-if="align.value === 'left'" x="3" y="13" width="16" height="2" />
+              <rect v-if="align.value === 'left'" x="3" y="17" width="12" height="2" />
+              <rect v-if="align.value === 'center'" x="3" y="5" width="18" height="2" />
+              <rect v-if="align.value === 'center'" x="5" y="9" width="14" height="2" />
+              <rect v-if="align.value === 'center'" x="4" y="13" width="16" height="2" />
+              <rect v-if="align.value === 'center'" x="6" y="17" width="12" height="2" />
+              <rect v-if="align.value === 'justify'" x="3" y="5" width="18" height="2" />
+              <rect v-if="align.value === 'justify'" x="3" y="9" width="18" height="2" />
+              <rect v-if="align.value === 'justify'" x="3" y="13" width="18" height="2" />
+              <rect v-if="align.value === 'justify'" x="3" y="17" width="14" height="2" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- 暗色对比度 -->
+      <div v-if="settings.theme === 'dark'" class="setting-row">
+        <label class="setting-label">
+          <span>暗色对比度</span>
+          <span class="setting-value">{{ settings.contrast || "normal" }}</span>
+        </label>
+        <div class="contrast-options">
+          <button
+            v-for="option in CONTRAST_OPTIONS"
+            :key="option.value"
+            :class="['contrast-btn', { active: settings.contrast === option.value }]"
+            @click="state.update({ contrast: option.value })"
+          >
+            {{ option.label }}
+          </button>
+        </div>
+      </div>
+
+      <!-- 字间距 -->
+      <div class="setting-row">
+        <label class="setting-label">
+          <span>字间距</span>
+          <span class="setting-value">{{ settings.letterSpacing || 0 }}em</span>
+        </label>
+        <input
+          type="range"
+          min="-0.05"
+          max="0.2"
+          step="0.01"
+          :value="settings.letterSpacing || 0"
+          @input="
+            state.update({ letterSpacing: Number(($event.target as HTMLInputElement).value) })
+          "
+          class="range-input"
+        />
+      </div>
+
+      <!-- 段落间距 -->
+      <div class="setting-row">
+        <label class="setting-label">
+          <span>段落间距</span>
+          <span class="setting-value">{{ settings.paragraphSpacing || 1.2 }}em</span>
+        </label>
+        <input
+          type="range"
+          min="0.8"
+          max="2.0"
+          step="0.1"
+          :value="settings.paragraphSpacing || 1.2"
+          @input="
+            state.update({ paragraphSpacing: Number(($event.target as HTMLInputElement).value) })
+          "
+          class="range-input"
+        />
       </div>
     </div>
-  </div>
+
+    <!-- 重置 -->
+    <div class="setting-section">
+      <button class="reset-btn" @click="resetSettings">
+        <AppIcon name="reset" :size="16" />
+        <span>重置为默认</span>
+      </button>
+    </div>
+  </ModalPanel>
 </template>
 
 <style scoped>
-.modal-body {
-  padding: 16px 20px 24px;
-}
-
 .setting-section {
   display: flex;
   flex-direction: column;
@@ -424,7 +372,7 @@ function resetSettings() {
   font-feature-settings: "tnum";
 }
 
-/* Toggle switch styles */
+/* Toggle switch row */
 .toggle-row {
   display: flex;
   justify-content: space-between;
@@ -456,42 +404,6 @@ function resetSettings() {
   font-size: 12px;
   color: var(--text-secondary);
   line-height: 1.4;
-}
-
-.toggle-switch {
-  position: relative;
-  width: 44px;
-  height: 26px;
-  border: none;
-  border-radius: 13px;
-  background: var(--border);
-  cursor: pointer;
-  transition: background 200ms ease;
-  flex-shrink: 0;
-}
-
-.toggle-switch:hover {
-  filter: brightness(1.1);
-}
-
-.toggle-switch.active {
-  background: var(--accent);
-}
-
-.toggle-knob {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: white;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.toggle-switch.active .toggle-knob {
-  transform: translateX(18px);
 }
 
 /* Reset button */

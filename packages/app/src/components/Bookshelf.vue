@@ -10,6 +10,8 @@ import type { Book } from "../core/types";
 import BookCard from "./BookCard.vue";
 import BookListItem from "./BookListItem.vue";
 import Popover from "./Popover.vue";
+import AppIcon from "./ui/AppIcon.vue";
+import LoadingSpinner from "./ui/LoadingSpinner.vue";
 
 const ModalWrapper = defineAsyncComponent(() => import("./modals/ModalWrapper.vue"));
 const ToastNotification = defineAsyncComponent(() => import("./ToastNotification.vue"));
@@ -312,20 +314,7 @@ onUnmounted(() => {
 
         <div class="header-search">
           <div class="search-container" :class="{ focused: searchFocused }">
-            <svg
-              class="search-icon"
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <circle cx="11" cy="11" r="8" />
-              <path d="M21 21l-4.35-4.35" />
-            </svg>
+            <AppIcon name="search" class="search-icon" :size="15" />
             <input
               v-model="bookshelfStore.searchQuery"
               type="text"
@@ -340,34 +329,14 @@ onUnmounted(() => {
               @click="bookshelfStore.setSearchQuery('')"
               aria-label="Clear search"
             >
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-              >
-                <path d="M18 6L6 18M6 6l12 12" />
-              </svg>
+              <AppIcon name="close" :size="13" />
             </button>
           </div>
         </div>
 
         <div class="header-actions">
           <label class="btn-add" :class="{ uploading: bookshelfStore.isUploading }">
-            <svg
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-            >
-              <path d="M12 5v14M5 12h14" />
-            </svg>
+            <AppIcon name="plus" :size="15" />
             <span>{{ bookshelfStore.isUploading ? "Adding…" : "Add" }}</span>
             <input
               type="file"
@@ -385,19 +354,7 @@ onUnmounted(() => {
               @click.stop="toggleMenu"
               aria-label="Options"
             >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.8"
-                stroke-linecap="round"
-              >
-                <circle cx="12" cy="5" r="1.5" fill="currentColor" />
-                <circle cx="12" cy="12" r="1.5" fill="currentColor" />
-                <circle cx="12" cy="19" r="1.5" fill="currentColor" />
-              </svg>
+              <AppIcon name="dots" :size="16" />
             </button>
             <Popover
               :open="showMenu"
@@ -417,34 +374,15 @@ onUnmounted(() => {
                     closeMenu();
                   "
                 >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                  >
-                    <rect x="3" y="3" width="7" height="7" rx="1" />
-                    <rect x="14" y="3" width="7" height="7" rx="1" />
-                    <rect x="3" y="14" width="7" height="7" rx="1" />
-                    <rect x="14" y="14" width="7" height="7" rx="1" />
-                  </svg>
+                  <AppIcon name="grid" :size="14" />
                   <span>Grid</span>
-                  <svg
+                  <AppIcon
                     v-if="viewMode === 'card'"
+                    name="check"
                     class="check-icon"
-                    width="13"
-                    height="13"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2.5"
-                    stroke-linecap="round"
-                  >
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
+                    :size="13"
+                    :stroke-width="2.5"
+                  />
                 </button>
                 <button
                   class="menu-item"
@@ -454,36 +392,15 @@ onUnmounted(() => {
                     closeMenu();
                   "
                 >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                  >
-                    <line x1="8" y1="6" x2="21" y2="6" />
-                    <line x1="8" y1="12" x2="21" y2="12" />
-                    <line x1="8" y1="18" x2="21" y2="18" />
-                    <circle cx="4" cy="6" r="1" fill="currentColor" />
-                    <circle cx="4" cy="12" r="1" fill="currentColor" />
-                    <circle cx="4" cy="18" r="1" fill="currentColor" />
-                  </svg>
+                  <AppIcon name="list" :size="14" />
                   <span>List</span>
-                  <svg
+                  <AppIcon
                     v-if="viewMode === 'list'"
+                    name="check"
                     class="check-icon"
-                    width="13"
-                    height="13"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2.5"
-                    stroke-linecap="round"
-                  >
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
+                    :size="13"
+                    :stroke-width="2.5"
+                  />
                 </button>
               </div>
               <div class="menu-divider"></div>
@@ -500,19 +417,13 @@ onUnmounted(() => {
                   "
                 >
                   <span>{{ opt.label }}</span>
-                  <svg
+                  <AppIcon
                     v-if="sortBy === opt.value"
+                    name="check"
                     class="check-icon"
-                    width="13"
-                    height="13"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2.5"
-                    stroke-linecap="round"
-                  >
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
+                    :size="13"
+                    :stroke-width="2.5"
+                  />
                 </button>
               </div>
               <div v-if="bookshelfMenuActions.length" class="menu-divider"></div>
@@ -546,18 +457,7 @@ onUnmounted(() => {
                   closeMenu();
                 "
               >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                >
-                  <rect x="2" y="6" width="20" height="12" rx="2" />
-                  <circle cx="12" cy="12" r="2" fill="currentColor" />
-                </svg>
+                <AppIcon name="sliders" :size="14" />
                 <span>Plugins</span>
               </button>
             </Popover>
@@ -595,16 +495,7 @@ onUnmounted(() => {
           @click.stop="showNewFolderInput = true"
           title="New folder"
         >
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.5"
-          >
-            <path d="M12 5v14M5 12h14" />
-          </svg>
+          <AppIcon name="plus" :size="12" :stroke-width="2.5" />
         </button>
         <input
           v-else
@@ -642,8 +533,7 @@ onUnmounted(() => {
 
       <!-- Upload Loading -->
       <div v-else-if="bookshelfStore.isUploading" class="uploading-state">
-        <div class="upload-spinner"></div>
-        <p>Adding volume to library…</p>
+        <LoadingSpinner size="lg" label="Adding volume to library…" block />
       </div>
 
       <!-- Empty State -->
@@ -787,16 +677,7 @@ onUnmounted(() => {
         }"
         @click="handleMoveToFolder(null)"
       >
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2v11z" />
-        </svg>
+        <AppIcon name="folder" :size="14" />
         Uncategorized
       </button>
       <button
@@ -1226,15 +1107,6 @@ onUnmounted(() => {
   color: var(--text-secondary);
 }
 
-.upload-spinner {
-  width: 32px;
-  height: 32px;
-  border: 2px solid var(--border);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
 /* ==========================================
    EMPTY STATE
    ========================================== */
@@ -1530,18 +1402,6 @@ onUnmounted(() => {
   }
 }
 
-@keyframes scaleIn {
-  from {
-    opacity: 0;
-    transform: scale(0.92);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
 /* Fade transition */
 
 /* ==========================================
@@ -1599,12 +1459,6 @@ onUnmounted(() => {
 
   .btn-add {
     padding: 8px 10px;
-  }
-
-  .stats-bar {
-    flex-wrap: wrap;
-    gap: 8px 14px;
-    padding-left: 0;
   }
 
   .book-grid {

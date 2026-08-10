@@ -2,6 +2,7 @@
 import { computed, ref, nextTick } from "vue";
 import { useUIStore } from "../../stores/ui";
 import Popover from "../Popover.vue";
+import AppIcon from "../ui/AppIcon.vue";
 import {
   getHeaderActions,
   getFooterActions,
@@ -67,16 +68,7 @@ async function openModal(modal: string) {
 <template>
   <header class="reader-header" :class="{ visible: uiStore.effectiveShowControls }">
     <button class="back-btn" @click.stop="emit('close')" aria-label="Back to library">
-      <svg
-        width="20"
-        height="20"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.5"
-      >
-        <path d="M19 12H5M12 19l-7-7 7-7" />
-      </svg>
+      <AppIcon name="arrow-left" :size="20" :stroke-width="1.5" />
     </button>
     <div class="header-center">
       <h1 class="book-title">{{ bookTitle }}</h1>
@@ -132,18 +124,7 @@ async function openModal(modal: string) {
           @click.stop="toggleMenu"
           aria-label="More options"
         >
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-          >
-            <circle cx="12" cy="5" r="1" fill="currentColor" />
-            <circle cx="12" cy="12" r="1" fill="currentColor" />
-            <circle cx="12" cy="19" r="1" fill="currentColor" />
-          </svg>
+          <AppIcon name="dots" :size="18" :stroke-width="1.5" />
         </button>
       </div>
 
@@ -462,34 +443,6 @@ async function openModal(modal: string) {
   pointer-events: auto;
 }
 
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 200ms ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-
-.slide-fade-enter-active {
-  transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.slide-fade-leave-active {
-  transition: all 200ms ease;
-}
-
-.slide-fade-enter-from {
-  opacity: 0;
-  transform: translateY(8px);
-}
-
-.slide-fade-leave-to {
-  opacity: 0;
-  transform: translateY(-4px);
-}
-
 @media (max-width: 768px) {
   .reader-header {
     padding: 10px 12px;
@@ -525,10 +478,6 @@ async function openModal(modal: string) {
   .chapter-text {
     font-size: 10px;
     max-width: 100px;
-  }
-
-  .menu-popover {
-    left: 8px;
   }
 }
 
@@ -590,10 +539,6 @@ async function openModal(modal: string) {
   .footer-sections {
     padding-left: max(12px, env(safe-area-inset-left, 0));
     padding-right: max(12px, env(safe-area-inset-right, 0));
-  }
-
-  .menu-popover {
-    left: max(12px, env(safe-area-inset-left, 0));
   }
 }
 </style>

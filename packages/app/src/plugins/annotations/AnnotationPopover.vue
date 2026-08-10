@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from "vue";
 import type { Annotation } from "../../core/types";
+import AppIcon from "../../components/ui/AppIcon.vue";
 import { HIGHLIGHT_COLORS } from "../../utils/colors";
 
 const POPOVER_WIDTH = 280;
@@ -123,16 +124,7 @@ function formatDate(ts: number) {
         }}</span>
         <span class="popover-date">{{ formatDate(annotation.createdAt) }}</span>
         <button class="popover-close" @click="emit('close')">
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
+          <AppIcon name="close" :size="14" />
         </button>
       </div>
 
@@ -156,17 +148,7 @@ function formatDate(ts: number) {
 
       <div class="popover-actions">
         <button class="action-link" @click="startEdit">
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-            <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-          </svg>
+          <AppIcon name="pencil" :size="14" />
           {{ annotation.note ? "Edit" : "Add Note" }}
         </button>
         <div class="color-mini-picker" :class="{ open: showColors }">
@@ -186,18 +168,7 @@ function formatDate(ts: number) {
           </div>
         </div>
         <button class="action-link danger" @click="emit('delete', annotation.id)">
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path
-              d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"
-            />
-          </svg>
+          <AppIcon name="trash" :size="14" />
           Delete
         </button>
       </div>

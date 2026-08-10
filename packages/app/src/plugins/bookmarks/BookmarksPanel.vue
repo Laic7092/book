@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { Bookmark } from "../../core/types";
-import ModalHeader from "../../components/modals/ModalHeader.vue";
+import ModalPanel from "../../components/modals/ModalPanel.vue";
+import EmptyState from "../../components/ui/EmptyState.vue";
+import AppIcon from "../../components/ui/AppIcon.vue";
 import { compareCfi } from "../../utils/epub-cfi";
+import { formatRelativeShort } from "../../utils/time";
 import { useBookmarkStore, addBookmarkFromHost } from "./index";
 import { currentSession } from "../../stores/reader-session";
 
@@ -37,94 +40,50 @@ function handleDelete(bookmarkId: string, event: MouseEvent) {
   event.stopPropagation();
   store.remove(bookmarkId);
 }
-
-function formatDate(timestamp: number): string {
-  const date = new Date(timestamp);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return "Just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString();
-}
 </script>
 
 <template>
-  <div class="modal-content-inner">
-    <ModalHeader title="Bookmarks" @close="emit('close')" />
-    <div class="bookmark-bar-fixed">
-      <button class="add-bookmark-btn" @click="handleAdd()">
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <path d="M12 5v14M5 12h14" />
-        </svg>
-        Add Bookmark
-      </button>
-    </div>
-    <div class="modal-body scroll-body">
-      <ul class="bookmarks-list">
-        <li v-for="bm in visibleBookmarks" :key="bm.id" class="bookmark-item">
-          <div class="bookmark-card" @click.stop="handleNavigate(bm)">
-            <div
-              class="bookmark-color-indicator"
-              :style="{ backgroundColor: bm.color || 'var(--accent)' }"
-            ></div>
-            <div class="bookmark-main">
-              <div class="bookmark-title-row">
-                <span class="bookmark-title">{{ bm.title }}</span>
-                <span class="bookmark-date">{{ formatDate(bm.createdAt) }}</span>
-              </div>
-              <p v-if="bm.contentPreview" class="bookmark-preview">{{ bm.contentPreview }}</p>
-            </div>
-            <button
-              class="action-btn delete-btn"
-              @click.stop="handleDelete(bm.id, $event)"
-              aria-label="Delete bookmark"
-              title="Delete bookmark"
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <path
-                  d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"
-                />
-              </svg>
-            </button>
-          </div>
-        </li>
-      </ul>
-      <div v-if="visibleBookmarks.length === 0" class="empty-state">
-        <svg
-          width="48"
-          height="48"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
-        >
-          <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
-        </svg>
-        <p>No bookmarks yet</p>
-        <span>Click the button above to add your first bookmark</span>
+  <ModalPanel title="Bookmarks" @close="emit('close')">
+    <template #toolbar>
+      <div class="bookmark-bar-fixed">
+        <button class="add-bookmark-btn" @click="handleAdd()">
+          <AppIcon name="plus" :size="16" />
+          Add Bookmark
+        </button>
       </div>
-    </div>
-  </div>
+    </template>
+    <ul class="bookmarks-list">
+      <li v-for="bm in visibleBookmarks" :key="bm.id" class="bookmark-item">
+        <div class="bookmark-card" @click.stop="handleNavigate(bm)">
+          <div
+            class="bookmark-color-indicator"
+            :style="{ backgroundColor: bm.color || 'var(--accent)' }"
+          ></div>
+          <div class="bookmark-main">
+            <div class="bookmark-title-row">
+              <span class="bookmark-title">{{ bm.title }}</span>
+              <span class="bookmark-date">{{ formatRelativeShort(bm.createdAt) }}</span>
+            </div>
+            <p v-if="bm.contentPreview" class="bookmark-preview">{{ bm.contentPreview }}</p>
+          </div>
+          <button
+            class="action-btn delete-btn"
+            @click.stop="handleDelete(bm.id, $event)"
+            aria-label="Delete bookmark"
+            title="Delete bookmark"
+          >
+            <AppIcon name="trash" :size="14" />
+          </button>
+        </div>
+      </li>
+    </ul>
+    <EmptyState
+      v-if="visibleBookmarks.length === 0"
+      icon="bookmark"
+      title="No bookmarks yet"
+      description="Click the button above to add your first bookmark"
+    />
+  </ModalPanel>
 </template>
 
 <style scoped>
@@ -158,15 +117,6 @@ function formatDate(timestamp: number): string {
 .add-bookmark-btn:hover {
   background: var(--accent-soft);
   border-color: var(--accent);
-}
-
-.no-bookmarks {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 200px;
-  color: var(--text-secondary);
-  font-size: 14px;
 }
 
 .bookmarks-list {
@@ -268,31 +218,5 @@ function formatDate(timestamp: number): string {
 .delete-btn:hover {
   background: var(--color-danger-soft);
   color: var(--color-danger);
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 200px;
-  color: var(--text-secondary);
-  gap: 8px;
-}
-
-.empty-state svg {
-  color: var(--text-tertiary, var(--text-secondary));
-  opacity: 0.5;
-}
-
-.empty-state p {
-  font-size: 14px;
-  font-weight: 500;
-  margin: 0;
-}
-
-.empty-state span {
-  font-size: 12px;
-  opacity: 0.7;
 }
 </style>

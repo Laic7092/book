@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import ModalHeader from "../../components/modals/ModalHeader.vue";
+import ModalPanel from "../../components/modals/ModalPanel.vue";
+import EmptyState from "../../components/ui/EmptyState.vue";
+import LoadingSpinner from "../../components/ui/LoadingSpinner.vue";
+import AppIcon from "../../components/ui/AppIcon.vue";
 import { useBookshelfStore } from "../../stores/bookshelf";
 import { useUIStore } from "../../stores/ui";
 import {
@@ -126,248 +129,138 @@ const formatLabel = (type: string, title?: string): string => {
 </script>
 
 <template>
-  <div class="modal-content-inner">
-    <ModalHeader title="OPDS Catalog" @close="emit('close')" />
+  <ModalPanel title="OPDS Catalog" body-padding="20px" @close="emit('close')">
+    <!-- URL input -->
+    <div class="opds-url-bar">
+      <AppIcon name="search" class="opds-url-icon" :size="16" />
+      <input
+        v-model="inputUrl"
+        type="url"
+        placeholder="Paste OPDS catalog URL…"
+        @keyup.enter="doLoad"
+        class="opds-url-input"
+      />
+      <button class="opds-load-btn" :disabled="isLoading || !inputUrl.trim()" @click="doLoad">
+        {{ isLoading ? "Loading…" : "Browse" }}
+      </button>
+    </div>
 
-    <div class="modal-body scroll-body" style="padding: 20px">
-      <!-- URL input -->
-      <div class="opds-url-bar">
-        <svg
-          class="opds-url-icon"
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
-          stroke-linecap="round"
-        >
-          <circle cx="11" cy="11" r="8" />
-          <path d="M21 21l-4.3-4.3" />
-        </svg>
-        <input
-          v-model="inputUrl"
-          type="url"
-          placeholder="Paste OPDS catalog URL…"
-          @keyup.enter="doLoad"
-          class="opds-url-input"
-        />
-        <button class="opds-load-btn" :disabled="isLoading || !inputUrl.trim()" @click="doLoad">
-          {{ isLoading ? "Loading…" : "Browse" }}
-        </button>
-      </div>
+    <!-- Breadcrumb -->
+    <div v-if="hasContent" class="opds-breadcrumb">
+      <button v-if="navStack.length > 1" class="opds-back-btn" @click="goBack">
+        <AppIcon name="arrow-left" :size="14" />
+      </button>
+      <span class="opds-breadcrumb-label">{{ feedTitle }}</span>
+      <span v-if="!isLoading && hasContent" class="opds-breadcrumb-count"
+        >{{ entries.length + navLinks.length }} item{{
+          entries.length + navLinks.length !== 1 ? "s" : ""
+        }}</span
+      >
+    </div>
 
-      <!-- Breadcrumb -->
-      <div v-if="hasContent" class="opds-breadcrumb">
-        <button v-if="navStack.length > 1" class="opds-back-btn" @click="goBack">
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-          >
-            <path d="M19 12H5M12 19l-7-7 7-7" />
-          </svg>
-        </button>
-        <span class="opds-breadcrumb-label">{{ feedTitle }}</span>
-        <span v-if="!isLoading && hasContent" class="opds-breadcrumb-count"
-          >{{ entries.length + navLinks.length }} item{{
-            entries.length + navLinks.length !== 1 ? "s" : ""
-          }}</span
-        >
-      </div>
+    <!-- Status -->
+    <LoadingSpinner v-if="isLoading" size="sm" label="Loading catalog…" />
+    <div v-else-if="error" class="opds-error">
+      <AppIcon name="alert" :size="16" />
+      {{ error }}
+    </div>
 
-      <!-- Status -->
-      <div v-if="isLoading" class="opds-loading">
-        <span class="opds-loading-spinner"></span>
-        Loading catalog…
-      </div>
-      <div v-else-if="error" class="opds-error">
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
-          stroke-linecap="round"
-        >
-          <circle cx="12" cy="12" r="10" />
-          <path d="M12 8v4M12 16h.01" />
-        </svg>
-        {{ error }}
-      </div>
+    <!-- Navigation (sub-catalogs) -->
+    <div v-if="navLinks.length" class="opds-section-label">Catalogs</div>
+    <div v-if="navLinks.length" class="opds-section">
+      <button
+        v-for="link in navLinks"
+        :key="link.href"
+        class="opds-nav-card"
+        @click="navigateTo(link.href, link.title)"
+      >
+        <span class="opds-nav-icon">
+          <AppIcon name="folder" :size="18" :stroke-width="1.3" />
+        </span>
+        <span class="opds-nav-label">{{ link.title }}</span>
+        <AppIcon name="chevron-right" class="opds-nav-arrow" :size="14" />
+      </button>
+    </div>
 
-      <!-- Navigation (sub-catalogs) -->
-      <div v-if="navLinks.length" class="opds-section-label">Catalogs</div>
-      <div v-if="navLinks.length" class="opds-section">
-        <button
-          v-for="link in navLinks"
-          :key="link.href"
-          class="opds-nav-card"
-          @click="navigateTo(link.href, link.title)"
-        >
-          <span class="opds-nav-icon">
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.3"
-              stroke-linecap="round"
-            >
-              <path
-                d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
-              />
-            </svg>
+    <!-- Book entries -->
+    <div v-if="entries.length" class="opds-section-label">Books</div>
+    <div v-if="entries.length" class="opds-section">
+      <div v-for="entry in entries" :key="entry.id" class="opds-book-card">
+        <div class="opds-book-cover" :class="{ 'has-cover': entry.coverUrl }">
+          <img
+            v-if="entry.coverUrl"
+            :src="entry.coverUrl"
+            :alt="entry.title"
+            class="opds-cover-img"
+          />
+          <span v-else class="opds-cover-fallback">
+            <AppIcon name="book" :size="20" :stroke-width="1" />
           </span>
-          <span class="opds-nav-label">{{ link.title }}</span>
-          <svg
-            class="opds-nav-arrow"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
+        </div>
+        <div class="opds-book-meta">
+          <div class="opds-book-title">{{ entry.title }}</div>
+          <div v-if="entry.author !== 'Unknown'" class="opds-book-author">{{ entry.author }}</div>
+        </div>
+        <div class="opds-book-actions">
+          <button
+            v-for="fmt in entry.formats"
+            :key="fmt.url"
+            class="opds-format-pill"
+            :disabled="importingIds.has(entry.id + '@' + fmt.url)"
+            @click="importBook(entry, fmt.url, fmt.type)"
           >
-            <path d="M9 18l6-6-6-6" />
-          </svg>
-        </button>
-      </div>
-
-      <!-- Book entries -->
-      <div v-if="entries.length" class="opds-section-label">Books</div>
-      <div v-if="entries.length" class="opds-section">
-        <div v-for="entry in entries" :key="entry.id" class="opds-book-card">
-          <div class="opds-book-cover" :class="{ 'has-cover': entry.coverUrl }">
-            <img
-              v-if="entry.coverUrl"
-              :src="entry.coverUrl"
-              :alt="entry.title"
-              class="opds-cover-img"
+            <AppIcon
+              v-if="importingIds.has(entry.id + '@' + fmt.url)"
+              name="spinner"
+              class="opds-spin"
+              :size="12"
+              :stroke-width="2.5"
             />
-            <span v-else class="opds-cover-fallback">
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1"
-                stroke-linecap="round"
-              >
-                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-              </svg>
-            </span>
-          </div>
-          <div class="opds-book-meta">
-            <div class="opds-book-title">{{ entry.title }}</div>
-            <div v-if="entry.author !== 'Unknown'" class="opds-book-author">{{ entry.author }}</div>
-          </div>
-          <div class="opds-book-actions">
-            <button
-              v-for="fmt in entry.formats"
-              :key="fmt.url"
-              class="opds-format-pill"
-              :disabled="importingIds.has(entry.id + '@' + fmt.url)"
-              @click="importBook(entry, fmt.url, fmt.type)"
-            >
-              <svg
-                v-if="importingIds.has(entry.id + '@' + fmt.url)"
-                class="opds-spin"
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.5"
-                stroke-linecap="round"
-              >
-                <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-              </svg>
-              <span v-else>{{
-                formatLabel(fmt.type, fmt.label !== "Download" ? fmt.label : "")
-              }}</span>
-            </button>
-            <button
-              v-if="!entry.formats.length && entry.downloadUrl"
-              class="opds-format-pill opds-format-pill-single"
-              :disabled="importingIds.has(entry.id + '@' + entry.downloadUrl)"
-              @click="importBook(entry)"
-            >
-              {{ importingIds.has(entry.id + "@" + entry.downloadUrl) ? "…" : "Import" }}
-            </button>
-          </div>
+            <span v-else>{{
+              formatLabel(fmt.type, fmt.label !== "Download" ? fmt.label : "")
+            }}</span>
+          </button>
+          <button
+            v-if="!entry.formats.length && entry.downloadUrl"
+            class="opds-format-pill opds-format-pill-single"
+            :disabled="importingIds.has(entry.id + '@' + entry.downloadUrl)"
+            @click="importBook(entry)"
+          >
+            {{ importingIds.has(entry.id + "@" + entry.downloadUrl) ? "…" : "Import" }}
+          </button>
         </div>
       </div>
-
-      <!-- Pagination -->
-      <div v-if="pagination.previous || pagination.next" class="opds-pagination">
-        <button
-          v-if="pagination.previous"
-          class="opds-page-btn"
-          @click="loadCatalog(pagination.previous)"
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-          >
-            <path d="M19 12H5M12 19l-7-7 7-7" />
-          </svg>
-          Previous page
-        </button>
-        <span v-else></span>
-        <button v-if="pagination.next" class="opds-page-btn" @click="loadCatalog(pagination.next)">
-          Next page
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-          >
-            <path d="M5 12h14M12 5l7 7-7 7" />
-          </svg>
-        </button>
-      </div>
-
-      <!-- Empty state (loaded but nothing to show) -->
-      <div v-if="!isLoading && !error && !hasContent()" class="opds-empty">
-        <svg
-          width="32"
-          height="32"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1"
-          stroke-linecap="round"
-        >
-          <circle cx="11" cy="11" r="8" />
-          <path d="M21 21l-4.3-4.3" />
-        </svg>
-        <p>Enter an OPDS catalog URL to browse</p>
-      </div>
     </div>
-  </div>
+
+    <!-- Pagination -->
+    <div v-if="pagination.previous || pagination.next" class="opds-pagination">
+      <button
+        v-if="pagination.previous"
+        class="opds-page-btn"
+        @click="loadCatalog(pagination.previous)"
+      >
+        <AppIcon name="arrow-left" :size="14" />
+        Previous page
+      </button>
+      <span v-else></span>
+      <button v-if="pagination.next" class="opds-page-btn" @click="loadCatalog(pagination.next)">
+        Next page
+        <AppIcon name="chevron-right" :size="14" />
+      </button>
+    </div>
+
+    <!-- Empty state (loaded but nothing to show) -->
+    <EmptyState
+      v-if="!isLoading && !error && !hasContent()"
+      icon="search"
+      title="Enter an OPDS catalog URL to browse"
+    />
+  </ModalPanel>
 </template>
 
 <style scoped>
 /* ── Panel shell ── */
-/* (using .modal-content-inner / .modal-body from ModalWrapper) */
+/* (ModalPanel provides .modal-content-inner / .modal-body) */
 
 /* ── URL bar ── */
 .opds-url-bar {
@@ -471,30 +364,6 @@ const formatLabel = (type: string, title?: string): string => {
 }
 
 /* ── Status ── */
-.opds-loading {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 24px 0;
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-family: var(--font-ui);
-  justify-content: center;
-}
-.opds-loading-spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid var(--border);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: opdsSpin 0.6s linear infinite;
-}
-@keyframes opdsSpin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 .opds-error {
   display: flex;
   align-items: center;
@@ -694,21 +563,13 @@ const formatLabel = (type: string, title?: string): string => {
   flex-shrink: 0;
 }
 
+@keyframes opdsSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* ── Empty state ── */
-.opds-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 48px 20px;
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-family: var(--font-ui);
-  text-align: center;
-}
-.opds-empty p {
-  margin: 0;
-}
 
 /* ── Pagination ── */
 .opds-pagination {

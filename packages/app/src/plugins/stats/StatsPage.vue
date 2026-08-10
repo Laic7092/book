@@ -5,6 +5,9 @@ import { useBookshelfStore } from "../../stores/bookshelf";
 import { getBookGradient, getInitial } from "../../utils/colors";
 import type { BookReadingStats, Book } from "../../core/types";
 import { formatDuration, formatRelativeTime, formatHour } from "../../utils/time";
+import LoadingSpinner from "../../components/ui/LoadingSpinner.vue";
+import EmptyState from "../../components/ui/EmptyState.vue";
+import AppIcon from "../../components/ui/AppIcon.vue";
 import { navigate } from "../../utils/router";
 import { pluginEvents } from "../manager/registry";
 
@@ -123,17 +126,7 @@ onUnmounted(() => {
               <span class="sp-subtitle">Your reading journey at a glance</span>
             </div>
             <button class="sp-close" @click="navigate('/')" aria-label="Close">
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-              >
-                <path d="M18 6L6 18M6 6l12 12" />
-              </svg>
+              <AppIcon name="close" :size="18" />
             </button>
           </header>
 
@@ -271,29 +264,19 @@ onUnmounted(() => {
 
           <!-- Loading -->
           <div v-else-if="loading" class="sp-empty">
-            <div class="sp-loader"></div>
-            <p>Loading statistics…</p>
+            <LoadingSpinner size="md" label="Loading statistics…" block />
           </div>
 
           <!-- Empty -->
-          <div v-else class="sp-empty">
-            <div class="sp-empty-icon">
-              <svg
-                width="56"
-                height="56"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.2"
-              >
-                <path d="M12 20V10M18 20V4M6 20v-4" />
-              </svg>
-            </div>
-            <h3 class="sp-empty-title">No reading data yet</h3>
-            <p class="sp-empty-desc">
-              Open a book and start reading — your statistics will appear here.
-            </p>
-          </div>
+          <EmptyState
+            v-else
+            class="sp-empty"
+            icon="chart"
+            :icon-size="56"
+            :icon-stroke-width="1.2"
+            title="No reading data yet"
+            description="Open a book and start reading — your statistics will appear here."
+          />
         </div>
       </div>
     </transition>
@@ -643,37 +626,6 @@ onUnmounted(() => {
   color: var(--text-secondary);
 }
 
-.sp-empty-icon {
-  margin-bottom: 18px;
-  opacity: 0.4;
-}
-
-.sp-empty-title {
-  font-family: var(--font-display);
-  font-size: 20px;
-  font-weight: 500;
-  margin: 0 0 6px;
-  color: var(--reader-text);
-}
-
-.sp-empty-desc {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin: 0;
-  max-width: 280px;
-  line-height: 1.5;
-}
-
-.sp-loader {
-  width: 28px;
-  height: 28px;
-  border: 2px solid var(--border);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  margin-bottom: 14px;
-}
-
 /* ── Transition ── */
 .stats-page-fade-enter-active {
   transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
@@ -699,12 +651,6 @@ onUnmounted(() => {
 .stats-page-fade-leave-to .stats-page {
   transform: scale(0.97);
   opacity: 0;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 /* ── Responsive ── */

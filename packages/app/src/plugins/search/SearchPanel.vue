@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { onUnmounted } from "vue";
 import type { SearchResult } from "../../core/types";
-import ModalHeader from "../../components/modals/ModalHeader.vue";
+import ModalPanel from "../../components/modals/ModalPanel.vue";
+import AppIcon from "../../components/ui/AppIcon.vue";
 import { getSearchApi } from ".";
 
 const emit = defineEmits<{ (e: "close"): void }>();
@@ -41,70 +42,51 @@ function highlightMatch(context: string): string {
 </script>
 
 <template>
-  <div class="modal-content-inner">
-    <ModalHeader title="Search" @close="emit('close')">
-      <template #extra>
-        <div class="search-box-wrapper">
-          <div class="search-row">
-            <input
-              :value="api.searchQuery"
-              @input="handleSearchInput(($event.target as HTMLInputElement).value)"
-              type="text"
-              placeholder="Search in book..."
-              class="search-input"
-            />
-            <button class="search-submit" @click="api.doSearch()" aria-label="Search">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-              >
-                <circle cx="11" cy="11" r="8" />
-                <path d="M21 21l-4.3-4.3" />
-              </svg>
-            </button>
-          </div>
-          <div class="search-results-info" v-if="api.searchResults.length > 0">
-            <span class="results-count"
-              >{{ api.searchResults.length }} result{{
-                api.searchResults.length !== 1 ? "s" : ""
-              }}</span
-            >
-            <button
-              class="clear-highlights"
-              @click="api.clearHighlights()"
-              v-if="api.hasHighlights"
-            >
-              Clear
-            </button>
-          </div>
+  <ModalPanel title="Search" @close="emit('close')">
+    <template #extra>
+      <div class="search-box-wrapper">
+        <div class="search-row">
+          <input
+            :value="api.searchQuery"
+            @input="handleSearchInput(($event.target as HTMLInputElement).value)"
+            type="text"
+            placeholder="Search in book..."
+            class="search-input"
+          />
+          <button class="search-submit" @click="api.doSearch()" aria-label="Search">
+            <AppIcon name="search" :size="16" />
+          </button>
         </div>
-      </template>
-    </ModalHeader>
-    <div class="modal-body scroll-body">
-      <ul class="search-results">
-        <li
-          v-for="(result, i) in api.searchResults"
-          :key="i"
-          class="search-result"
-          @click.stop="handleResultClick(result)"
-        >
-          <div class="result-header">
-            <span class="result-chapter">{{ result.chapterTitle }}</span>
-            <span class="result-index">{{ i + 1 }}</span>
-          </div>
-          <p class="result-context" v-html="highlightMatch(result.context)"></p>
-        </li>
-      </ul>
-      <p v-if="api.searchResults.length === 0 && api.searchQuery" class="no-results">
-        No results found
-      </p>
-    </div>
-  </div>
+        <div class="search-results-info" v-if="api.searchResults.length > 0">
+          <span class="results-count"
+            >{{ api.searchResults.length }} result{{
+              api.searchResults.length !== 1 ? "s" : ""
+            }}</span
+          >
+          <button class="clear-highlights" @click="api.clearHighlights()" v-if="api.hasHighlights">
+            Clear
+          </button>
+        </div>
+      </div>
+    </template>
+    <ul class="search-results">
+      <li
+        v-for="(result, i) in api.searchResults"
+        :key="i"
+        class="search-result"
+        @click.stop="handleResultClick(result)"
+      >
+        <div class="result-header">
+          <span class="result-chapter">{{ result.chapterTitle }}</span>
+          <span class="result-index">{{ i + 1 }}</span>
+        </div>
+        <p class="result-context" v-html="highlightMatch(result.context)"></p>
+      </li>
+    </ul>
+    <p v-if="api.searchResults.length === 0 && api.searchQuery" class="no-results">
+      No results found
+    </p>
+  </ModalPanel>
 </template>
 
 <style scoped>

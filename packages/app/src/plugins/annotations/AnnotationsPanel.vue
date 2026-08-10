@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import type { Annotation } from "../../core/types";
-import ModalHeader from "../../components/modals/ModalHeader.vue";
+import ModalPanel from "../../components/modals/ModalPanel.vue";
+import EmptyState from "../../components/ui/EmptyState.vue";
+import FilterBar from "../../components/ui/FilterBar.vue";
+import AppIcon from "../../components/ui/AppIcon.vue";
+import { formatRelativeShort } from "../../utils/time";
 import { useAnnotationStore, useAnnotationFilters } from "./index";
 import { currentSession } from "../../stores/reader-session";
 
@@ -24,6 +28,12 @@ function handleDelete(id: string) {
 
 type Filter = "all" | "highlight" | "underline";
 const filter = ref<Filter>("all");
+
+const FILTER_ITEMS = [
+  { key: "all", label: "All" },
+  { key: "highlight", label: "Highlights" },
+  { key: "underline", label: "Underlines" },
+] as const;
 
 // Derive book-scoped annotations from the full entity store cache
 const annotations = computed(() =>
@@ -59,149 +69,56 @@ const groupedByChapter = computed(() => {
 
   return groups;
 });
-
-function formatDate(ts: number): string {
-  const date = new Date(ts);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return "Just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString();
-}
 </script>
 
 <template>
-  <div class="modal-content-inner">
-    <ModalHeader title="Annotations" @close="emit('close')" />
-
-    <div class="filter-bar">
-      <button
-        v-for="f in [
-          ['all', 'All'],
-          ['highlight', 'Highlights'],
-          ['underline', 'Underlines'],
-        ] as const"
-        :key="f[0]"
-        class="filter-btn"
-        :class="{ active: filter === f[0] }"
-        @click="filter = f[0]"
-      >
-        {{ f[1] }}
-      </button>
-    </div>
-
-    <div class="modal-body scroll-body">
-      <template v-if="groupedByChapter.length > 0">
-        <div v-for="group in groupedByChapter" :key="group.chapterId" class="chapter-group">
-          <h4 class="chapter-title">{{ group.title }}</h4>
-          <ul class="annotations-list">
-            <li v-for="ann in group.annotations" :key="ann.id" class="annotation-item">
-              <div class="annotation-card" @click.stop="handleNavigate(ann)">
-                <div class="annotation-left">
-                  <span
-                    v-if="ann.type === 'highlight'"
-                    class="color-dot"
-                    :style="{ backgroundColor: ann.color }"
-                  />
-                  <svg
-                    v-else
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    :stroke="ann.color"
-                    stroke-width="2.5"
-                    class="underline-icon"
-                  >
-                    <path d="M6 3v7a6 6 0 006 6 6 6 0 006-6V3" />
-                    <line x1="4" y1="21" x2="20" y2="21" />
-                  </svg>
-                </div>
-                <div class="annotation-main">
-                  <p class="annotation-preview">{{ ann.textPreview }}</p>
-                  <p v-if="ann.note" class="annotation-note">{{ ann.note }}</p>
-                  <span class="annotation-date">{{ formatDate(ann.createdAt) }}</span>
-                </div>
-                <button
-                  class="delete-btn"
-                  @click.stop="handleDelete(ann.id)"
-                  aria-label="Delete annotation"
-                >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                  >
-                    <path
-                      d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"
-                    />
-                  </svg>
-                </button>
+  <ModalPanel title="Annotations" @close="emit('close')">
+    <template #toolbar>
+      <FilterBar v-model="filter" :items="FILTER_ITEMS" />
+    </template>
+    <template v-if="groupedByChapter.length > 0">
+      <div v-for="group in groupedByChapter" :key="group.chapterId" class="chapter-group">
+        <h4 class="chapter-title">{{ group.title }}</h4>
+        <ul class="annotations-list">
+          <li v-for="ann in group.annotations" :key="ann.id" class="annotation-item">
+            <div class="annotation-card" @click.stop="handleNavigate(ann)">
+              <div class="annotation-left">
+                <span
+                  v-if="ann.type === 'highlight'"
+                  class="color-dot"
+                  :style="{ backgroundColor: ann.color }"
+                />
+                <span v-else class="underline-icon" :style="{ color: ann.color }">
+                  <AppIcon name="underline" :size="14" :stroke-width="2.5" />
+                </span>
               </div>
-            </li>
-          </ul>
-        </div>
-      </template>
-      <div v-else class="empty-state">
-        <svg
-          width="48"
-          height="48"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
-        >
-          <path
-            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-          />
-        </svg>
-        <p>No annotations yet</p>
-        <span>Select text in the reader to highlight or underline</span>
+              <div class="annotation-main">
+                <p class="annotation-preview">{{ ann.textPreview }}</p>
+                <p v-if="ann.note" class="annotation-note">{{ ann.note }}</p>
+                <span class="annotation-date">{{ formatRelativeShort(ann.createdAt) }}</span>
+              </div>
+              <button
+                class="delete-btn"
+                @click.stop="handleDelete(ann.id)"
+                aria-label="Delete annotation"
+              >
+                <AppIcon name="trash" :size="14" />
+              </button>
+            </div>
+          </li>
+        </ul>
       </div>
-    </div>
-  </div>
+    </template>
+    <EmptyState
+      v-if="groupedByChapter.length === 0"
+      icon="pencil"
+      title="No annotations yet"
+      description="Select text in the reader to highlight or underline"
+    />
+  </ModalPanel>
 </template>
 
 <style scoped>
-.filter-bar {
-  display: flex;
-  gap: 4px;
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--border-subtle);
-  flex-shrink: 0;
-}
-
-.filter-btn {
-  padding: 5px 14px;
-  border: none;
-  border-radius: 16px;
-  background: transparent;
-  color: var(--text-secondary, #6b7280);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 120ms ease;
-  font-family: inherit;
-}
-
-.filter-btn:hover {
-  background: var(--hover-bg, #f3f4f6);
-}
-
-.filter-btn.active {
-  background: var(--accent-soft, #eef2ff);
-  color: var(--accent, #6366f1);
-}
-
 .chapter-group {
   padding: 0 12px;
 }
@@ -258,6 +175,7 @@ function formatDate(ts: number): string {
 
 .underline-icon {
   flex-shrink: 0;
+  display: flex;
 }
 
 .annotation-main {
@@ -305,30 +223,5 @@ function formatDate(ts: number): string {
 .delete-btn:hover {
   background: #fef2f2;
   color: #dc2626;
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 200px;
-  color: var(--text-secondary);
-  gap: 8px;
-}
-
-.empty-state svg {
-  opacity: 0.4;
-}
-
-.empty-state p {
-  font-size: 14px;
-  font-weight: 500;
-  margin: 0;
-}
-
-.empty-state span {
-  font-size: 12px;
-  opacity: 0.7;
 }
 </style>

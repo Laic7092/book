@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
-import ModalHeader from "../../components/modals/ModalHeader.vue";
+import ModalPanel from "../../components/modals/ModalPanel.vue";
+import FilterBar from "../../components/ui/FilterBar.vue";
+import ToggleSwitch from "../../components/ui/ToggleSwitch.vue";
 import {
   getAllPlugins,
   setPluginEnabled,
@@ -107,142 +109,47 @@ defineEmits<{ close: [] }>();
 </script>
 
 <template>
-  <div class="modal-content-inner">
-    <ModalHeader title="插件管理" @close="$emit('close')" />
-
-    <!-- Filter pills -->
-    <div class="filter-bar">
-      <button
-        v-for="pill in filterPills"
-        :key="pill.key"
-        class="pill"
-        :class="{ active: activeFilter === pill.key }"
-        @click="activeFilter = pill.key"
+  <ModalPanel title="插件管理" body-padding="0 20px 20px" @close="$emit('close')">
+    <template #toolbar>
+      <FilterBar v-model="activeFilter" :items="filterPills" />
+    </template>
+    <div class="plugin-list">
+      <div
+        v-for="p in filteredPlugins"
+        :key="p.id"
+        class="plugin-row"
+        :class="{ disabled: !isEnabled(p), toggling: toggling.has(p.id) }"
       >
-        {{ pill.label }}
-        <span v-if="pill.count != null" class="pill-count">{{ pill.count }}</span>
-      </button>
-    </div>
-
-    <div class="plugin-body">
-      <div class="plugin-list">
-        <div
-          v-for="p in filteredPlugins"
-          :key="p.id"
-          class="plugin-row"
-          :class="{ disabled: !isEnabled(p), toggling: toggling.has(p.id) }"
-        >
-          <div class="plugin-info">
-            <span class="plugin-name">
-              {{ p.name }}
-              <span v-if="isCore(p)" class="core-badge">核心</span>
+        <div class="plugin-info">
+          <span class="plugin-name">
+            {{ p.name }}
+            <span v-if="isCore(p)" class="core-badge">核心</span>
+          </span>
+          <span class="plugin-id-line">
+            <span class="plugin-id">{{ p.id }} · v{{ p.version }}</span>
+            <span class="scene-badges">
+              <span v-for="label in getSceneLabels(p.id)" :key="label" class="scene-badge">{{
+                label
+              }}</span>
             </span>
-            <span class="plugin-id-line">
-              <span class="plugin-id">{{ p.id }} · v{{ p.version }}</span>
-              <span class="scene-badges">
-                <span v-for="label in getSceneLabels(p.id)" :key="label" class="scene-badge">{{
-                  label
-                }}</span>
-              </span>
-            </span>
-          </div>
-          <div v-if="!isCore(p)" class="toggle" @click.prevent="toggle(p.id)">
-            <input type="checkbox" :checked="isEnabled(p)" @change="toggle(p.id)" />
-            <span class="toggle-track">
-              <span class="toggle-thumb" />
-            </span>
-          </div>
+          </span>
         </div>
+        <ToggleSwitch
+          v-if="!isCore(p)"
+          :model-value="isEnabled(p)"
+          :disabled="toggling.has(p.id)"
+          :label="p.name"
+          @update:model-value="toggle(p.id)"
+        />
       </div>
-
-      <p v-if="filteredPlugins.length === 0" class="empty-tab">该分类下暂无插件</p>
     </div>
-  </div>
+
+    <p v-if="filteredPlugins.length === 0" class="empty-tab">该分类下暂无插件</p>
+  </ModalPanel>
 </template>
 
 <style scoped>
-/* ── Filter pills ── */
-
-.filter-bar {
-  display: flex;
-  gap: 8px;
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--border);
-  flex-wrap: wrap;
-}
-
-.pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  font-size: 13px;
-  font-weight: 500;
-  border-radius: 20px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition:
-    background 150ms,
-    color 150ms,
-    border-color 150ms;
-}
-
-.pill:hover {
-  background: var(--hover-bg);
-  color: var(--reader-text);
-}
-
-.pill.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-
-.pill-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: 9px;
-  font-size: 11px;
-  font-weight: 600;
-  background: rgba(0, 0, 0, 0.1);
-}
-
-.pill.active .pill-count {
-  background: rgba(255, 255, 255, 0.25);
-}
-
-/* ── Plugin body ── */
-
-.plugin-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 20px 20px;
-}
-
-.plugin-hint {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin: 16px 0;
-  line-height: 1.5;
-}
-
-.core-badge-sm {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--accent);
-}
-
-.plugin-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
+/* ── Plugin list ── */
 
 .plugin-row {
   display: flex;
@@ -328,49 +235,5 @@ defineEmits<{ close: [] }>();
   color: var(--text-secondary);
   border: 1px solid var(--border);
   white-space: nowrap;
-}
-
-.toggle {
-  position: relative;
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  margin-left: 12px;
-}
-
-.toggle input {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.toggle-track {
-  width: 44px;
-  height: 26px;
-  border-radius: 13px;
-  background: var(--border);
-  transition: background-color 200ms ease;
-  display: flex;
-  align-items: center;
-  padding: 0 3px;
-  flex-shrink: 0;
-}
-
-input:checked + .toggle-track {
-  background: var(--accent);
-}
-
-.toggle-thumb {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: white;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-  transition: transform 200ms ease;
-}
-
-input:checked + .toggle-track .toggle-thumb {
-  transform: translateX(18px);
 }
 </style>

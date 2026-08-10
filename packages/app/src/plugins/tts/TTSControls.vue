@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import AppIcon from "../../components/ui/AppIcon.vue";
+import ProgressBar from "../../components/ui/ProgressBar.vue";
 import { currentSession } from "../../stores/reader-session";
 
 // ── State ──
@@ -248,20 +250,7 @@ watch(speed, (val) => {
     @click.stop="toggleExpanded"
     :title="isActive ? 'TTS Controls' : 'Text to Speech'"
   >
-    <svg
-      viewBox="0 0 24 24"
-      width="20"
-      height="20"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.5"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-    >
-      <path d="M11 5L6 9H2v6h4l5 4V5z" />
-      <path d="M19.07 4.93a10 10 0 010 14.14" />
-      <path d="M15.54 8.46a5 5 0 010 7.07" />
-    </svg>
+    <AppIcon name="mic" :size="20" :stroke-width="1.5" />
   </div>
 
   <!-- Expanded panel -->
@@ -276,16 +265,7 @@ watch(speed, (val) => {
           expanded = false;
         "
       >
-        <svg
-          viewBox="0 0 24 24"
-          width="16"
-          height="16"
-          stroke="currentColor"
-          stroke-width="2"
-          fill="none"
-        >
-          <path d="M18 6L6 18M6 6l12 12" />
-        </svg>
+        <AppIcon name="close" :size="16" />
       </button>
     </div>
 
@@ -293,7 +273,7 @@ watch(speed, (val) => {
     <div v-if="sentences[currentSentenceIndex]" class="sentence-display">
       <p>{{ sentences[currentSentenceIndex] }}</p>
       <div class="progress-track">
-        <div class="progress-fill" :style="{ width: progress + '%' }"></div>
+        <ProgressBar :value="progress" size="sm" />
       </div>
     </div>
     <div v-else class="sentence-display empty">
@@ -310,9 +290,7 @@ watch(speed, (val) => {
           :disabled="speed <= MIN_SPEED"
           title="Slower"
         >
-          <svg viewBox="0 0 24 24" width="12" height="12">
-            <path d="M5 12h14" stroke="currentColor" stroke-width="2.5" fill="none" />
-          </svg>
+          <AppIcon name="minus" :size="12" :stroke-width="2.5" />
         </button>
         <span class="speed-label">{{ speed.toFixed(2) }}x</span>
         <button
@@ -321,9 +299,7 @@ watch(speed, (val) => {
           :disabled="speed >= MAX_SPEED"
           title="Faster"
         >
-          <svg viewBox="0 0 24 24" width="12" height="12">
-            <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" fill="none" />
-          </svg>
+          <AppIcon name="plus" :size="12" :stroke-width="2.5" />
         </button>
       </div>
 
@@ -335,25 +311,12 @@ watch(speed, (val) => {
           :disabled="!isActive || currentSentenceIndex <= 0"
           title="Previous sentence"
         >
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-            <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
-          </svg>
+          <AppIcon name="skip-back" :size="16" />
         </button>
 
         <button class="play-btn" @click="togglePlay">
-          <svg
-            v-if="state === 'playing'"
-            viewBox="0 0 24 24"
-            width="18"
-            height="18"
-            fill="currentColor"
-          >
-            <rect x="6" y="4" width="4" height="16" rx="1" />
-            <rect x="14" y="4" width="4" height="16" rx="1" />
-          </svg>
-          <svg v-else viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-            <path d="M8 5v14l11-7z" />
-          </svg>
+          <AppIcon v-if="state === 'playing'" name="pause" :size="18" />
+          <AppIcon v-else name="play" :size="18" />
         </button>
 
         <button
@@ -362,9 +325,7 @@ watch(speed, (val) => {
           :disabled="!isActive || currentSentenceIndex >= sentences.length - 1"
           title="Next sentence"
         >
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-            <path d="M4 18l8.5-6L4 6v12zm9-12v12h2V6h-2z" />
-          </svg>
+          <AppIcon name="skip-forward" :size="16" />
         </button>
       </div>
 
@@ -372,9 +333,7 @@ watch(speed, (val) => {
       <div class="counter">
         <span v-if="isActive">{{ currentSentenceIndex + 1 }}/{{ sentences.length }}</span>
         <button v-if="isActive" class="ctrl-btn stop-btn" @click="stop" title="Stop">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-            <rect x="6" y="6" width="12" height="12" rx="1" />
-          </svg>
+          <AppIcon name="stop" :size="14" />
         </button>
       </div>
     </div>
@@ -481,17 +440,9 @@ watch(speed, (val) => {
 
 .progress-track {
   height: 2px;
-  background: var(--border-subtle, #e0e0e0);
   border-radius: 2px;
   margin-top: 6px;
   overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background: var(--accent, #5b9aff);
-  border-radius: 2px;
-  transition: width 150ms linear;
 }
 
 /* ── Controls ── */

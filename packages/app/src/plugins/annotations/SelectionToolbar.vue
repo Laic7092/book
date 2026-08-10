@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import AppIcon from "../../components/ui/AppIcon.vue";
 import { HIGHLIGHT_COLORS } from "../../utils/colors";
 
 defineProps<{
@@ -44,17 +45,7 @@ let noteText = ref("");
             @mousedown.prevent
             @click.stop="emit('underline')"
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path d="M6 3v7a6 6 0 006 6 6 6 0 006-6V3" />
-              <line x1="4" y1="21" x2="20" y2="21" />
-            </svg>
+            <AppIcon name="underline" :size="16" />
           </button>
           <button
             class="toolbar-btn"
@@ -62,16 +53,7 @@ let noteText = ref("");
             @mousedown.prevent
             @click.stop="emit('add-note')"
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
-            </svg>
+            <AppIcon name="note" :size="16" />
           </button>
         </div>
       </template>

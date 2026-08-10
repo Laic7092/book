@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AppIcon from "../ui/AppIcon.vue";
+
 defineProps<{
   title: string;
 }>();
@@ -16,17 +18,7 @@ const emit = defineEmits<{
         <h3>{{ title }}</h3>
       </div>
       <button class="modal-close" @click="emit('close')" aria-label="Close">
-        <svg
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
-          stroke-linecap="round"
-        >
-          <path d="M18 6L6 18M6 6l12 12" />
-        </svg>
+        <AppIcon name="close" :size="20" :stroke-width="1.5" />
       </button>
     </div>
     <slot name="extra" />

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, watch, onUnmounted } from "vue";
 import { getSearchApi } from ".";
+import AppIcon from "../../components/ui/AppIcon.vue";
 import { useUIStore } from "../../stores/ui";
 
 const uiStore = useUIStore();
@@ -58,42 +59,15 @@ const currentLabel = computed(() => {
   >
     <div class="search-nav-chip">
       <button class="nav-btn" @click.stop="handlePrevMatch()" aria-label="Previous match">
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.5"
-        >
-          <path d="M15 18l-6-6 6-6" />
-        </svg>
+        <AppIcon name="chevron-left" :size="14" :stroke-width="2.5" />
       </button>
       <span class="nav-counter">{{ currentLabel }}</span>
       <button class="nav-btn" @click.stop="handleNextMatch()" aria-label="Next match">
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.5"
-        >
-          <path d="M9 18l6-6-6-6" />
-        </svg>
+        <AppIcon name="chevron-right" :size="14" :stroke-width="2.5" />
       </button>
       <div class="nav-divider"></div>
       <button class="nav-btn nav-close" @click.stop="handleClear" aria-label="Exit search">
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.5"
-        >
-          <path d="M18 6L6 18M6 6l12 12" />
-        </svg>
+        <AppIcon name="close" :size="14" :stroke-width="2.5" />
       </button>
     </div>
   </div>

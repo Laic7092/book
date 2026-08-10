@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import ModalHeader from "../../components/modals/ModalHeader.vue";
+import ModalPanel from "../../components/modals/ModalPanel.vue";
+import AppIcon from "../../components/ui/AppIcon.vue";
 import { THEME_OPTIONS, READING_MODE_OPTIONS, FONT_SIZE_PRESETS } from "./options";
 import { getSettingsState } from "./index";
 import { useUIStore } from "../../stores/ui";
 import { themeRegistry } from "../../core/theme-registry";
+import { fileToBase64 } from "../../utils/file";
 import { ref } from "vue";
 
 const state = getSettingsState();
@@ -21,15 +23,6 @@ const emit = defineEmits<{
 const bgImageInputRef = ref<HTMLInputElement | null>(null);
 const bgImageUploading = ref(false);
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
-
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
 
 async function handleBgImageUpload(e: Event) {
   const input = e.target as HTMLInputElement;
@@ -56,223 +49,176 @@ function removeBgImage() {
 </script>
 
 <template>
-  <div class="modal-content-inner">
-    <ModalHeader title="阅读设置" @close="emit('close')" />
-
-    <div class="modal-body">
-      <!-- 核心设置 -->
-      <div class="core-settings">
-        <!-- 主题 -->
-        <div class="setting-row">
-          <label class="setting-label">主题</label>
-          <div class="theme-options">
-            <button
-              v-for="theme in THEME_OPTIONS"
-              :key="theme.value"
-              :class="['theme-btn', { active: settings.theme === theme.value }]"
-              @click="state.update({ theme: settings.theme === theme.value ? null : theme.value })"
-            >
-              <div class="theme-preview" :style="{ background: themePreviewBg(theme.value) }"></div>
-              <span>{{ theme.label }}</span>
-              <span v-if="settings.theme === theme.value" class="theme-check">✓</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- 字号 -->
-        <div class="setting-row">
-          <label class="setting-label">
-            <span>字号</span>
-            <span class="setting-value" v-if="settings.fontSize == null">使用原始字号</span>
-          </label>
-          <div class="size-options">
-            <button
-              v-for="size in FONT_SIZE_PRESETS"
-              :key="size"
-              :class="['size-btn', { active: settings.fontSize === size }]"
-              @click="state.update({ fontSize: settings.fontSize === size ? null : size })"
-            >
-              {{ size }}
-            </button>
-          </div>
-        </div>
-
-        <!-- 自定义颜色 -->
-        <div class="setting-row">
-          <label class="setting-label">自定义颜色</label>
-          <div class="color-custom-row">
-            <label class="color-field">
-              <span class="color-label">背景</span>
-              <span class="color-input-wrap">
-                <input
-                  type="color"
-                  :value="settings.customBgColor || '#ffffff'"
-                  @input="
-                    state.update({
-                      customBgColor: ($event.target as HTMLInputElement).value,
-                      useCustomColors: true,
-                    })
-                  "
-                  class="color-picker"
-                />
-                <span class="color-hex">{{ settings.customBgColor }}</span>
-              </span>
-            </label>
-            <label class="color-field">
-              <span class="color-label">文字</span>
-              <span class="color-input-wrap">
-                <input
-                  type="color"
-                  :value="settings.customTextColor || '#000000'"
-                  @input="
-                    state.update({
-                      customTextColor: ($event.target as HTMLInputElement).value,
-                      useCustomColors: true,
-                    })
-                  "
-                  class="color-picker"
-                />
-                <span class="color-hex">{{ settings.customTextColor }}</span>
-              </span>
-            </label>
-          </div>
+  <ModalPanel title="阅读设置" body-padding="16px 20px 24px" @close="emit('close')">
+    <!-- 核心设置 -->
+    <div class="core-settings">
+      <!-- 主题 -->
+      <div class="setting-row">
+        <label class="setting-label">主题</label>
+        <div class="theme-options">
           <button
-            v-if="settings.useCustomColors"
-            class="color-reset-btn"
-            @click="state.update({ useCustomColors: false })"
+            v-for="theme in THEME_OPTIONS"
+            :key="theme.value"
+            :class="['theme-btn', { active: settings.theme === theme.value }]"
+            @click="state.update({ theme: settings.theme === theme.value ? null : theme.value })"
           >
-            恢复主题颜色
+            <div class="theme-preview" :style="{ background: themePreviewBg(theme.value) }"></div>
+            <span>{{ theme.label }}</span>
+            <span v-if="settings.theme === theme.value" class="theme-check">✓</span>
           </button>
         </div>
+      </div>
 
-        <!-- 自定义背景图片 -->
-        <div class="setting-row">
-          <label class="setting-label">背景图片</label>
-          <div class="bg-image-area">
-            <div v-if="settings.customBgImage" class="bg-image-preview-wrap">
-              <div
-                class="bg-image-preview"
-                :style="{ backgroundImage: `url(${settings.customBgImage})` }"
-              ></div>
-              <button class="bg-image-remove" @click="removeBgImage">
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                >
-                  <path d="M18 6L6 18M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div v-else class="bg-image-upload">
-              <input
-                ref="bgImageInputRef"
-                type="file"
-                accept="image/*"
-                style="display: none"
-                @change="handleBgImageUpload"
-              />
-              <button
-                class="bg-image-upload-btn"
-                :disabled="bgImageUploading"
-                @click="bgImageInputRef?.click()"
-              >
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                >
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                  <circle cx="8.5" cy="8.5" r="1.5" />
-                  <path d="M21 15l-5-5L5 21" />
-                </svg>
-                <span>{{ bgImageUploading ? "上传中..." : "选择图片" }}</span>
-              </button>
-              <p class="bg-image-hint">支持 JPG、PNG、WebP，最大 5MB</p>
-            </div>
-          </div>
+      <!-- 字号 -->
+      <div class="setting-row">
+        <label class="setting-label">
+          <span>字号</span>
+          <span class="setting-value" v-if="settings.fontSize == null">使用原始字号</span>
+        </label>
+        <div class="size-options">
+          <button
+            v-for="size in FONT_SIZE_PRESETS"
+            :key="size"
+            :class="['size-btn', { active: settings.fontSize === size }]"
+            @click="state.update({ fontSize: settings.fontSize === size ? null : size })"
+          >
+            {{ size }}
+          </button>
         </div>
+      </div>
 
-        <!-- 阅读模式 -->
-        <div class="setting-row">
-          <label class="setting-label">阅读模式</label>
-          <div class="mode-options">
-            <button
-              v-for="mode in READING_MODE_OPTIONS"
-              :key="mode.value"
-              :class="['mode-btn', { active: (settings.readingMode || 'vertical') === mode.value }]"
-              @click="state.update({ readingMode: mode.value })"
-            >
-              <svg
-                v-if="mode.value === 'vertical'"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
-              >
-                <path d="M12 5v14M19 12l-7 7-7-7" />
-              </svg>
-              <svg
-                v-else
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
-              >
-                <rect x="4" y="4" width="16" height="16" rx="2" />
-                <path d="M9 4v16M4 12h16" />
-              </svg>
-              <span>{{ mode.label }}</span>
-              <span class="mode-desc">{{ mode.desc }}</span>
+      <!-- 自定义颜色 -->
+      <div class="setting-row">
+        <label class="setting-label">自定义颜色</label>
+        <div class="color-custom-row">
+          <label class="color-field">
+            <span class="color-label">背景</span>
+            <span class="color-input-wrap">
+              <input
+                type="color"
+                :value="settings.customBgColor || '#ffffff'"
+                @input="
+                  state.update({
+                    customBgColor: ($event.target as HTMLInputElement).value,
+                    useCustomColors: true,
+                  })
+                "
+                class="color-picker"
+              />
+              <span class="color-hex">{{ settings.customBgColor }}</span>
+            </span>
+          </label>
+          <label class="color-field">
+            <span class="color-label">文字</span>
+            <span class="color-input-wrap">
+              <input
+                type="color"
+                :value="settings.customTextColor || '#000000'"
+                @input="
+                  state.update({
+                    customTextColor: ($event.target as HTMLInputElement).value,
+                    useCustomColors: true,
+                  })
+                "
+                class="color-picker"
+              />
+              <span class="color-hex">{{ settings.customTextColor }}</span>
+            </span>
+          </label>
+        </div>
+        <button
+          v-if="settings.useCustomColors"
+          class="color-reset-btn"
+          @click="state.update({ useCustomColors: false })"
+        >
+          恢复主题颜色
+        </button>
+      </div>
+
+      <!-- 自定义背景图片 -->
+      <div class="setting-row">
+        <label class="setting-label">背景图片</label>
+        <div class="bg-image-area">
+          <div v-if="settings.customBgImage" class="bg-image-preview-wrap">
+            <div
+              class="bg-image-preview"
+              :style="{ backgroundImage: `url(${settings.customBgImage})` }"
+            ></div>
+            <button class="bg-image-remove" @click="removeBgImage">
+              <AppIcon name="close" :size="14" />
             </button>
+          </div>
+          <div v-else class="bg-image-upload">
+            <input
+              ref="bgImageInputRef"
+              type="file"
+              accept="image/*"
+              style="display: none"
+              @change="handleBgImageUpload"
+            />
+            <button
+              class="bg-image-upload-btn"
+              :disabled="bgImageUploading"
+              @click="bgImageInputRef?.click()"
+            >
+              <AppIcon name="image" :size="20" />
+              <span>{{ bgImageUploading ? "上传中..." : "选择图片" }}</span>
+            </button>
+            <p class="bg-image-hint">支持 JPG、PNG、WebP，最大 5MB</p>
           </div>
         </div>
       </div>
 
-      <!-- 自定义排版按钮 -->
-      <button class="typography-btn" @click="useUIStore().openModal('typographySettings')">
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <path d="M4 7V4h16v3M9 20h6M12 4v16" />
-        </svg>
-        <span>自定义排版</span>
-        <svg
-          class="arrow-icon"
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <path d="M9 18l6-6-6-6" />
-        </svg>
-      </button>
+      <!-- 阅读模式 -->
+      <div class="setting-row">
+        <label class="setting-label">阅读模式</label>
+        <div class="mode-options">
+          <button
+            v-for="mode in READING_MODE_OPTIONS"
+            :key="mode.value"
+            :class="['mode-btn', { active: (settings.readingMode || 'vertical') === mode.value }]"
+            @click="state.update({ readingMode: mode.value })"
+          >
+            <svg
+              v-if="mode.value === 'vertical'"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <path d="M12 5v14M19 12l-7 7-7-7" />
+            </svg>
+            <svg
+              v-else
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <rect x="4" y="4" width="16" height="16" rx="2" />
+              <path d="M9 4v16M4 12h16" />
+            </svg>
+            <span>{{ mode.label }}</span>
+            <span class="mode-desc">{{ mode.desc }}</span>
+          </button>
+        </div>
+      </div>
     </div>
-  </div>
+
+    <!-- 自定义排版按钮 -->
+    <button class="typography-btn" @click="useUIStore().openModal('typographySettings')">
+      <AppIcon name="type" :size="18" />
+      <span>自定义排版</span>
+      <AppIcon name="chevron-right" class="arrow-icon" :size="16" />
+    </button>
+  </ModalPanel>
 </template>
 
 <style scoped>
-.modal-body {
-  padding: 16px 20px 24px;
-}
-
 .core-settings {
   display: flex;
   flex-direction: column;
@@ -302,8 +248,7 @@ function removeBgImage() {
 
 .theme-options,
 .size-options,
-.mode-options,
-.anim-options {
+.mode-options {
   display: flex;
   gap: 8px;
 }
@@ -616,31 +561,5 @@ function removeBgImage() {
   font-size: 11px;
   color: var(--text-secondary);
   margin: 0;
-}
-
-/* Animation options */
-.anim-btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 10px;
-  border: 1.5px solid var(--border);
-  border-radius: 8px;
-  background: var(--modal-bg);
-  cursor: pointer;
-  transition: all 150ms ease;
-  font-size: 13px;
-  color: var(--modal-text);
-}
-
-.anim-btn:hover {
-  border-color: var(--border);
-  background: var(--bg-secondary);
-}
-
-.anim-btn.active {
-  border-color: var(--accent);
-  background: var(--accent-soft);
 }
 </style>

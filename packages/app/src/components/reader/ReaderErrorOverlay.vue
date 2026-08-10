@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AppIcon from "../ui/AppIcon.vue";
+
 defineProps<{
   message: string | null;
 }>();
@@ -13,20 +15,7 @@ const emit = defineEmits<{
   <div class="reader-error-overlay">
     <div class="error-card">
       <div class="error-icon">
-        <svg
-          width="40"
-          height="40"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <circle cx="12" cy="12" r="10" />
-          <line x1="12" y1="8" x2="12" y2="12" />
-          <line x1="12" y1="16" x2="12.01" y2="16" />
-        </svg>
+        <AppIcon name="alert" :size="40" :stroke-width="1.5" />
       </div>
       <p class="error-title">Failed to load chapter</p>
       <p class="error-message" v-if="message">{{ message }}</p>
