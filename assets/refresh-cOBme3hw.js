@@ -1,0 +1,1 @@
+var e=null;function t(t){e=t}function n(){e?.()}export{n,t};
