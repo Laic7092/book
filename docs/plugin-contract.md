@@ -10,7 +10,7 @@
 
 | 类别                         | 定义                       | 判定门槛（全部满足）                                                                               | 现状                                                                                                                                         |
 | ---------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| **核心**                     | 无它无法"打开一本书并阅读" | ① 基础性：缺它阅读流程断裂 ② 被依赖：核心代码或多个插件依赖它 ③ 无独立 UI 面，或 UI 面就是阅读本身 | reader machine、reader-engine、parser-core、storage、app 壳（ReaderChrome/Bookshelf/路由）、`core/`（theme-registry、reader-settings）       |
+| **核心**                     | 无它无法"打开一本书并阅读" | ① 基础性：缺它阅读流程断裂 ② 被依赖：核心代码或多个插件依赖它 ③ 无独立 UI 面，或 UI 面就是阅读本身 | reader machine、engine、parser、storage、app 壳（ReaderChrome/Bookshelf/路由）、`core/`（theme-registry、reader-settings）                   |
 | **核心插件**（`core: true`） | 永远需要，但保留插件形态   | ① 满足"插件"定义 ② 不可禁用（缺它产品不成立）                                                      | `manager`（插件管理入口）                                                                                                                    |
 | **插件**                     | 可选的用户可见能力         | ① 可禁用而不破坏其他功能 ② 有独立领域逻辑与 UI 面 ③ 只有一个入口：`setup` + 事件监听               | 其余 12 个（settings、stats、search、tts、annotations、bookmarks、opds、book-sources、auto-read、progress-bar、reading-progress、last-book） |
 
@@ -27,7 +27,7 @@
    - 核心事件总线（`ctx.events`）——单向通知；
    - **服务注册（`ctx.expose` / `ctx.require`）**——服务调用。`expose` 在 teardown 时自动移除；`require` 拿不到时返回 `undefined`，调用方必须优雅降级；
    - 不允许模块级全局（stats 的 `setStatsEngine` 是插件内部单例，未导出给其他插件，属合规）。
-3. **插件可以 import 核心**：`@book/reader-core` 类型、`core/` 下的类型与纯函数、`utils/` 的纯工具（如 `reader-css.ts`）。
+3. **插件可以 import 核心**：`@book/engine` 类型、`core/` 下的类型与纯函数、`utils/` 的纯工具（如 `reader-css.ts`）。
 4. 插件私有代码（引擎、解析器、组件）一律留在插件目录内。
 
 ---

@@ -6,7 +6,7 @@ A browser-based ebook reader PWA. Import books from files or OPDS catalogs, read
 
 ```bash
 pnpm install
-vp dev packages/app
+vp dev app
 ```
 
 Open the dev server URL in your browser. Import EPUB/PDF/CBZ/CBR/TXT/FB2/MOBI files to start reading.
@@ -15,12 +15,12 @@ Open the dev server URL in your browser. Import EPUB/PDF/CBZ/CBR/TXT/FB2/MOBI fi
 
 | Command                          | Description                               |
 | -------------------------------- | ----------------------------------------- |
-| `vp dev packages/app`            | Start the PWA dev server                  |
+| `vp dev app`                     | Start the PWA dev server                  |
 | `vp check`                       | Lint + TypeScript typecheck               |
 | `vp check --fix`                 | Lint + typecheck with auto-fix            |
 | `vp fmt`                         | Format code (oxc)                         |
 | `vp test`                        | Run vitest tests                          |
-| `vp build packages/app`          | Production build                          |
+| `vp build app`                   | Production build                          |
 | `pnpm --filter @book/server dev` | Start Hono API server (OPDS, local files) |
 
 ### Prerequisites
@@ -30,16 +30,14 @@ Open the dev server URL in your browser. Import EPUB/PDF/CBZ/CBR/TXT/FB2/MOBI fi
 
 ## Architecture
 
-The project is a pnpm workspace monorepo with 6 packages under `packages/`:
+The project is a pnpm workspace monorepo: `app/` and `server/` at the root, two library packages under `packages/`:
 
 ```
+app/            Vue 3 PWA — UI, router, storage, plugin manager
+server/         Hono server for OPDS catalogs and filesystem access
 packages/
-  app/            Vue 3 PWA — UI, router, storage, plugin manager
-  parser-core/    Parser registry + lazy-loaded format parsers (epub, pdf, cbz, …)
-  reader-core/    Pure reader state machine (framework-agnostic reducer)
-  reader-engine/  Iframe-based rendering engine (reflowable + fixed-layout hosts)
-  server/         Hono server for OPDS catalogs and filesystem access
-  contracts/      Shared wire contracts between app and server
+  engine/       Iframe rendering engine + pure reader state machine
+  parser/       Parser registry + lazy-loaded format parsers (epub, pdf, cbz, …)
 ```
 
 ### Plugin system
@@ -57,12 +55,12 @@ Plugins have access to reactive IndexedDB storage, a typed event bus, filter hoo
 1. **Parse** — parser extracts chapters and content from the file
 2. **Store** — book metadata and chapters saved to IndexedDB
 3. **Render** — chapter HTML passes through content transformers → resource injection → iframe
-4. **Paginate** — the iframe renders in CSS multi-column layout (`column-width`, `column-fill: auto`); page count is computed from `body.scrollWidth / viewportWidth` (pure math in `reader-engine/src/layout.ts`), re-measured via `ResizeObserver` when content/fonts settle
-5. **Scroll mode** — chapters are wrapped in `.scroll-chapter` containers; in-chapter progress and viewport-top anchor are computed by `reader-engine/src/scroll-progress.ts`, with `IntersectionObserver` sentinels pre-loading adjacent chapters
+4. **Paginate** — the iframe renders in CSS multi-column layout (`column-width`, `column-fill: auto`); page count is computed from `body.scrollWidth / viewportWidth` (pure math in `packages/engine/src/layout.ts`), re-measured via `ResizeObserver` when content/fonts settle
+5. **Scroll mode** — chapters are wrapped in `.scroll-chapter` containers; in-chapter progress and viewport-top anchor are computed by `packages/engine/src/scroll-progress.ts`, with `IntersectionObserver` sentinels pre-loading adjacent chapters
 
 ### Format support
 
-All formats use lazy-loaded parsers registered in `packages/parser-core/src/index.ts`:
+All formats use lazy-loaded parsers registered in `packages/parser/src/index.ts`:
 
 | Format        | Extensions               |
 | ------------- | ------------------------ |
@@ -76,7 +74,7 @@ All formats use lazy-loaded parsers registered in `packages/parser-core/src/inde
 
 ## Deployment
 
-Push to `main` triggers GitHub Actions: `pnpm install` → `pnpm build` → deploys `packages/app/dist` to `gh-pages` branch.
+Push to `main` triggers GitHub Actions: `pnpm install` → `pnpm build` → deploys `app/dist` to `gh-pages` branch.
 
 ## Tech stack
 

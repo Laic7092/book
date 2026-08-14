@@ -1,0 +1,17 @@
+{
+  "name": "app",
+  "version": "0.0.0",
+  "type": "module",
+  "dependencies": {
+    "@book/engine": "workspace:*",
+    "@book/parser": "workspace:*",
+    "@zip.js/zip.js": "^2.8.26",
+    "pdfjs-dist": "^5.7.284",
+    "pinia": "^3.0.4",
+    "vue": "^3.5.34"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.6",
+    "vite-plugin-pwa": "^1.3.0"
+  }
+}
