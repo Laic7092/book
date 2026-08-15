@@ -35,7 +35,7 @@ export const statsPlugin: Plugin = {
     ctx.events.on("book:closed", ({ bookId }) => {
       // Best effort: the session may already be gone by the time this fires.
       const state = ctx.readerSession()?.getState();
-      const chapterId = state?.chapters[state.currentChapterIndex]?.id;
+      const chapterId = state?.chapters[state.position.chapterIndex]?.id;
       const totalChapters = state?.chapters.length;
       void eng.endSession(bookId, chapterId, totalChapters);
     });

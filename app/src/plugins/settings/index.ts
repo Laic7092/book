@@ -227,11 +227,7 @@ export const settingsPlugin: Plugin = {
       () => s.value.readingMode,
       (mode) => {
         const host = ctx.readerSession();
-        if (host)
-          host.dispatch({
-            type: "SET_MODE",
-            mode: (mode ?? "pagination") === "vertical" ? "scroll" : "pagination",
-          });
+        if (host) host.setMode((mode ?? "pagination") === "vertical" ? "scroll" : "pagination");
       },
     );
 

@@ -102,11 +102,11 @@ function advanceChapter() {
   if (!session) return;
   const s = session.getState();
   const chapters = s.chapters;
-  const current = chapters[s.currentChapterIndex];
+  const current = chapters[s.position.chapterIndex];
   if (!current) return;
   const idx = chapters.findIndex((c) => c.id === current.id);
   if (idx < chapters.length - 1) {
-    session.dispatch({ type: "GO_TO_CHAPTER", chapterId: chapters[idx + 1].id });
+    session.dispatch({ type: "SEEK", chapterIndex: idx + 1 });
     start();
   } else {
     expanded.value = false;
@@ -223,10 +223,10 @@ onMounted(() => {
   // Chapter change detection: watch machine state for chapter transitions
   const session = currentSession.value;
   if (session) {
-    let lastChapterId = session.getState().chapters[session.getState().currentChapterIndex]?.id;
+    let lastChapterId = session.getState().chapters[session.getState().position.chapterIndex]?.id;
     chapterChangeUnsub = (() => {
       const s = session.getState();
-      const chId = s.chapters[s.currentChapterIndex]?.id;
+      const chId = s.chapters[s.position.chapterIndex]?.id;
       if (chId && chId !== lastChapterId) {
         lastChapterId = chId;
         onChapterChange();

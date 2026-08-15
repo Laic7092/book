@@ -28,8 +28,8 @@ export interface PluginEventMap {
     chapterIndex: number;
     mode: "pagination" | "scroll";
     page: number;
-    scrollProgress: number;
-    scrollAnchor?: number;
+    progress: number;
+    anchor?: number;
   };
   [key: string]: unknown;
 }
@@ -59,8 +59,10 @@ export interface InitConfig {
   bookId: string;
   chapterIndex: number;
   mode: "pagination" | "scroll";
-  initialPage?: Partial<import("@book/engine").PageState>;
-  initialScroll?: Partial<{ progress: number }>;
+  /** Exact scroll-style restore (progress + optional anchor). */
+  initialPosition?: Partial<import("@book/engine").Position>;
+  /** Exact pagination page restore (page -1 = last page). */
+  initialPage?: number;
 }
 
 /** Maps hook names to their payload types. */

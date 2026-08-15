@@ -21,24 +21,41 @@ import type { Chapter } from "../core/types";
 
 export type { ReaderState, ReaderAction, ReaderEffect };
 
+/**
+ * Map unified machine effects to the plugin event bus. The machine speaks one
+ * language (position + presentation); plugins keep their stable events
+ * (chapter:changed / page:changed / scroll:progress / content:loaded /
+ * mode:changed / reader:unmounted).
+ */
 export function translateEffect(effect: ReaderEffect, bookId: string): void {
   switch (effect.type) {
-    case "CHAPTER_DID_CHANGE":
-      void pluginEvents.emit("chapter:changed", {
-        bookId,
-        chapterId: effect.chapterId,
-        previousChapterId: effect.previousChapterId ?? undefined,
-      });
+    case "POSITION_CHANGED": {
+      const { chapterId, previousChapterId, position, presentation } = effect;
+      if (chapterId && previousChapterId && previousChapterId !== chapterId) {
+        void pluginEvents.emit("chapter:changed", {
+          bookId,
+          chapterId,
+          previousChapterId,
+        });
+      }
+      if (!chapterId) break;
+      if (presentation.mode === "pagination") {
+        void pluginEvents.emit("page:changed", {
+          bookId,
+          chapterId,
+          page: presentation.page,
+          totalPages: presentation.total,
+        });
+      } else {
+        void pluginEvents.emit("scroll:progress", {
+          bookId,
+          progress: position.progress,
+          anchor: position.anchor,
+        });
+      }
       break;
-    case "PAGE_DID_CHANGE":
-      void pluginEvents.emit("page:changed", {
-        bookId,
-        chapterId: effect.chapterId,
-        page: effect.page,
-        totalPages: effect.totalPages,
-      });
-      break;
-    case "CONTENT_DID_LOAD":
+    }
+    case "CONTENT_READY":
       void pluginEvents.emit("content:loaded", {
         bookId,
         chapterId: effect.chapterId,
@@ -47,13 +64,6 @@ export function translateEffect(effect: ReaderEffect, bookId: string): void {
     case "MODE_CHANGED":
       void pluginEvents.emit("mode:changed", { bookId, mode: effect.mode });
       break;
-    case "SCROLL_PROGRESS_UPDATED":
-      void pluginEvents.emit("scroll:progress", {
-        bookId,
-        progress: effect.progress,
-        anchor: effect.anchor,
-      });
-      break;
     case "READER_UNMOUNTED":
       void pluginEvents.emit("reader:unmounted", {
         bookId: effect.bookId,
@@ -61,8 +71,8 @@ export function translateEffect(effect: ReaderEffect, bookId: string): void {
         chapterIndex: effect.chapterIndex,
         mode: effect.mode,
         page: effect.page,
-        scrollProgress: effect.scrollProgress,
-        scrollAnchor: effect.scrollAnchor,
+        progress: effect.progress,
+        anchor: effect.anchor,
       });
       break;
   }
@@ -78,6 +88,9 @@ export function useReaderMachine(
   const uiStore = useUIStore();
 
   const state = shallowRef<ReaderState>(createInitialState());
+  /** Presentation mode — host-side fact, seeded from init-config, updated on
+   * MODE_CHANGED. The machine reports it only after the first MEASURED. */
+  const presentationMode = ref<"pagination" | "scroll">("pagination");
   const isRestoring = ref(true);
   let host: ReflowableHost | null = null;
 
@@ -91,29 +104,30 @@ export function useReaderMachine(
   });
 
   const readingMode = computed<"vertical" | "pagination">(() =>
-    state.value.mode === "scroll" ? "vertical" : "pagination",
+    presentationMode.value === "scroll" ? "vertical" : "pagination",
   );
-  const isPaginationMode = computed(() => state.value.mode === "pagination");
-  const currentChapterIndex = computed(() => state.value.currentChapterIndex);
+  const isPaginationMode = computed(() => presentationMode.value === "pagination");
+  const currentChapterIndex = computed(() => state.value.position.chapterIndex);
   const currentChapterId = computed(
-    () => state.value.chapters[state.value.currentChapterIndex]?.id ?? null,
+    () => state.value.chapters[state.value.position.chapterIndex]?.id ?? null,
   );
   const chapterProgress = computed(() => {
-    const { page, chapters, currentChapterIndex } = state.value;
-    if (currentChapterIndex < 0 || chapters.length === 0) return 0;
-    if (page.total <= 1) return 100;
-    return ((page.current + 1) / page.total) * 100;
+    const { position, presentation, chapters } = state.value;
+    if (position.chapterIndex < 0 || chapters.length === 0) return 0;
+    if (presentation.mode === "scroll") return position.progress * 100;
+    if (presentation.total <= 1) return 100;
+    return ((presentation.page + 1) / presentation.total) * 100;
   });
   const readingProgress = computed(() => {
-    const { chapters, currentChapterIndex } = state.value;
+    const { chapters, position } = state.value;
     const cp = chapterProgress.value;
     if (chapters.length <= 1) return Math.max(1, Math.round(cp));
     const portion = 100 / chapters.length;
-    return Math.round(currentChapterIndex * portion + (cp / 100) * portion);
+    return Math.round(position.chapterIndex * portion + (cp / 100) * portion);
   });
   const totalBookProgress = readingProgress;
-  const currentPage = computed(() => state.value.page.current);
-  const totalPages = computed(() => state.value.page.total);
+  const currentPage = computed(() => state.value.presentation.page);
+  const totalPages = computed(() => state.value.presentation.total);
   const isTransitioning = computed(() => state.value.status === "loading");
   const hasError = computed(() => state.value.status === "error");
   const errorMessage = computed(() => (hasError.value ? state.value.lastError : null));
@@ -132,10 +146,10 @@ export function useReaderMachine(
     return host?.getDocument() ?? null;
   }
 
-  // ── Navigation (delegate to host) ──
+  // ── Navigation (host compiles intents → SEEK) ──
 
   function handleSelectChapter(chapterId: string, targetPage: number = 0) {
-    host?.dispatch({ type: "GO_TO_CHAPTER", chapterId, targetPage });
+    host?.goToChapter(chapterId, targetPage);
   }
 
   function nextPage() {
@@ -173,13 +187,14 @@ export function useReaderMachine(
       mode: readingMode.value === "vertical" ? "scroll" : "pagination",
     };
     void pluginHooks.run("reader:init-config", baseConfig).then((config) => {
+      presentationMode.value = config.mode;
       host!.init(
         bookId.value,
         chapters,
         config.chapterIndex,
         config.mode,
+        config.initialPosition,
         config.initialPage,
-        config.initialScroll,
       );
     });
   }
@@ -191,6 +206,7 @@ export function useReaderMachine(
     host = new ReflowableHost({
       container,
       onEffect: async (effect) => {
+        if (effect.type === "MODE_CHANGED") presentationMode.value = effect.mode;
         translateEffect(effect, bookId.value);
       },
       onStateChange: (s) => {
@@ -207,7 +223,7 @@ export function useReaderMachine(
           uiStore.closeModal();
           return;
         }
-        if (state.value.mode === "pagination") {
+        if (presentationMode.value === "pagination") {
           const w = window.innerWidth;
           const x = e.clientX;
           if (x < w * TAP_ZONE_LEFT) prevPage();
@@ -262,10 +278,8 @@ export function useReaderMachine(
     if (!targetChapter) return;
 
     if (targetChapter.id !== currentChapterId.value) {
-      host?.dispatch({
-        type: "GO_TO_CHAPTER",
-        chapterId: targetChapter.id,
-      });
+      const idx = state.value.chapters.findIndex((c) => c.id === targetChapter!.id);
+      host?.seek({ chapterIndex: idx });
       await new Promise<void>((resolve) => {
         const stop = watch(
           () => state.value.status,
@@ -284,13 +298,13 @@ export function useReaderMachine(
     const doc = getIframeDoc();
     if (!doc?.body) return;
 
-    if (state.value.mode === "pagination") {
+    if (presentationMode.value === "pagination") {
       const element = resolveCfiToElement(cfi, doc.body);
       if (element) {
         const step = doc.documentElement.clientWidth;
         if (step > 0) {
-          host?.dispatch({
-            type: "GO_TO_PAGE",
+          host?.seek({
+            chapterIndex: state.value.position.chapterIndex,
             page: computePageFromOffset(
               element.getBoundingClientRect().left,
               doc.body.getBoundingClientRect().left,

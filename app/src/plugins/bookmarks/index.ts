@@ -46,7 +46,7 @@ export async function addBookmarkFromHost(): Promise<void> {
   if (!session || !_store) return;
 
   const s = session.getState();
-  const chapter = s.chapters[s.currentChapterIndex];
+  const chapter = s.chapters[s.position.chapterIndex];
   if (!chapter) return;
 
   const article = session.getDocument()?.body;
@@ -58,13 +58,13 @@ export async function addBookmarkFromHost(): Promise<void> {
   let cfi: string;
   let preview: string;
 
-  if (s.mode === "pagination") {
+  if (s.presentation.mode === "pagination") {
     const doc = session.getDocument();
     const body = doc?.body;
     if (!body) return;
 
-    const totalPages = s.page.total;
-    const currentPage = s.page.current;
+    const totalPages = s.presentation.total;
+    const currentPage = s.presentation.page;
     const fullHtml = body.innerHTML;
     const fullText = fullHtml.replace(/<[^>]*>/g, "");
     const charOffset = Math.floor(((currentPage + 0.5) / totalPages) * fullText.length);

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vite-plus/test";
 import { Engine, type EngineOptions } from "./engine";
-import type { ReaderEffect, ReaderAction } from "./machine";
+import type { ReaderEffect } from "./machine";
 
 /**
  * Effect fan-out contract:
@@ -12,9 +12,10 @@ import type { ReaderEffect, ReaderAction } from "./machine";
  * FETCH_CHAPTER is engine-internal (hosts override fetchAndLoadChapter) and
  * must NEVER surface to onEffect.
  *
- * Regression: reflowable-host used to consume MODE_CHANGED/PAGE_POSITION_CHANGED
- * and break, so the app's translateEffect could never emit "mode:changed"
- * even though plugins were listening.
+ * The machine is mode-free: MODE_CHANGED is a host-reported presentation
+ * fact (MEASURED), never an init-time event. The regression this guards is
+ * the same as before — a host that consumes an effect and breaks the app's
+ * observation of it.
  */
 
 class StubEngine extends Engine {
@@ -30,6 +31,14 @@ class StubEngine extends Engine {
 
   protected async runEffect(effect: ReaderEffect): Promise<void> {
     this.domEffects.push(effect);
+  }
+
+  mainSignal(): AbortSignal {
+    return this.nextFetchSignal();
+  }
+
+  autoSignal(): AbortSignal {
+    return this.nextAutoLoadSignal();
   }
 }
 
@@ -51,28 +60,17 @@ function flush(): Promise<void> {
 }
 
 describe("Engine effect fan-out", () => {
-  it("delivers MODE_CHANGED to onEffect on init (regression: mode:changed dead link)", async () => {
+  it("delivers MODE_CHANGED to onEffect when the host reports a mode switch", async () => {
     const { engine, appEffects } = makeEngine();
     engine.init("book1", [{ id: "ch1", bookId: "book1", title: "C1", order: 0 }], 0, "pagination");
-    await flush();
-
-    const types = appEffects.map((e) => e.type);
-    expect(types).toContain("MODE_CHANGED");
-    expect(types).not.toContain("FETCH_CHAPTER");
-  });
-
-  it("delivers MODE_CHANGED to onEffect on SET_MODE mid-session", async () => {
-    const { engine, appEffects } = makeEngine();
-    engine.init("book1", [{ id: "ch1", bookId: "book1", title: "C1", order: 0 }], 0, "pagination");
-    await flush();
-    engine.dispatch({ type: "PAGE_COUNT_UPDATED", chapterId: "ch1", total: 5 });
     await flush();
 
     appEffects.length = 0;
-    engine.dispatch({ type: "SET_MODE", mode: "scroll" });
+    engine.dispatch({ type: "MEASURED", chapterId: "ch1", total: 0, mode: "scroll" });
     await flush();
 
     expect(appEffects).toContainEqual({ type: "MODE_CHANGED", mode: "scroll" });
+    expect(appEffects.some((e) => e.type === "FETCH_CHAPTER")).toBe(false);
   });
 
   it("never surfaces FETCH_CHAPTER to onEffect", async () => {
@@ -98,13 +96,56 @@ describe("Engine effect fan-out", () => {
     engine.init("book1", [{ id: "ch1", bookId: "book1", title: "C1", order: 0 }], 0, "pagination");
     await flush();
 
-    const action: ReaderAction = { type: "SET_MODE", mode: "scroll" };
-    engine.dispatch(action);
+    // Reach ready, then a SEEK must fan out to both consumers.
+    engine.dispatch({ type: "MEASURED", chapterId: "ch1", total: 5, mode: "pagination" });
+    await flush();
+    appEffects.length = 0;
+    engine.domEffects.length = 0;
+
+    engine.dispatch({ type: "SEEK", chapterIndex: 0, page: 2 });
     await flush();
 
     const hostTypes = engine.domEffects.map((e) => e.type);
     const appTypes = appEffects.map((e) => e.type);
-    expect(hostTypes).toContain("MODE_CHANGED");
-    expect(appTypes).toContain("MODE_CHANGED");
+    expect(hostTypes).toContain("POSITION_CHANGED");
+    expect(appTypes).toContain("POSITION_CHANGED");
+  });
+
+  it("resolves an initialPage restore through the lifecycle", async () => {
+    const { engine, appEffects } = makeEngine();
+    engine.init(
+      "book1",
+      [{ id: "ch1", bookId: "book1", title: "C1", order: 0 }],
+      0,
+      "pagination",
+      undefined,
+      7,
+    );
+    await flush();
+    engine.dispatch({ type: "MEASURED", chapterId: "ch1", total: 10, mode: "pagination" });
+    await flush();
+
+    expect(engine.getState().status).toBe("ready");
+    expect(engine.getState().position.progress).toBe(0.7);
+    expect(engine.getState().presentation.page).toBe(7);
+    expect(appEffects).toContainEqual(expect.objectContaining({ type: "POSITION_CHANGED" }));
+  });
+
+  it("an auto-load abort never cancels an in-flight main load (scroll sentinel race)", () => {
+    const { engine } = makeEngine();
+    // A queued scroll-sentinel callback opens a new auto-load scope, which
+    // aborts only the previous auto-load scope. The in-flight chapter load
+    // must survive — aborting it strands the machine in "loading" (permanent
+    // black overlay, dead scroll).
+    const auto1 = engine.autoSignal();
+    const main = engine.mainSignal();
+    engine.autoSignal(); // sentinel fires mid-load: new auto-load scope
+    expect(auto1.aborted).toBe(true); // previous auto-load cancelled
+    expect(main.aborted).toBe(false); // the chapter load survives
+
+    // A newer main load supersedes the previous main load (rapid navigation).
+    const main2 = engine.mainSignal();
+    expect(main.aborted).toBe(true);
+    expect(main2.aborted).toBe(false);
   });
 });

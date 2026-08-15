@@ -1,4 +1,4 @@
-import { type ReaderEffect, type Chapter } from "./machine";
+import { type ReaderEffect, type Chapter, type Position } from "./machine";
 import { Engine, type EngineOptions } from "./engine";
 import { BASE_CSS } from "./styles";
 import {
@@ -66,30 +66,90 @@ export class ReflowableHost extends Engine {
     chapters: Chapter[],
     chapterIndex = 0,
     mode: "pagination" | "scroll" = "pagination",
-    initialPage?: Partial<{
-      current: number;
-      total: number;
-      pendingTarget: number | null;
-    }>,
-    initialScroll?: Partial<{ progress: number }>,
+    initialPosition?: Partial<Position>,
+    initialPage?: number,
   ): void {
-    super.init(bookId, chapters, chapterIndex, mode, initialPage, initialScroll);
+    // The machine no longer knows the mode: the host applies its own
+    // presentation before the content pipeline starts.
+    this.mode = mode;
+    this.iframeDoc.documentElement.dataset.mode = mode;
+    if (mode === "scroll") this.setupScrollHandler();
+    else this.teardownScrollHandler();
+    super.init(bookId, chapters, chapterIndex, mode, initialPosition, initialPage);
+  }
+
+  /**
+   * Switch presentation mode. The position is preserved (no reset — this
+   * fixes the old SET_MODE behavior that dropped the reader's place).
+   */
+  override setMode(mode: "pagination" | "scroll"): void {
+    const prev = this.mode;
+    this.mode = mode;
+    this.iframeDoc.documentElement.dataset.mode = mode;
+    if (mode === "scroll") this.setupScrollHandler();
+    else this.teardownScrollHandler();
+
+    if (prev !== mode && this.lastChapterHtml && this.state.status === "ready") {
+      this.restructureForMode(mode, this.lastChapterId);
+      const chapterId = this.currentChapterId();
+      if (chapterId) {
+        if (mode === "pagination") {
+          requestAnimationFrame(() => this.measureColumns(chapterId));
+        } else {
+          this.dispatch({ type: "MEASURED", chapterId, total: 0, mode: "scroll" });
+        }
+      }
+    }
+  }
+
+  /** The single navigation primitive: go to chapter + in-chapter target. */
+  seek(target: { chapterIndex: number; progress?: number; page?: number }): void {
+    this.dispatch({ type: "SEEK", ...target });
+    // In scroll mode, POSITION_CHANGED is a report channel (DOM → machine),
+    // not a command: re-applying positions there would clamp the user's
+    // natural scrolling at progress=1 and starve the next-chapter sentinel.
+    // Explicit in-chapter progress navigation must be applied here instead.
+    if (
+      this.mode === "scroll" &&
+      target.progress !== undefined &&
+      target.chapterIndex === this.state.position.chapterIndex
+    ) {
+      this.scrollToProgress(this.state.position);
+    }
   }
 
   nextPage(): void {
-    this.dispatch({ type: "NEXT_PAGE" });
+    if (this.mode !== "pagination" || this.state.status !== "ready") return;
+    const { page, total } = this.state.presentation;
+    if (total <= 0) return;
+    if (page < total - 1) {
+      this.seek({ chapterIndex: this.state.position.chapterIndex, page: page + 1 });
+    } else {
+      this.seek({ chapterIndex: this.state.position.chapterIndex + 1, page: 0 });
+    }
   }
 
   prevPage(): void {
-    this.dispatch({ type: "PREV_PAGE" });
+    if (this.mode !== "pagination" || this.state.status !== "ready") return;
+    const { page } = this.state.presentation;
+    if (page > 0) {
+      this.seek({ chapterIndex: this.state.position.chapterIndex, page: page - 1 });
+    } else {
+      // page -1 = last page of the previous chapter (see machine SEEK).
+      this.seek({ chapterIndex: this.state.position.chapterIndex - 1, page: -1 });
+    }
   }
 
   retry(): void {
     this.dispatch({ type: "RETRY" });
   }
 
-  goToChapter(chapterId: string): void {
-    this.dispatch({ type: "GO_TO_CHAPTER", chapterId });
+  goToChapter(chapterId: string, targetPage?: number): void {
+    const idx = this.state.chapters.findIndex((c) => c.id === chapterId);
+    if (idx < 0) return;
+    this.seek(
+      targetPage !== undefined ? { chapterIndex: idx, page: targetPage } : { chapterIndex: idx },
+    );
   }
 
   getDocument(): Document | null {
@@ -128,7 +188,7 @@ export class ReflowableHost extends Engine {
         (c.href === filePath || c.href.endsWith(filePath) || c.href.endsWith("/" + filePath)),
     );
 
-    const currentId = this.state.chapters[this.state.currentChapterIndex]?.id;
+    const currentId = this.currentChapterId();
 
     if (!filePath) {
       if (anchor) {
@@ -155,9 +215,9 @@ export class ReflowableHost extends Engine {
     }
   }
 
-  /** Position the iframe at an anchor element in either mode. */
+  /** Position the viewport at an anchor element in either mode. */
   private navigateToAnchor(el: Element): void {
-    if (this.state.mode === "pagination") {
+    if (this.mode === "pagination") {
       const step = this.iframeDoc.documentElement.clientWidth;
       if (step > 0) {
         const page = computePageFromOffset(
@@ -165,9 +225,10 @@ export class ReflowableHost extends Engine {
           this.iframeDoc.body.getBoundingClientRect().left,
           step,
         );
-        this.dispatch({ type: "GO_TO_PAGE", page });
+        this.seek({ chapterIndex: this.state.position.chapterIndex, page });
       }
     } else {
+      // Direct scroll — the scroll handler reports the new position.
       const top = computeAnchorScrollTop(
         el.getBoundingClientRect().top,
         this.iframeDoc.documentElement.scrollTop,
@@ -195,38 +256,31 @@ export class ReflowableHost extends Engine {
 
   protected async runEffect(effect: ReaderEffect): Promise<void> {
     switch (effect.type) {
-      case "PAGE_POSITION_CHANGED":
-        this.iframeDoc.documentElement.style.setProperty("--current-page", String(effect.page));
-        break;
-      case "MODE_CHANGED":
-        // Only rebuild when switching modes on already-rendered content
-        // (SET_MODE mid-session). A fresh iframe has no data-mode yet (the
-        // createIframe default was removed), so an INIT-driven MODE_CHANGED
-        // just sets the attribute and the scroll handler — the content was
-        // built in the right mode by loadChapter and must not be rebuilt.
-        {
-          const prev = this.iframeDoc.documentElement.dataset.mode;
-          this.iframeDoc.documentElement.dataset.mode = effect.mode;
-          if (this.lastChapterHtml && prev && prev !== effect.mode) {
-            this.restructureForMode(effect.mode, this.lastChapterId);
-          }
+      case "POSITION_CHANGED":
+        if (effect.presentation.mode === "pagination") {
+          this.iframeDoc.documentElement.style.setProperty(
+            "--current-page",
+            String(effect.presentation.page),
+          );
         }
-        if (effect.mode === "scroll") {
-          this.setupScrollHandler();
-        } else {
-          this.teardownScrollHandler();
-        }
+        // Scroll mode: the position is a report, not a command. Re-applying
+        // it here would fight the user's scrolling (progress saturates at 1,
+        // pinning the viewport bottom on the sentinel's edge so the next
+        // chapter never auto-loads). Explicit navigations apply via seek().
         break;
       default:
-        // No DOM side effect for this effect; the app layer observes it via
-        // onEffect (see Engine.runEffects — every non-FETCH effect reaches
-        // the onEffect callback after runEffect).
+        // CONTENT_READY / MODE_CHANGED / READER_UNMOUNTED need no DOM side
+        // effect here; the app observes them via onEffect.
         break;
     }
   }
 
   protected override async fetchAndLoadChapter(bookId: string, chapterId: string): Promise<void> {
     await this.loadChapter(bookId, chapterId);
+  }
+
+  private currentChapterId(): string | null {
+    return this.state.chapters[this.state.position.chapterIndex]?.id ?? null;
   }
 
   private async processChapterContent(
@@ -286,7 +340,7 @@ export class ReflowableHost extends Engine {
     this.lastChapterHtml = processed;
     this.lastChapterId = chapterId;
 
-    if (this.state.mode === "pagination") {
+    if (this.mode === "pagination") {
       this.iframeDoc.body.innerHTML = processed;
       this.dispatch({ type: "CHAPTER_LOADED", chapterId });
 
@@ -298,12 +352,14 @@ export class ReflowableHost extends Engine {
       return;
     }
 
-    // Scroll mode: start fresh with this chapter
+    // Scroll mode: start fresh with this chapter.
     this.loadedChapterIds.clear();
     this.loadedChapterIds.add(chapterId);
     this.iframeDoc.body.innerHTML = `<div class="scroll-chapter" data-chapter-id="${chapterId}">${processed}</div>`;
     this.iframeDoc.documentElement.scrollTop = 0;
     this.dispatch({ type: "CHAPTER_LOADED", chapterId });
+    // Scroll mode has no column measurement; report readiness immediately.
+    this.dispatch({ type: "MEASURED", chapterId, total: 0, mode: "scroll" });
 
     requestAnimationFrame(() => {
       void this.restoreScrollPosition().then(() => {
@@ -312,6 +368,27 @@ export class ReflowableHost extends Engine {
         this.startScrollCalibration();
       });
     });
+  }
+
+  /**
+   * Apply an in-chapter flow position to the scroll viewport: invert the
+   * progress mapping (see scroll-progress.ts) against the current chapter's
+   * wrapper. A no-op when the position already matches the DOM (reports from
+   * the scroll handler round-trip exactly).
+   */
+  private scrollToProgress(position: Position): void {
+    if (this.state.status !== "ready") return;
+    const chapterId = this.currentChapterId();
+    if (!chapterId) return;
+    const wrapper = this.iframeDoc.querySelector<HTMLElement>(
+      `[data-chapter-id="${CSS.escape(chapterId)}"]`,
+    );
+    if (!wrapper) return;
+    const html = this.iframeDoc.documentElement;
+    const max = wrapper.scrollHeight - html.clientHeight;
+    if (max <= 0) return;
+    const offset = wrapper.getBoundingClientRect().top + html.scrollTop;
+    html.scrollTop = computeScrollTarget(position.progress, max, offset);
   }
 
   private setupScrollHandler(): void {
@@ -340,9 +417,7 @@ export class ReflowableHost extends Engine {
   }
 
   private handleScroll(): void {
-    // Guard first: progress computation depends on scroll-mode DOM ([data-chapter-id]),
-    // and the pagination branch must not pay for it either.
-    if (this.state.mode !== "scroll" || this.state.status !== "ready") return;
+    if (this.state.status !== "ready") return;
 
     const doc = this.iframeDoc;
     const html = doc.documentElement;
@@ -356,20 +431,21 @@ export class ReflowableHost extends Engine {
       html.scrollHeight || 0,
     );
 
-    this.dispatch({ type: "SCROLL_PROGRESS", bookProgress: progress, anchor });
+    const chapterIndex =
+      chapterId !== undefined
+        ? this.state.chapters.findIndex((c) => c.id === chapterId)
+        : this.state.position.chapterIndex;
 
-    // Notify machine when visible chapter changes (without triggering a fetch)
-    if (chapterId) {
-      const currentId = this.state.chapters[this.state.currentChapterIndex]?.id;
-      if (chapterId !== currentId) {
-        this.dispatch({ type: "SET_CURRENT_CHAPTER", chapterId });
-      }
-    }
+    this.dispatch({
+      type: "POSITION_REPORT",
+      chapterIndex: chapterIndex >= 0 ? chapterIndex : this.state.position.chapterIndex,
+      progress,
+      anchor,
+    });
 
     // At the very top: bring the previous chapter in so it is reachable by
     // scrolling up. After loadChapter the doc starts at scrollTop 0, so this
-    // also chains the previous chapter onto a freshly opened one. autoLoading
-    // and the loadedChapterIds min-index check guard against duplicate work.
+    // also chains the previous chapter onto a freshly opened one.
     if (scrollTop <= 0) {
       let minIdx = Infinity;
       for (const id of this.loadedChapterIds) {
@@ -380,14 +456,14 @@ export class ReflowableHost extends Engine {
     }
   }
 
-  /** Dispatch current scroll position after content load */
+  /** Dispatch current scroll position after content load. */
   private syncScrollPosition(): void {
     this.handleScroll();
   }
 
   /** Restore scroll position after content load in scroll mode. */
   private async restoreScrollPosition(): Promise<void> {
-    if (this.state.mode !== "scroll") return;
+    if (this.mode !== "scroll") return;
     const doc = this.iframeDoc;
     const html = doc.documentElement;
     // Restore against the saved anchor (viewport-top offset inside the
@@ -402,11 +478,11 @@ export class ReflowableHost extends Engine {
     if (!wrapper) return;
     // Document coordinate: viewport top + scrollTop. Reading rect.top alone is
     // only valid at scrollTop 0 — restoreScrollPosition can run again after
-    // the first restore (MODE_CHANGED → restructureForMode), by which time the
+    // the first restore (setMode → restructureForMode), by which time the
     // wrapper top is far above the viewport and rect.top is negative.
     const offset = wrapper.getBoundingClientRect().top + html.scrollTop;
 
-    const anchor = this.state.scrollAnchor;
+    const anchor = this.state.position.anchor;
     if (anchor === undefined || anchor <= 0) return;
 
     // The saved viewport-top may lie beyond the single-chapter document (the
@@ -446,15 +522,15 @@ export class ReflowableHost extends Engine {
    * yet, so the measured height differs from what was saved. A ResizeObserver
    * on the body catches those height changes; as long as the user has not
    * scrolled away from the restored position, recompute scrollTop from the
-   * saved progress. The first user scroll stops the calibration.
+   * saved anchor. The first user scroll stops the calibration.
    */
   private startScrollCalibration(): void {
     this.teardownScrollCalibration();
-    if (this.state.mode !== "scroll") return;
-    const anchor = this.state.scrollAnchor;
+    if (this.mode !== "scroll") return;
+    const anchor = this.state.position.anchor;
     if (anchor === undefined || anchor <= 0) return;
     this.calibrationObserver = new ResizeObserver(() => {
-      if (this.state.mode !== "scroll" || this.state.status !== "ready") return;
+      if (this.mode !== "scroll" || this.state.status !== "ready") return;
       const html = this.iframeDoc.documentElement;
       const wrapper = this.iframeDoc.body.querySelector<HTMLElement>("[data-chapter-id]");
       if (!wrapper) return;
@@ -469,7 +545,7 @@ export class ReflowableHost extends Engine {
         this.teardownScrollCalibration();
         return;
       }
-      const target = computeScrollTarget(this.state.scrollAnchor ?? 0, max, offset);
+      const target = computeScrollTarget(this.state.position.anchor ?? 0, max, offset);
       html.scrollTop = target;
       this.lastCalibratedTop = target;
     });
@@ -487,12 +563,12 @@ export class ReflowableHost extends Engine {
     const doc = this.iframeDoc;
     if (!doc?.body) return;
     const total = computePageCount(doc.body.scrollWidth, doc.documentElement.clientWidth);
-    this.dispatch({ type: "PAGE_COUNT_UPDATED", chapterId, total });
+    this.dispatch({ type: "MEASURED", chapterId, total, mode: this.mode });
   }
 
   private setupColumnObserver(chapterId: string): void {
     this.teardownColumnObserver();
-    if (this.state.mode !== "pagination") return;
+    if (this.mode !== "pagination") return;
     this.columnObserver = new ResizeObserver(() => {
       this.measureColumns(chapterId);
     });
@@ -512,31 +588,21 @@ export class ReflowableHost extends Engine {
       this.loadedChapterIds.add(chapterId);
       this.iframeDoc.body.innerHTML = `<div class="scroll-chapter" data-chapter-id="${chapterId}">${this.lastChapterHtml}</div>`;
       this.iframeDoc.documentElement.scrollTop = 0;
-      if (this.state.status === "ready") {
-        requestAnimationFrame(() => {
-          void this.restoreScrollPosition().then(() => {
-            this.syncScrollPosition();
-            this.setupScrollSentinels();
-            this.startScrollCalibration();
-          });
-        });
-      }
+      requestAnimationFrame(() => {
+        // The position survives the mode switch — reapply it.
+        this.scrollToProgress(this.state.position);
+        this.syncScrollPosition();
+        this.setupScrollSentinels();
+        this.startScrollCalibration();
+      });
     } else {
       this.teardownScrollSentinels();
       this.teardownScrollCalibration();
       this.iframeDoc.body.innerHTML = this.lastChapterHtml;
-      if (this.state.status === "ready") {
-        requestAnimationFrame(() => {
-          this.measureColumns(chapterId);
-          this.setupColumnObserver(chapterId);
-        });
-      } else {
-        this.dispatch({ type: "CHAPTER_LOADED", chapterId });
-        requestAnimationFrame(() => {
-          this.measureColumns(chapterId);
-          this.setupColumnObserver(chapterId);
-        });
-      }
+      requestAnimationFrame(() => {
+        this.measureColumns(chapterId);
+        this.setupColumnObserver(chapterId);
+      });
     }
   }
 
@@ -581,6 +647,12 @@ export class ReflowableHost extends Engine {
 
   private async autoLoadChapter(dir: "prev" | "next"): Promise<void> {
     if (this.autoLoading) return;
+    // A main chapter load (SEEK/INIT/RETRY) is in flight: loadChapter replaces
+    // the whole body, so a queued sentinel callback must not touch the DOM or
+    // abort it — aborting would strand the machine in "loading" (black
+    // screen, dead scroll). The sentinel re-arms after the load settles.
+    if (this.state.status === "loading") return;
+    if (this.mode !== "scroll") return;
     this.autoLoading = true;
 
     try {
@@ -598,7 +670,7 @@ export class ReflowableHost extends Engine {
       const chapter = chapters[targetIdx];
       if (this.loadedChapterIds.has(chapter.id)) return;
 
-      const signal = this.nextFetchSignal();
+      const signal = this.nextAutoLoadSignal();
       let result: { html: string | undefined; rawData?: ArrayBuffer } | undefined;
       try {
         result = await this.fetchChapter!(this.state.bookId, chapter.id, signal);

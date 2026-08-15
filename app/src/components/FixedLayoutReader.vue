@@ -50,7 +50,7 @@ const totalPages = computed(() => {
   return state.value.chapters.length;
 });
 
-const currentPageNum = computed(() => (state.value.currentChapterIndex ?? 0) + 1);
+const currentPageNum = computed(() => (state.value.position.chapterIndex ?? 0) + 1);
 
 const displayPage = computed(() => currentPageNum.value);
 
@@ -250,7 +250,7 @@ onMounted(async () => {
     },
     onEffect: async (effect) => {
       translateEffect(effect, props.book.id);
-      if (effect.type === "CONTENT_DID_LOAD" && outlineItems.value.length === 0) {
+      if (effect.type === "CONTENT_READY" && outlineItems.value.length === 0) {
         void loadOutline();
       }
     },
@@ -274,8 +274,8 @@ onMounted(async () => {
       hostChapters,
       config.chapterIndex,
       config.mode,
+      config.initialPosition,
       config.initialPage,
-      config.initialScroll,
     );
   });
 

@@ -161,17 +161,13 @@ export function useReaderSearch(getSession: () => ReaderSession | null) {
     const targetIdx = session.getState().chapters.findIndex((c) => c.id === result.chapterId);
     if (targetIdx < 0) return;
 
-    const sameChapter = session.getState().currentChapterIndex === targetIdx;
+    const sameChapter = session.getState().position.chapterIndex === targetIdx;
 
     if (!sameChapter) {
-      session.dispatch({
-        type: "GO_TO_CHAPTER",
-        chapterId: session.getState().chapters[targetIdx].id,
-        targetPage: 0,
-      });
+      session.dispatch({ type: "SEEK", chapterIndex: targetIdx });
       await waitForState(
         () => session.getState(),
-        (s) => s.currentChapterIndex === targetIdx && s.status === "ready",
+        (s) => s.position.chapterIndex === targetIdx && s.status === "ready",
       );
     }
 
@@ -181,7 +177,7 @@ export function useReaderSearch(getSession: () => ReaderSession | null) {
 
     ensureSearchStyle(doc);
 
-    const isPagination = state.mode === "pagination";
+    const isPagination = state.presentation.mode === "pagination";
     const targetChapterId = state.chapters[targetIdx].id;
     const container = isPagination
       ? doc.body
@@ -196,8 +192,12 @@ export function useReaderSearch(getSession: () => ReaderSession | null) {
     const mark = getMarker().getElement(SEARCH_MARKER_ID);
     if (mark) {
       if (isPagination) {
-        const page = findPageFromMark(doc, mark, state.page.total);
-        session.dispatch({ type: "GO_TO_PAGE", page });
+        const page = findPageFromMark(doc, mark, state.presentation.total);
+        session.dispatch({
+          type: "SEEK",
+          chapterIndex: state.position.chapterIndex,
+          page,
+        });
       } else {
         const top =
           mark.getBoundingClientRect().top +

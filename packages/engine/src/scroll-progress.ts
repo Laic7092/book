@@ -26,8 +26,8 @@ export interface ChapterScrollResult {
  * the anchor until it has fully scrolled out (its bottom edge passes the
  * viewport top) — a trailing portion of the previous chapter sharing the
  * viewport with the next chapter's top never steals the anchor, so
- * `SET_CURRENT_CHAPTER` stays consistent with what the reader is actually
- * looking at.
+ * POSITION_REPORT stays consistent with what the reader is actually looking
+ * at.
  *
  * - In-chapter scrollTop is the distance the wrapper's top has scrolled out of
  *   the viewport (`-rect.top`); it is stable across autoLoad append/prepend

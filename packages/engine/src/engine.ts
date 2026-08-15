@@ -4,6 +4,7 @@ import {
   type ReaderAction,
   type ReaderEffect,
   type Chapter,
+  type Position,
 } from "./machine";
 
 export interface ReaderSession {
@@ -11,6 +12,7 @@ export interface ReaderSession {
   getState(): ReaderState;
   getDocument(): Document | null;
   setPageMargin(margin: number): void;
+  setMode(mode: "pagination" | "scroll"): void;
   navigateToCfi(cfi: string, chapterId: string): Promise<void>;
 }
 
@@ -34,12 +36,24 @@ export interface EngineOptions {
 export abstract class Engine {
   protected machine = createReaderMachine();
   state: ReaderState;
+  /**
+   * The host's rendering mode. The machine does not know this — it only
+   * receives it back via MEASURED as a presentation fact. Hosts read this
+   * field for their DOM branches; the app changes it via setMode.
+   */
+  protected mode: "pagination" | "scroll" = "pagination";
   private unsub: () => void;
   private onReady: (() => void) | undefined;
   protected onEffect: ((effect: ReaderEffect) => void | Promise<void>) | undefined;
   protected fetchChapter: EngineOptions["fetchChapter"];
   protected extractResource: EngineOptions["extractResource"];
   private fetchAbortController: AbortController | null = null;
+  /**
+   * Background auto-loads (scroll chaining) get their own abort scope: they
+   * must never abort an in-flight main chapter load. Aborting one leaves the
+   * machine stuck in "loading" with no resolution (permanent black overlay).
+   */
+  private autoLoadAbortController: AbortController | null = null;
 
   constructor(options: EngineOptions) {
     this.onReady = options.onReady;
@@ -61,27 +75,35 @@ export abstract class Engine {
     return this.fetchAbortController.signal;
   }
 
+  /** Fresh AbortSignal for background auto-loads; aborts previous auto-loads only. */
+  protected nextAutoLoadSignal(): AbortSignal {
+    this.autoLoadAbortController?.abort();
+    this.autoLoadAbortController = new AbortController();
+    return this.autoLoadAbortController.signal;
+  }
+
   init(
     bookId: string,
     chapters: Chapter[],
     chapterIndex = 0,
     mode: "pagination" | "scroll" = "pagination",
-    initialPage?: Partial<{
-      current: number;
-      total: number;
-      pendingTarget: number | null;
-    }>,
-    initialScroll?: Partial<{ progress: number }>,
+    initialPosition?: Partial<Position>,
+    initialPage?: number,
   ): void {
+    this.mode = mode;
     this.dispatch({
       type: "INIT",
       bookId,
       chapters,
       chapterIndex,
-      mode,
-      ...(initialPage ? { initialPage } : {}),
-      ...(initialScroll ? { initialScroll } : {}),
+      ...(initialPosition ? { initialPosition } : {}),
+      ...(initialPage !== undefined ? { initialPage } : {}),
     });
+  }
+
+  /** The host re-renders in the new presentation mode; position is preserved. */
+  setMode(mode: "pagination" | "scroll"): void {
+    this.mode = mode;
   }
 
   dispatch(action: ReaderAction): void {
@@ -101,12 +123,14 @@ export abstract class Engine {
       getState: () => this.getState(),
       getDocument: () => this.getDocument(),
       setPageMargin: (_margin: number) => {},
+      setMode: (m) => this.setMode(m),
       navigateToCfi: (_cfi: string, _chapterId: string) => Promise.resolve(),
     };
   }
 
   destroy(): void {
     this.fetchAbortController?.abort();
+    this.autoLoadAbortController?.abort();
     this.dispatch({ type: "TEARDOWN" });
     this.unsub();
   }
@@ -121,10 +145,7 @@ export abstract class Engine {
       } else {
         // Two non-overlapping consumers, neither may swallow the other's
         // signal: the host renders DOM side effects (runEffect), the app
-        // observes every effect through onEffect. Before this split,
-        // reflowable-host consumed MODE_CHANGED/PAGE_POSITION_CHANGED and
-        // the app never saw them — e.g. the "mode:changed" plugin event
-        // was emitted by translateEffect but could never fire.
+        // observes every effect through onEffect.
         await this.runEffect(effect);
         await Promise.resolve(this.onEffect?.(effect));
       }

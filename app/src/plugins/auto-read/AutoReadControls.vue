@@ -71,27 +71,32 @@ function tickPagination(s: ReaderSession) {
   if (state.status !== "ready") return;
 
   // Chapter-end policy: stop before turning past the last page of a chapter
-  // (NEXT_PAGE would otherwise auto-advance into the next chapter).
+  // (SEEK would otherwise auto-advance into the next chapter).
   if (
     settings.value.chapterEnd === "stop" &&
-    state.page.total > 0 &&
-    state.page.current >= state.page.total - 1 &&
-    state.currentChapterIndex < state.chapters.length - 1
+    state.presentation.total > 0 &&
+    state.presentation.page >= state.presentation.total - 1 &&
+    state.position.chapterIndex < state.chapters.length - 1
   ) {
     stop();
     return;
   }
 
-  const prevPage = state.page.current;
+  const prevPage = state.presentation.page;
   setAutoAdvancing(true);
-  s.dispatch({ type: "NEXT_PAGE" });
+  const { position, presentation, chapters } = state;
+  if (presentation.page < presentation.total - 1) {
+    s.dispatch({ type: "SEEK", chapterIndex: position.chapterIndex, page: presentation.page + 1 });
+  } else {
+    s.dispatch({ type: "SEEK", chapterIndex: position.chapterIndex + 1, page: 0 });
+  }
   requestAnimationFrame(() => {
     setAutoAdvancing(false);
     const newState = s.getState();
     if (newState.status !== "ready") return;
     if (
-      newState.page.current === prevPage &&
-      newState.currentChapterIndex >= newState.chapters.length - 1
+      newState.presentation.page === prevPage &&
+      newState.position.chapterIndex >= newState.chapters.length - 1
     ) {
       stop();
     }
@@ -126,11 +131,15 @@ function scrollLoop() {
   if (maxScroll <= 0 || scrollTop >= maxScroll - 1) {
     // End of chapter — continue into the next one (configurable), or stop.
     const state = s.getState();
-    const nextChapter = state.chapters[state.currentChapterIndex + 1];
-    if (settings.value.chapterEnd === "auto" && nextChapter && state.mode === "scroll") {
+    const nextChapter = state.chapters[state.position.chapterIndex + 1];
+    if (
+      settings.value.chapterEnd === "auto" &&
+      nextChapter &&
+      state.presentation.mode === "scroll"
+    ) {
       waitingForChapter = true;
       raf = null; // cancel self; resumed by the chapter watch below
-      s.dispatch({ type: "GO_TO_CHAPTER", chapterId: nextChapter.id });
+      s.dispatch({ type: "SEEK", chapterIndex: state.position.chapterIndex + 1 });
       return;
     }
     stop();
@@ -190,7 +199,7 @@ function start() {
   lastTarget = -1;
   armSleep();
 
-  if (s.getState().mode === "scroll") {
+  if (s.getState().presentation.mode === "scroll") {
     raf = requestAnimationFrame(scrollLoop);
   } else {
     // Wait a full interval before turning the first page (no immediate flip
@@ -245,20 +254,20 @@ watch(
 );
 
 // Resume scrolling once a scroll-mode chapter transition has finished
-// loading (GO_TO_CHAPTER puts the machine into "loading"; ready means the
-// new chapter's DOM is in the iframe).
+// loading (SEEK puts the machine into "loading"; ready means the new
+// chapter's DOM is in the iframe).
 watch(
   () => {
     const s = currentSession.value;
     if (!s) return null;
     const st = s.getState();
-    return st.status === "ready" ? st.currentChapterIndex : st.status;
+    return st.status === "ready" ? st.position.chapterIndex : st.status;
   },
   () => {
     if (!waitingForChapter || !isPlaying.value) return;
     const s = currentSession.value;
     const st = s?.getState();
-    if (s && st && st.status === "ready" && st.mode === "scroll") {
+    if (s && st && st.status === "ready" && st.presentation.mode === "scroll") {
       waitingForChapter = false;
       lastTarget = -1;
       lastTick = Date.now();

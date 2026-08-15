@@ -8,7 +8,8 @@ const width = ref("0%");
 function update() {
   const s = currentSession.value?.getState();
   if (!s) return;
-  const pct = s.page.total <= 1 ? 100 : ((s.page.current + 1) / s.page.total) * 100;
+  const pct =
+    s.presentation.total <= 1 ? 100 : ((s.presentation.page + 1) / s.presentation.total) * 100;
   width.value = `${pct}%`;
 }
 
@@ -16,7 +17,7 @@ function update() {
 // chapter's in-chapter fraction (0..1) directly.
 function updateFromScroll(progress: number) {
   const s = currentSession.value?.getState();
-  if (!s || s.mode !== "scroll") return;
+  if (!s || s.presentation.mode !== "scroll") return;
   const clamped = Math.min(1, Math.max(0, progress));
   width.value = `${(clamped * 100).toFixed(1)}%`;
 }

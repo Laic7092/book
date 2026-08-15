@@ -4,7 +4,12 @@ import { PLUGIN_BRAND } from "../../core/plugin-runtime/types";
 interface ProgressData {
   chapterId: string;
   chapterIndex: number;
+  /** Exact pagination page at save time (best when reopening in pagination). */
   pageIndex?: number;
+  /** Mode-independent in-chapter flow progress — the canonical coordinate. */
+  progress?: number;
+  anchor?: number;
+  /** @deprecated legacy scroll-mode fields (pre-unification). */
   scrollProgress?: number;
   scrollAnchor?: number;
 }
@@ -70,7 +75,7 @@ export const readingProgressPlugin: Plugin = {
     });
     ctx.events.on(
       "reader:unmounted",
-      ({ bookId, chapterId, chapterIndex, mode, page, scrollProgress, scrollAnchor }) => {
+      ({ bookId, chapterId, chapterIndex, mode, page, progress, anchor }) => {
         flushSave();
         // The machine resets its state before this event fires; save the
         // snapshot carried by the event instead of reading the session.
@@ -80,8 +85,8 @@ export const readingProgressPlugin: Plugin = {
           chapterIndex,
           mode,
           page,
-          scrollProgress,
-          scrollAnchor,
+          progress,
+          anchor,
         });
       },
     );
@@ -90,7 +95,7 @@ export const readingProgressPlugin: Plugin = {
     // never runs.
     function onHidden() {
       const h = ctx.readerSession();
-      if (!h || h.getState().mode !== "scroll") return;
+      if (!h || h.getState().presentation.mode !== "scroll") return;
       flushSave();
       void save(h.getState().bookId);
     }
@@ -113,21 +118,21 @@ export const readingProgressPlugin: Plugin = {
         chapterIndex: number;
         mode: "pagination" | "scroll";
         page: number;
-        scrollProgress: number;
-        scrollAnchor?: number;
+        progress: number;
+        anchor?: number;
       },
     ) {
       lastSavedAt = performance.now();
       const data: ProgressData = {
         chapterId: snapshot.chapterId,
         chapterIndex: snapshot.chapterIndex,
+        // Unified position: mode-independent, restores in either mode.
+        progress: snapshot.progress,
+        anchor: snapshot.anchor,
       };
-      if (snapshot.mode === "scroll") {
-        // In-chapter progress (0..1); scrollAnchor is the viewport-top offset
-        // inside the chapter, restored exactly (see scroll-progress.ts).
-        data.scrollProgress = snapshot.scrollProgress;
-        data.scrollAnchor = snapshot.scrollAnchor;
-      } else {
+      if (snapshot.mode === "pagination" && snapshot.page > 0) {
+        // Keep the exact page as well, for lossless restore when the user
+        // reopens in pagination with a stable layout.
         data.pageIndex = snapshot.page;
       }
       await ctx.storage.put(progressKey(bookId), data);
@@ -137,39 +142,37 @@ export const readingProgressPlugin: Plugin = {
       const h = ctx.readerSession();
       if (!h) return;
       const s = h.getState();
-      const chapter = s.chapters[s.currentChapterIndex];
+      const chapter = s.chapters[s.position.chapterIndex];
       if (!chapter) return;
       void saveFromSnapshot(bookId, {
         chapterId: chapter.id,
-        chapterIndex: s.currentChapterIndex,
-        mode: s.mode,
-        page: s.page.current,
-        scrollProgress: s.scrollProgress,
-        scrollAnchor: s.scrollAnchor,
+        chapterIndex: s.position.chapterIndex,
+        mode: s.presentation.mode,
+        page: s.presentation.page,
+        progress: s.position.progress,
+        anchor: s.position.anchor,
       });
     }
 
     ctx.hooks.filter("reader:init-config", async (config) => {
       const data = await ctx.storage.get<ProgressData>(progressKey(config.bookId));
       if (!data) return config;
-      if (data.scrollProgress !== undefined) {
-        // Saved from scroll mode: open in scroll mode so the in-chapter
-        // anchor restores against the single-chapter document. The init
-        // mode defaults to "pagination" (driven by the machine, not by
-        // settings), so without this override scroll progress is never
-        // restored.
+      // Exact page restore when reopening in pagination with a stable layout.
+      if (data.pageIndex !== undefined && config.mode === "pagination") {
         return {
           ...config,
-          mode: "scroll",
           chapterIndex: data.chapterIndex,
-          initialScroll: { progress: data.scrollProgress, anchor: data.scrollAnchor },
+          initialPage: data.pageIndex,
         };
       }
-      if (data.pageIndex !== undefined) {
+      // Unified position restore: progress + anchor work in either mode
+      // (pagination derives the page readout; scroll restores exactly).
+      const progress = data.progress ?? data.scrollProgress;
+      if (progress !== undefined) {
         return {
           ...config,
           chapterIndex: data.chapterIndex,
-          initialPage: { ...config.initialPage, pendingTarget: data.pageIndex },
+          initialPosition: { progress, anchor: data.anchor ?? data.scrollAnchor },
         };
       }
       return {

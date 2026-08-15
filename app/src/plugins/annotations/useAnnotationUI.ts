@@ -47,7 +47,7 @@ export function useAnnotationUI() {
 
     const s = session?.getState();
     if (!s) return;
-    const chapter = s.chapters[s.currentChapterIndex];
+    const chapter = s.chapters[s.position.chapterIndex];
 
     listenerCleanup?.();
     listenerCleanup = renderer.setupListeners({
@@ -140,7 +140,7 @@ export function useAnnotationUI() {
       initDone = true;
       setupListeners();
 
-      const currentCh = s.chapters[s.currentChapterIndex];
+      const currentCh = s.chapters[s.position.chapterIndex];
       if (currentCh?.id && s.bookId) {
         currentChapterId.value = currentCh.id;
         void store.reload().then(() => applyAnnotations());
@@ -155,7 +155,7 @@ export function useAnnotationUI() {
   const stopChapterWatch = watch(
     () => {
       const s = session?.getState();
-      return s ? s.chapters[s.currentChapterIndex]?.id : null;
+      return s ? s.chapters[s.position.chapterIndex]?.id : null;
     },
     (chapterId) => {
       if (chapterId && chapterId !== lastChapterId && initDone) {
@@ -180,7 +180,7 @@ export function useAnnotationUI() {
   function getCurrentChapterInfo() {
     const s = session?.getState();
     if (!s) return { bookId: "", chapterId: "" };
-    const chapter = s.chapters[s.currentChapterIndex];
+    const chapter = s.chapters[s.position.chapterIndex];
     return { bookId: s.bookId, chapterId: chapter?.id ?? "" };
   }
 

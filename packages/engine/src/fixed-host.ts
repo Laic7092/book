@@ -1,4 +1,4 @@
-import { type ReaderEffect, type Chapter } from "./machine";
+import { type ReaderEffect, type Chapter, type Position } from "./machine";
 import { Engine, type EngineOptions } from "./engine";
 
 export interface FixedLayoutSurface {
@@ -42,6 +42,9 @@ export interface FixedHostOptions extends EngineOptions {
  * Fixed-layout reader host — supports two modes:
  * - Host-driven (surface): CBZ and other formats where host calls loadChapter/goToPage.
  * - Autonomous (renderer): PDF where the renderer manages its own DOM and navigation.
+ *
+ * Fixed layouts always paginate; page state lives in the surface/renderer.
+ * The machine only holds the chapter + a progress readout for events.
  */
 export class FixedHost extends Engine {
   private surface: FixedLayoutSurface | undefined;
@@ -54,11 +57,13 @@ export class FixedHost extends Engine {
     this.renderer = options.renderer;
 
     if (this.renderer) {
-      this.renderer.onPageChange = (_page, total) => {
-        const chapterId = this.state.chapters[this.state.currentChapterIndex]?.id;
-        if (chapterId) {
-          this.dispatch({ type: "PAGE_COUNT_UPDATED", chapterId, total });
-        }
+      this.renderer.onPageChange = (page, total) => {
+        const chapterId = this.currentChapterId();
+        if (!chapterId) return;
+        // Presentation-level page change: reflect it in the position and
+        // report the (possibly new) page count.
+        this.seek({ chapterIndex: this.state.position.chapterIndex, page });
+        this.dispatch({ type: "MEASURED", chapterId, total, mode: "pagination" });
       };
     }
   }
@@ -70,15 +75,19 @@ export class FixedHost extends Engine {
     chapters: Chapter[],
     chapterIndex = 0,
     _mode?: "pagination" | "scroll",
-    initialPage?: Partial<{
-      current: number;
-      total: number;
-      pendingTarget: number | null;
-    }>,
-    initialScroll?: Partial<{ progress: number }>,
+    initialPosition?: Partial<Position>,
+    initialPage?: number,
   ): void {
     // Fixed-layout always uses pagination — scroll mode is not applicable.
-    super.init(bookId, chapters, chapterIndex, "pagination", initialPage, initialScroll);
+    super.init(bookId, chapters, chapterIndex, "pagination", initialPosition, initialPage);
+  }
+
+  override setMode(_mode: "pagination" | "scroll"): void {
+    // Fixed layouts have a single presentation; nothing to switch.
+  }
+
+  seek(target: { chapterIndex: number; progress?: number; page?: number }): void {
+    this.dispatch({ type: "SEEK", ...target });
   }
 
   nextPage(): void {
@@ -87,7 +96,7 @@ export class FixedHost extends Engine {
     if (target.getCurrentPage() < target.getPageCount() - 1) {
       target.goToPage(target.getCurrentPage() + 1);
     } else {
-      this.dispatch({ type: "NEXT_PAGE" });
+      this.seek({ chapterIndex: this.state.position.chapterIndex + 1, page: 0 });
     }
   }
 
@@ -97,12 +106,16 @@ export class FixedHost extends Engine {
     if (target.getCurrentPage() > 0) {
       target.goToPage(target.getCurrentPage() - 1);
     } else {
-      this.dispatch({ type: "PREV_PAGE" });
+      this.seek({ chapterIndex: this.state.position.chapterIndex - 1, page: -1 });
     }
   }
 
   goToChapter(chapterId: string, targetPage?: number): void {
-    this.dispatch({ type: "GO_TO_CHAPTER", chapterId, targetPage });
+    const idx = this.state.chapters.findIndex((c) => c.id === chapterId);
+    if (idx < 0) return;
+    this.seek(
+      targetPage !== undefined ? { chapterIndex: idx, page: targetPage } : { chapterIndex: idx },
+    );
   }
 
   zoomIn(): void {
@@ -155,12 +168,15 @@ export class FixedHost extends Engine {
 
   protected async runEffect(_effect: ReaderEffect): Promise<void> {
     // Fixed-layout rendering is delegated to the surface/renderer, which
-    // drives the machine itself (goToPage/PAGE_COUNT_UPDATED); there are no
-    // DOM side effects to apply here. The app observes every effect via
-    // onEffect (see Engine.runEffects).
+    // drives the machine itself (seek/MEASURED); there are no DOM side
+    // effects to apply here. The app observes every effect via onEffect.
   }
 
   // ── Chapter fetching with surface integration ──
+
+  private currentChapterId(): string | null {
+    return this.state.chapters[this.state.position.chapterIndex]?.id ?? null;
+  }
 
   protected async fetchAndLoadChapter(bookId: string, chapterId: string): Promise<void> {
     const { rawData } = await this.fetchChapter!(bookId, chapterId);
@@ -190,7 +206,7 @@ export class FixedHost extends Engine {
     if (target) {
       const pageCount = target.getPageCount();
       if (pageCount > 0) {
-        this.dispatch({ type: "PAGE_COUNT_UPDATED", chapterId, total: pageCount });
+        this.dispatch({ type: "MEASURED", chapterId, total: pageCount, mode: "pagination" });
       }
     }
   }
