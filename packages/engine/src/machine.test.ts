@@ -22,7 +22,6 @@ function readyState(overrides?: Partial<ReaderState>): ReaderState {
     status: "ready",
     lastError: null,
     presentation: { mode: "pagination", page: 0, total: 10 },
-    pendingSeek: null,
     ...overrides,
   };
 }
@@ -83,20 +82,6 @@ describe("INIT", () => {
     });
 
     expect(result.state.position).toEqual({ chapterIndex: 1, progress: 0.5, anchor: 0.25 });
-    expect(result.state.pendingSeek).toBeNull();
-  });
-
-  test("stores initialPage as pendingSeek until measured", () => {
-    const result = dispatch(createInitialState(), {
-      type: "INIT",
-      bookId: "book1",
-      chapters: CHAPTERS,
-      chapterIndex: 0,
-      initialPage: 7,
-    });
-
-    expect(result.state.pendingSeek).toEqual({ chapterIndex: 0, page: 7 });
-    expect(result.state.position.progress).toBe(0);
   });
 
   test("no-ops with empty chapters", () => {
@@ -153,7 +138,6 @@ describe("SEEK", () => {
     expect(result.state.status).toBe("loading");
     expect(result.state.position).toEqual({ chapterIndex: 2, progress: 0 });
     expect(result.state.presentation).toEqual({ mode: "pagination", page: 0, total: 0 });
-    expect(result.state.pendingSeek).toEqual({ chapterIndex: 2, page: 3 });
     expect(result.state.lastError).toBeNull();
     expect(result.effects).toContainEqual({
       type: "FETCH_CHAPTER",
@@ -170,7 +154,6 @@ describe("SEEK", () => {
     const result = dispatch(readyState(), { type: "SEEK", chapterIndex: 1, progress: 0.4 });
 
     expect(result.state.position).toEqual({ chapterIndex: 1, progress: 0.4 });
-    expect(result.state.pendingSeek).toBeNull();
   });
 
   test("no-ops for invalid chapter index", () => {
@@ -189,11 +172,11 @@ describe("SEEK", () => {
     expect(result.effects).toEqual([]);
   });
 
-  test("same-chapter seek while loading stores pendingSeek", () => {
+  test("same-chapter seek while loading no-ops (the engine defers and re-dispatches)", () => {
     const state = readyState({ status: "loading" });
     const result = dispatch(state, { type: "SEEK", chapterIndex: 0, page: 4 });
 
-    expect(result.state.pendingSeek).toEqual({ chapterIndex: 0, page: 4 });
+    expect(result.state).toBe(state);
     expect(result.effects).toEqual([]);
   });
 
@@ -358,44 +341,6 @@ describe("MEASURED", () => {
     expect(result.effects).toEqual([posChanged("ch1", "ch1")]);
   });
 
-  test("resolves pendingSeek page target", () => {
-    const state = readyState({
-      status: "loading",
-      position: { chapterIndex: 0, progress: 0 },
-      presentation: { mode: "pagination", page: 0, total: 0 },
-      pendingSeek: { chapterIndex: 0, page: 3 },
-    });
-    const result = dispatch(state, {
-      type: "MEASURED",
-      chapterId: "ch1",
-      total: 10,
-      mode: "pagination",
-    });
-
-    expect(result.state.status).toBe("ready");
-    expect(result.state.position.progress).toBe(0.3);
-    expect(result.state.presentation.page).toBe(3);
-    expect(result.state.pendingSeek).toBeNull();
-    expect(result.effects).toEqual([posChanged("ch1", "ch1")]);
-  });
-
-  test("resolves pendingSeek page -1 to last page", () => {
-    const state = readyState({
-      status: "loading",
-      pendingSeek: { chapterIndex: 0, page: -1 },
-      presentation: { mode: "pagination", page: 0, total: 0 },
-    });
-    const result = dispatch(state, {
-      type: "MEASURED",
-      chapterId: "ch1",
-      total: 15,
-      mode: "pagination",
-    });
-
-    expect(result.state.position.progress).toBe(14 / 15);
-    expect(result.state.presentation.page).toBe(14);
-  });
-
   test("clamps progress to measurable range when total shrinks", () => {
     const state = readyState({
       status: "ready",
@@ -531,7 +476,6 @@ describe("RETRY", () => {
 
     expect(result.state.status).toBe("loading");
     expect(result.state.lastError).toBeNull();
-    expect(result.state.pendingSeek).toBeNull();
     expect(result.effects).toContainEqual({
       type: "FETCH_CHAPTER",
       bookId: "book1",
@@ -662,12 +606,13 @@ describe("full lifecycle", () => {
     expect(r3.state.presentation.total).toBe(12);
   });
 
-  test("SEEK cross-chapter → load → measure lands on the target page", () => {
+  test("SEEK cross-chapter → load → measure: the engine resolves the page target", () => {
     let state = readyState();
 
     const r1 = dispatch(state, { type: "SEEK", chapterIndex: 1, page: 4 });
     state = r1.state;
     expect(state.status).toBe("loading");
+    expect(state.position).toEqual({ chapterIndex: 1, progress: 0, anchor: undefined });
 
     const r2 = dispatch(state, { type: "CHAPTER_LOADED", chapterId: "ch2" });
     state = r2.state;
@@ -679,8 +624,10 @@ describe("full lifecycle", () => {
       mode: "pagination",
     });
     expect(r3.state.status).toBe("ready");
-    expect(r3.state.position.progress).toBe(0.5);
-    expect(r3.state.presentation.page).toBe(4);
+    // The machine lands at the chapter start; the engine's re-dispatched
+    // SEEK (page 4 → progress 0.5) resolves the exact position.
+    expect(r3.state.position.progress).toBe(0);
+    expect(r3.state.presentation.total).toBe(8);
   });
 
   test("error recovery: FAILED → SEEK to another chapter → load → ready", () => {
@@ -719,14 +666,16 @@ describe("full lifecycle", () => {
     });
   });
 
-  test("prevPage across chapter boundary resolves to last page", () => {
-    // Compiled intent: SEEK previous chapter with page -1 (last page).
+  test("prevPage across chapter boundary starts the previous chapter; the page target is resolved by the engine", () => {
+    // Compiled intent: SEEK previous chapter with page -1 (last page). The
+    // machine cannot resolve the page until the chapter is measured; the
+    // engine defers it and re-dispatches a progress SEEK after MEASURED.
     let state = readyState({ position: { chapterIndex: 1, progress: 0 } });
 
     const r1 = dispatch(state, { type: "SEEK", chapterIndex: 0, page: -1 });
     state = r1.state;
     expect(state.status).toBe("loading");
-    expect(state.pendingSeek).toEqual({ chapterIndex: 0, page: -1 });
+    expect(state.position).toEqual({ chapterIndex: 0, progress: 0, anchor: undefined });
 
     const r2 = dispatch(state, { type: "CHAPTER_LOADED", chapterId: "ch1" });
     state = r2.state;
@@ -738,8 +687,8 @@ describe("full lifecycle", () => {
       mode: "pagination",
     });
     expect(r3.state.status).toBe("ready");
-    expect(r3.state.position.progress).toBe(14 / 15);
-    expect(r3.state.presentation.page).toBe(14);
+    expect(r3.state.position.progress).toBe(0);
+    expect(r3.state.presentation.total).toBe(15);
   });
 
   test("scroll session: INIT with position → load → ready, position preserved", () => {

@@ -34,7 +34,7 @@ class StubEngine extends Engine {
   }
 
   mainSignal(): AbortSignal {
-    return this.nextFetchSignal();
+    return this.beginMainLoad();
   }
 
   autoSignal(): AbortSignal {
@@ -58,6 +58,11 @@ function makeEngine(overrides: Partial<EngineOptions> = {}) {
 function flush(): Promise<void> {
   return new Promise((r) => setTimeout(r, 0));
 }
+
+const CHAPTERS2 = [
+  { id: "ch1", bookId: "book1", title: "C1", order: 0 },
+  { id: "ch2", bookId: "book1", title: "C2", order: 1 },
+];
 
 describe("Engine effect fan-out", () => {
   it("delivers MODE_CHANGED to onEffect when the host reports a mode switch", async () => {
@@ -147,5 +152,61 @@ describe("Engine effect fan-out", () => {
     const main2 = engine.mainSignal();
     expect(main.aborted).toBe(true);
     expect(main2.aborted).toBe(false);
+  });
+
+  it("beginMainLoad cancels the previous main load and all auto-loads (navigation replaces the DOM)", () => {
+    const { engine } = makeEngine();
+    const auto = engine.autoSignal();
+    expect(auto.aborted).toBe(false);
+
+    // A new main load replaces the document the auto-loads were writing
+    // into, so starting one cancels every in-flight auto-load.
+    const main = engine.mainSignal();
+    expect(auto.aborted).toBe(true);
+    expect(main.aborted).toBe(false);
+
+    // A newer main load supersedes the previous one.
+    const main2 = engine.mainSignal();
+    expect(main.aborted).toBe(true);
+    expect(main2.aborted).toBe(false);
+  });
+
+  it("destroy cancels every in-flight load (main and auto)", () => {
+    const { engine } = makeEngine();
+    const auto = engine.autoSignal();
+    const main = engine.mainSignal();
+    engine.destroy();
+    expect(main.aborted).toBe(true);
+    expect(auto.aborted).toBe(true);
+  });
+
+  it("defers a same-chapter page seek while loading and resolves it after MEASURED", async () => {
+    const { engine } = makeEngine();
+    engine.init("book1", CHAPTERS2, 0, "pagination");
+    await flush();
+    // init fetched ch1 but never measured it — the machine is still loading.
+    expect(engine.getState().status).toBe("loading");
+
+    engine.dispatch({ type: "SEEK", chapterIndex: 0, page: 4 });
+    engine.dispatch({ type: "MEASURED", chapterId: "ch1", total: 10, mode: "pagination" });
+
+    expect(engine.getState().status).toBe("ready");
+    expect(engine.getState().position.progress).toBe(0.4);
+    expect(engine.getState().presentation.page).toBe(4);
+  });
+
+  it("defers a cross-chapter page seek, starts the fetch, and resolves after MEASURED", async () => {
+    const { engine } = makeEngine();
+    engine.init("book1", CHAPTERS2, 0, "pagination");
+    await flush();
+
+    engine.dispatch({ type: "SEEK", chapterIndex: 1, page: 3 });
+    await flush(); // ch2 fetched (CHAPTER_LOADED)
+    engine.dispatch({ type: "MEASURED", chapterId: "ch2", total: 10, mode: "pagination" });
+
+    expect(engine.getState().status).toBe("ready");
+    expect(engine.getState().position.chapterIndex).toBe(1);
+    expect(engine.getState().position.progress).toBe(0.3);
+    expect(engine.getState().presentation.page).toBe(3);
   });
 });

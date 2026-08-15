@@ -89,6 +89,10 @@ export class ReflowableHost extends Engine {
     if (mode === "scroll") this.setupScrollHandler();
     else this.teardownScrollHandler();
 
+    // A mode switch restructures the whole document; in-flight chained loads
+    // would write into a DOM that is about to be replaced.
+    if (prev !== mode) this.cancelAutoLoads();
+
     if (prev !== mode && this.lastChapterHtml && this.state.status === "ready") {
       this.restructureForMode(mode, this.lastChapterId);
       const chapterId = this.currentChapterId();
@@ -320,7 +324,7 @@ export class ReflowableHost extends Engine {
     }
     this.resourceUrls.clear();
 
-    const signal = this.nextFetchSignal();
+    const signal = this.beginMainLoad();
     let result: { html: string | undefined; rawData?: ArrayBuffer } | undefined;
     try {
       result = await this.fetchChapter!(bookId, chapterId, signal);

@@ -1,11 +1,13 @@
 import {
   createReaderMachine,
+  pageToProgress,
   type ReaderState,
   type ReaderAction,
   type ReaderEffect,
   type Chapter,
   type Position,
 } from "./machine";
+import { TaskScope } from "./tasks";
 
 export interface ReaderSession {
   dispatch(action: ReaderAction): void;
@@ -47,13 +49,23 @@ export abstract class Engine {
   protected onEffect: ((effect: ReaderEffect) => void | Promise<void>) | undefined;
   protected fetchChapter: EngineOptions["fetchChapter"];
   protected extractResource: EngineOptions["extractResource"];
-  private fetchAbortController: AbortController | null = null;
+  /** Scope of the current main chapter load; superseded on every new load. */
+  private mainLoadScope: TaskScope | null = null;
   /**
-   * Background auto-loads (scroll chaining) get their own abort scope: they
-   * must never abort an in-flight main chapter load. Aborting one leaves the
-   * machine stuck in "loading" with no resolution (permanent black overlay).
+   * Root scope for background auto-loads (scroll chaining). Forked children
+   * can never cancel the main load (cancellation flows down the tree only);
+   * a new main load cancels this whole scope because it replaces the DOM the
+   * auto-loads were writing into.
    */
-  private autoLoadAbortController: AbortController | null = null;
+  private autoLoadScope: TaskScope | null = null;
+  /** The most recent auto-load task; superseded by the next one. */
+  private activeAutoLoad: TaskScope | null = null;
+  /**
+   * In-chapter seek target the machine cannot resolve yet (a page seek
+   * before the chapter is measured, any in-chapter seek while materializing).
+   * Flushed as a progress SEEK once MEASURED makes the chapter ready.
+   */
+  private deferredSeek: { chapterIndex: number; progress?: number; page?: number } | null = null;
 
   constructor(options: EngineOptions) {
     this.onReady = options.onReady;
@@ -68,18 +80,41 @@ export abstract class Engine {
     });
   }
 
-  /** Returns a fresh AbortSignal, aborting any previous in-flight fetch. */
-  protected nextFetchSignal(): AbortSignal {
-    this.fetchAbortController?.abort();
-    this.fetchAbortController = new AbortController();
-    return this.fetchAbortController.signal;
+  /**
+   * Begin a main chapter load: cancel the previous main load and every
+   * in-flight auto-load (their DOM targets are about to be replaced), then
+   * hand out a fresh signal for the new load.
+   */
+  protected beginMainLoad(): AbortSignal {
+    this.mainLoadScope?.cancel();
+    this.mainLoadScope = new TaskScope();
+    this.cancelAutoLoads();
+    return this.mainLoadScope.signal;
   }
 
-  /** Fresh AbortSignal for background auto-loads; aborts previous auto-loads only. */
+  /** Cancel all background auto-loads (scroll chaining). */
+  protected cancelAutoLoads(): void {
+    this.autoLoadScope?.cancel();
+    this.autoLoadScope = null;
+    this.activeAutoLoad = null;
+  }
+
+  /**
+   * Fresh signal for a background auto-load; supersedes the previous one.
+   * Never affects the main load scope (children cannot cancel ancestors).
+   */
   protected nextAutoLoadSignal(): AbortSignal {
-    this.autoLoadAbortController?.abort();
-    this.autoLoadAbortController = new AbortController();
-    return this.autoLoadAbortController.signal;
+    this.autoLoadScope ??= new TaskScope();
+    this.activeAutoLoad?.cancel();
+    this.activeAutoLoad = this.autoLoadScope.fork();
+    return this.activeAutoLoad.signal;
+  }
+
+  /** Cancel every in-flight task (main + auto loads). Called by destroy(). */
+  protected cancelAllTasks(): void {
+    this.mainLoadScope?.cancel();
+    this.mainLoadScope = null;
+    this.cancelAutoLoads();
   }
 
   init(
@@ -91,13 +126,15 @@ export abstract class Engine {
     initialPage?: number,
   ): void {
     this.mode = mode;
+    // An exact page restore cannot be resolved before the chapter is
+    // measured; defer it and re-dispatch after the first MEASURED.
+    this.deferredSeek = initialPage !== undefined ? { chapterIndex, page: initialPage } : null;
     this.dispatch({
       type: "INIT",
       bookId,
       chapters,
       chapterIndex,
       ...(initialPosition ? { initialPosition } : {}),
-      ...(initialPage !== undefined ? { initialPage } : {}),
     });
   }
 
@@ -107,8 +144,51 @@ export abstract class Engine {
   }
 
   dispatch(action: ReaderAction): void {
+    if (action.type === "SEEK" && !this.isSeekResolvable(action)) {
+      // In-chapter targets the machine cannot resolve yet are deferred here
+      // (covers every dispatcher: hosts, composable, plugins) and re-dispatched
+      // as a progress SEEK once MEASURED makes the chapter ready. The bare
+      // chapter seek still fires — a cross-chapter target must start the fetch.
+      const { chapterIndex, progress, page } = action;
+      this.deferredSeek = { chapterIndex, progress, page };
+      this.dispatch({ type: "SEEK", chapterIndex });
+      return;
+    }
     const effects = this.machine.dispatch(action);
     void this.runEffects(effects);
+    if (action.type === "MEASURED") this.flushDeferredSeek();
+  }
+
+  private isSeekResolvable(action: Extract<ReaderAction, { type: "SEEK" }>): boolean {
+    const state = this.machine.getState();
+    if (action.chapterIndex < 0 || action.chapterIndex >= state.chapters.length) return true;
+    const sameChapter = action.chapterIndex === state.position.chapterIndex;
+    if (action.page !== undefined) return state.status === "ready" && sameChapter;
+    if (action.progress !== undefined) return !(state.status !== "ready" && sameChapter);
+    return true;
+  }
+
+  private flushDeferredSeek(): void {
+    const deferred = this.deferredSeek;
+    this.deferredSeek = null;
+    if (!deferred) return;
+    const state = this.machine.getState();
+    // Resolve only against the chapter that was just measured; a newer seek
+    // replaces the deferred target anyway.
+    if (state.status !== "ready" || deferred.chapterIndex !== state.position.chapterIndex) return;
+    if (deferred.page !== undefined) {
+      this.dispatch({
+        type: "SEEK",
+        chapterIndex: deferred.chapterIndex,
+        progress: pageToProgress(deferred.page, state.presentation.total),
+      });
+    } else if (deferred.progress !== undefined) {
+      this.dispatch({
+        type: "SEEK",
+        chapterIndex: deferred.chapterIndex,
+        progress: deferred.progress,
+      });
+    }
   }
 
   getState(): ReaderState {
@@ -129,8 +209,8 @@ export abstract class Engine {
   }
 
   destroy(): void {
-    this.fetchAbortController?.abort();
-    this.autoLoadAbortController?.abort();
+    this.cancelAllTasks();
+    this.deferredSeek = null;
     this.dispatch({ type: "TEARDOWN" });
     this.unsub();
   }
@@ -164,7 +244,7 @@ export abstract class Engine {
   }
 
   protected async fetchAndLoadChapter(bookId: string, chapterId: string): Promise<void> {
-    const signal = this.nextFetchSignal();
+    const signal = this.beginMainLoad();
     let result: { html: string | undefined; rawData?: ArrayBuffer } | undefined;
     try {
       result = await this.fetchChapter!(bookId, chapterId, signal);

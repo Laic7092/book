@@ -18,6 +18,10 @@
  * navigation primitive (`SEEK`), one continuous-position channel
  * (`POSITION_REPORT`), and the load lifecycle. Everything else is the host's
  * job.
+ *
+ * Targets the machine cannot resolve yet (a page seek before the chapter is
+ * measured, any in-chapter seek while materializing) are NOT deferred here:
+ * the engine holds them and re-dispatches a progress SEEK after MEASURED.
  */
 
 export interface Chapter {
@@ -51,14 +55,6 @@ export interface Presentation {
   total: number;
 }
 
-/** A SEEK intent whose target could not be resolved yet (page of a chapter
- * whose page count is unknown). Resolved at MEASURED. */
-interface PendingSeek {
-  chapterIndex: number;
-  progress?: number;
-  page?: number;
-}
-
 export interface ReaderState {
   bookId: string;
   chapters: Chapter[];
@@ -67,8 +63,6 @@ export interface ReaderState {
   lastError: string | null;
   /** Host-measured presentation facts (see Presentation). */
   presentation: Presentation;
-  /** @internal Transient resolution state, see PendingSeek. */
-  pendingSeek: PendingSeek | null;
 }
 
 export type ReaderAction =
@@ -79,8 +73,6 @@ export type ReaderAction =
       chapterIndex: number;
       /** Exact position restore (scroll-style: progress + optional anchor). */
       initialPosition?: Partial<Position>;
-      /** Exact page restore (pagination-style); resolved once measured. */
-      initialPage?: number;
     }
   /** The only navigation primitive. page -1 means "last page". */
   | { type: "SEEK"; chapterIndex: number; progress?: number; page?: number }
@@ -129,7 +121,6 @@ export function createInitialState(): ReaderState {
     status: "idle",
     lastError: null,
     presentation: { mode: "pagination", page: 0, total: 0 },
-    pendingSeek: null,
   };
 }
 
@@ -148,14 +139,14 @@ function clampProgress(p: number): number {
 }
 
 /** page → in-chapter progress. page < 0 means "last page". */
-function pageToProgress(page: number, total: number): number {
+export function pageToProgress(page: number, total: number): number {
   if (total <= 0) return 0;
   const p = page < 0 ? total - 1 : Math.min(page, total - 1);
   return p / total;
 }
 
 /** progress → pagination page readout (with float fudge). */
-function progressToPage(progress: number, total: number): number {
+export function progressToPage(progress: number, total: number): number {
   if (total <= 0) return 0;
   return Math.min(total - 1, Math.floor(clampProgress(progress) * total + 1e-9));
 }
@@ -195,10 +186,6 @@ function initReducer(
     status: "loading",
     lastError: null,
     presentation: { mode: "pagination", page: 0, total: 0 },
-    pendingSeek:
-      action.initialPage !== undefined
-        ? { chapterIndex: action.chapterIndex, page: action.initialPage }
-        : null,
   };
 
   return {
@@ -218,15 +205,9 @@ function seekReducer(
   const prevChapterIndex = state.position.chapterIndex;
 
   if (sameChapter && state.status !== "ready") {
-    // Same chapter still materializing: remember the intent, resolve at MEASURED.
-    if (state.status === "error") return { state, effects: [] };
-    return {
-      state: {
-        ...state,
-        pendingSeek: { chapterIndex: idx, progress: action.progress, page: action.page },
-      },
-      effects: [],
-    };
+    // Not resolvable while materializing. The engine defers the target and
+    // re-dispatches a progress SEEK after MEASURED makes the chapter ready.
+    return { state, effects: [] };
   }
 
   if (!sameChapter) {
@@ -239,7 +220,6 @@ function seekReducer(
       lastError: null,
       // Old measurement belongs to the previous chapter.
       presentation: { ...state.presentation, page: 0, total: 0 },
-      pendingSeek: hasPage ? { chapterIndex: idx, page: action.page } : null,
     };
     return {
       state: next,
@@ -332,22 +312,8 @@ function measuredReducer(
   const prev = state.presentation;
   const modeChanged = prev.mode !== action.mode;
   const total = Math.max(0, action.total);
-  let pending = state.pendingSeek;
   let progress = state.position.progress;
   let positionChangedFlag = false;
-
-  if (pending && pending.chapterIndex === state.position.chapterIndex) {
-    if (pending.page !== undefined) {
-      const resolved = pageToProgress(pending.page, total);
-      positionChangedFlag = resolved !== progress;
-      progress = resolved;
-    } else if (pending.progress !== undefined) {
-      const resolved = clampProgress(pending.progress);
-      positionChangedFlag = resolved !== progress;
-      progress = resolved;
-    }
-    pending = null;
-  }
 
   // Pagination: keep progress within the measurable range (page 0..total-1).
   if (action.mode === "pagination" && total > 0) {
@@ -366,28 +332,17 @@ function measuredReducer(
   // object, no effects. Never early-return while loading — the loading →
   // ready transition is the whole point of MEASURED, even when the
   // presentation facts are unchanged (scroll-mode reloads always are).
-  if (
-    state.status === "ready" &&
-    pending === null &&
-    !modeChanged &&
-    !positionChangedFlag &&
-    !presentationChanged
-  ) {
+  if (state.status === "ready" && !modeChanged && !positionChangedFlag && !presentationChanged) {
     return { state, effects: [] };
   }
 
   const next: ReaderState = {
     ...state,
     position: positionChangedFlag
-      ? {
-          ...state.position,
-          progress,
-          anchor: pending === null ? undefined : state.position.anchor,
-        }
+      ? { ...state.position, progress, anchor: undefined }
       : state.position,
     status: "ready",
     lastError: null,
-    pendingSeek: pending,
     presentation: { mode: action.mode, page, total },
   };
 
@@ -404,7 +359,7 @@ function retryReducer(state: ReaderState): { state: ReaderState; effects: Reader
   const chapterId = currentChapterId(state);
   if (!chapterId) return { state, effects: [] };
   return {
-    state: { ...state, status: "loading", lastError: null, pendingSeek: null },
+    state: { ...state, status: "loading", lastError: null },
     effects: [{ type: "FETCH_CHAPTER", bookId: state.bookId, chapterId }],
   };
 }
