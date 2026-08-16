@@ -611,7 +611,6 @@ img {
 }
 .empty-state svg {
   opacity: 0.4;
-  margin-bottom: var(--space-3);
 }
 .empty-state p {
   font-size: var(--text-base);

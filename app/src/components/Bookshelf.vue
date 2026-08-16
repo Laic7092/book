@@ -1116,7 +1116,7 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 120px 20px;
+  padding: 60px 20px;
   text-align: center;
   animation: fadeInUp 0.7s ease-out;
 }
