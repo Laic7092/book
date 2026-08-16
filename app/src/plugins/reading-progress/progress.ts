@@ -1,12 +1,23 @@
 import type { ReaderSession } from "@book/engine";
-import type { PluginStorageAdapter, InitConfig } from "./plugin-runtime/types";
+import type {
+  PluginContext,
+  PluginStorageAdapter,
+  InitConfig,
+} from "../../core/plugin-runtime/types";
+import {
+  applyPositionSnapshot,
+  snapshotFromSession,
+  type ReaderPositionSnapshot,
+} from "../../core/reader-session";
 
 /**
- * Reading-progress persistence.
+ * Reading-progress persistence (plugin-owned).
  *
- * Lives in core because “continue reading where I left off” is part of the
- * reader session lifecycle. The reading-progress plugin is kept as a thin
- * scene loader/registrar on top of this service.
+ * The recovery protocol (snapshot shape / capture / apply) lives in core
+ * (`core/reader-session.ts`) and is shared by the `reader:unmounted` event and
+ * the `reader:init-config` hook. This plugin only decides the persistence
+ * format (IndexedDB via ctx.storage) and when to persist. Disabling it simply
+ * means no position restore.
  */
 
 export interface ReadingProgressData {
@@ -20,15 +31,6 @@ export interface ReadingProgressData {
   /** @deprecated legacy scroll-mode fields (pre-unification). */
   scrollProgress?: number;
   scrollAnchor?: number;
-}
-
-export interface ReadingProgressSnapshot {
-  chapterId: string;
-  chapterIndex: number;
-  mode: "pagination" | "scroll";
-  page: number;
-  progress: number;
-  anchor?: number;
 }
 
 const PROGRESS_PREFIX = "readingProgress";
@@ -46,7 +48,7 @@ export function createReadingProgressService(storage: PluginStorageAdapter) {
     await storage.delete(progressKey(bookId));
   }
 
-  async function saveSnapshot(bookId: string, snapshot: ReadingProgressSnapshot): Promise<void> {
+  async function saveSnapshot(bookId: string, snapshot: ReaderPositionSnapshot): Promise<void> {
     const data: ReadingProgressData = {
       chapterId: snapshot.chapterId,
       chapterIndex: snapshot.chapterIndex,
@@ -66,44 +68,26 @@ export function createReadingProgressService(storage: PluginStorageAdapter) {
     bookId: string,
     getSession: () => ReaderSession | null,
   ): Promise<void> {
-    const h = getSession();
-    if (!h) return;
-    const s = h.getState();
-    const chapter = s.chapters[s.position.chapterIndex];
-    if (!chapter) return;
-    await saveSnapshot(bookId, {
-      chapterId: chapter.id,
-      chapterIndex: s.position.chapterIndex,
-      mode: s.presentation.mode,
-      page: s.presentation.page,
-      progress: s.position.progress,
-      anchor: s.position.anchor,
-    });
+    const snapshot = snapshotFromSession(getSession());
+    if (!snapshot) return;
+    await saveSnapshot(bookId, snapshot);
   }
 
+  /** Map the persisted format onto the core recovery protocol. */
   function applyToConfig(config: InitConfig, data: ReadingProgressData): InitConfig {
-    // Exact page restore when reopening in pagination with a stable layout.
-    if (data.pageIndex !== undefined && config.mode === "pagination") {
-      return {
-        ...config,
-        chapterIndex: data.chapterIndex,
-        initialPage: data.pageIndex,
-      };
-    }
-    // Unified position restore: progress + anchor work in either mode
-    // (pagination derives the page readout; scroll restores exactly).
     const progress = data.progress ?? data.scrollProgress;
-    if (progress !== undefined) {
-      return {
-        ...config,
-        chapterIndex: data.chapterIndex,
-        initialPosition: { progress, anchor: data.anchor ?? data.scrollAnchor },
-      };
+    if (data.pageIndex === undefined && progress === undefined) {
+      // No position data — restore the chapter only.
+      return { ...config, chapterIndex: data.chapterIndex };
     }
-    return {
-      ...config,
+    return applyPositionSnapshot(config, {
+      chapterId: data.chapterId,
       chapterIndex: data.chapterIndex,
-    };
+      mode: data.pageIndex !== undefined ? "pagination" : "scroll",
+      page: data.pageIndex ?? 0,
+      progress: progress ?? 0,
+      anchor: data.anchor ?? data.scrollAnchor,
+    });
   }
 
   return {
@@ -116,34 +100,14 @@ export function createReadingProgressService(storage: PluginStorageAdapter) {
 }
 
 /**
- * Wires the reading-progress service into the plugin lifecycle.
+ * Wires the reading-progress service into the plugin lifecycle (own setup).
  *
- * This is kept in core so the reader session restore behavior is owned and
- * tested alongside the persistence logic; the plugin file only needs to call
- * this from its setup.
+ * Pure trigger logic: listen to core events, debounce high-frequency scroll
+ * updates, and hand the core recovery protocol back through the
+ * reader:init-config hook. Persistence itself is in createReadingProgressService.
  */
 export function createReadingProgressController(
-  ctx: {
-    storage: PluginStorageAdapter;
-    events: {
-      on: <K extends keyof import("./plugin-runtime/types").PluginEventMap>(
-        event: K,
-        handler: import("./plugin-runtime/types").EventHandler<
-          import("./plugin-runtime/types").PluginEventMap[K]
-        >,
-      ) => () => void;
-    };
-    hooks: {
-      filter: <K extends keyof import("./plugin-runtime/types").HookMap>(
-        name: K,
-        handler: import("./plugin-runtime/types").FilterHandler<
-          import("./plugin-runtime/types").HookMap[K]
-        >,
-        priority?: number,
-      ) => () => void;
-    };
-    readerSession: () => ReaderSession | null;
-  },
+  ctx: PluginContext,
   onTeardown: (fn: () => void | Promise<void>) => void,
 ): void {
   const progress = createReadingProgressService(ctx.storage);

@@ -24,6 +24,7 @@ export interface PluginEventMap {
   "reader:mounted": { bookId: string };
   "reader:unmounted": {
     bookId: string;
+    /** Same shape as ReaderPositionSnapshot — the reader's recovery protocol. */
     chapterId?: string;
     chapterIndex: number;
     mode: "pagination" | "scroll";

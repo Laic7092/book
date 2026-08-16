@@ -1,11 +1,13 @@
-import type { PluginStorageAdapter, PluginContext } from "./plugin-runtime/types";
+import type { PluginStorageAdapter, PluginContext } from "../../core/plugin-runtime/types";
 
 /**
- * Last-book restore.
+ * Last-book restore (plugin-owned).
  *
- * Kept in core as part of the reader session lifecycle: on startup we return
- * to the last opened book; on book open/close/delete we keep that marker in
- * sync. The plugin file is a thin scene loader for this behavior.
+ * On startup we return to the last opened book; on book open/close/delete we
+ * keep that marker in sync. Everything here is domain logic of the last-book
+ * plugin — the shared infrastructure it leans on (events / storage / navigate)
+ * lives in core and arrives via PluginContext. Disabling the plugin simply
+ * lands the app on the bookshelf instead of auto-resuming.
  */
 
 const LAST_BOOK_KEY = "lastBookId";

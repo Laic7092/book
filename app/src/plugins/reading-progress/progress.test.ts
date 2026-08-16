@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vite-plus/test";
-import type { PluginStorageAdapter } from "./plugin-runtime/types";
-import type { InitConfig } from "./plugin-runtime/types";
-import { createReadingProgressService } from "./reading-progress";
+import type { PluginStorageAdapter } from "../../core/plugin-runtime/types";
+import type { InitConfig } from "../../core/plugin-runtime/types";
+import { createReadingProgressService } from "./progress";
 
 class MemoryAdapter implements PluginStorageAdapter {
   private map = new Map<string, unknown>();

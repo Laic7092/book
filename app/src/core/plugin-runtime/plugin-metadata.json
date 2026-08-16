@@ -29,7 +29,7 @@
     "name": "Last Book Restore",
     "loadOn": "app",
     "dir": "last-book",
-    "core": true
+    "defaultEnabled": true
   },
   {
     "pluginId": "manager",
@@ -56,7 +56,7 @@
     "name": "Reading Progress",
     "loadOn": "reader",
     "dir": "reading-progress",
-    "core": true
+    "defaultEnabled": true
   },
   {
     "pluginId": "search",

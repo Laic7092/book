@@ -1,7 +1,7 @@
+import { defineAsyncComponent } from "vue";
 import type { Plugin } from "../../core/plugin-runtime/types";
 import { PLUGIN_BRAND } from "../../core/plugin-runtime/types";
 import type { PluginStorageAdapter } from "../../core/plugin-runtime/types";
-import AutoReadControls from "./AutoReadControls.vue";
 
 // Flag: true while auto-read is dispatching NEXT_PAGE (so page:changed events from
 // auto-read itself are distinguishable from user-initiated page changes).
@@ -67,6 +67,12 @@ export const autoReadPlugin: Plugin = {
     ctx.events.on("book:closed", () => {
       _onBookClosed?.();
     });
-    ctx.ui.registerToolbarItem({ id: "auto-read", order: 10, component: AutoReadControls });
+    // Lazy: keep the toolbar component out of the base bundle; loaded on the
+    // reader scene and unloaded on plugin disable (contract §五.5).
+    ctx.ui.registerToolbarItem({
+      id: "auto-read",
+      order: 10,
+      component: defineAsyncComponent(() => import("./AutoReadControls.vue")),
+    });
   },
 };

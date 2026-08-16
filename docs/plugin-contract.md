@@ -8,15 +8,16 @@
 
 ## 一、三分法
 
-| 类别                         | 定义                       | 判定门槛（全部满足）                                                                               | 现状                                                                                                                                                                                                            |
-| ---------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **核心**                     | 无它无法"打开一本书并阅读" | ① 基础性：缺它阅读流程断裂 ② 被依赖：核心代码或多个插件依赖它 ③ 无独立 UI 面，或 UI 面就是阅读本身 | reader machine、engine、parser、storage、app 壳（ReaderChrome/Bookshelf/路由）、`core/`（theme-registry、reader-settings、reader-settings-store、reader-session、document-marker、reading-progress、last-book） |
-| **核心插件**（`core: true`） | 永远需要，但保留插件形态   | ① 满足"插件"定义 ② 不可禁用（缺它产品不成立）                                                      | `manager`（插件管理入口）、`settings`（阅读设置）、`reading-progress`（阅读位置恢复）、`last-book`（上次阅读恢复）                                                                                              |
-| **插件**                     | 可选的用户可见能力         | ① 可禁用而不破坏其他功能 ② 有独立领域逻辑与 UI 面 ③ 只有一个入口：`setup` + 事件监听               | 其余 9 个（stats、search、tts、annotations、bookmarks、opds、book-sources、auto-read、progress-bar）                                                                                                            |
+| 类别                         | 定义                       | 判定门槛（全部满足）                                                                               | 现状                                                                                                                                                                                               |
+| ---------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **核心**                     | 无它无法"打开一本书并阅读" | ① 基础性：缺它阅读流程断裂 ② 被依赖：核心代码或多个插件依赖它 ③ 无独立 UI 面，或 UI 面就是阅读本身 | reader machine、engine、parser、storage、app 壳（ReaderChrome/Bookshelf/路由）、`core/`（plugin-runtime、theme-registry、reader-settings、reader-settings-store、reader-session、document-marker） |
+| **核心插件**（`core: true`） | 永远需要，但保留插件形态   | ① 满足"插件"定义 ② 不可禁用（缺它产品不成立）                                                      | `manager`（插件管理入口）、`settings`（阅读设置）                                                                                                                                                  |
+| **插件**                     | 可选的用户可见能力         | ① 可禁用而不破坏其他功能 ② 有独立领域逻辑与 UI 面 ③ 只有一个入口：`setup` + 事件监听               | 其余 11 个（stats、search、tts、annotations、bookmarks、opds、book-sources、auto-read、progress-bar、reading-progress、last-book）                                                                 |
 
 **一句话判定**：_禁用它，阅读还能进行吗？能 → 插件；不能 → 核心或核心插件，且核心不得 import 插件的任何东西。_
 
-> `settings`、`reading-progress`、`last-book` 已升级为 `core: true` 核心插件：前者承载阅读设置/排版/主题，后两者承载“继续阅读”的会话恢复。核心层持有 `ReaderSettings` 默认值、CSS 构建器、阅读进度服务与 last-book 服务；插件只保留场景注册。
+> `settings` 已升级为 `core: true` 核心插件：承载阅读设置/排版/主题。核心层持有 `ReaderSettings` 默认值、CSS 构建器与主题注册表；插件只保留场景注册。
+> `reading-progress`（书内位置恢复）与 `last-book`（上次阅读恢复）是**普通插件**（`defaultEnabled: true`，可禁用）：**恢复协议在核心**（`core/reader-session.ts` 的 `ReaderPositionSnapshot` / `snapshotFromSession` / `applyPositionSnapshot`，与 `reader:unmounted` 事件、`reader:init-config` hook 共享同一形状），插件只保留**持久化格式与触发策略**（存什么、何时存、存到哪）。禁用 = 不恢复位置/不自动续读，阅读本身不受影响。
 
 ---
 
