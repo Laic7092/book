@@ -208,6 +208,36 @@ export async function saveSingleChapter(
 }
 
 /**
+ * Save a batch of chapters in a single transaction (streaming parse flush).
+ */
+export async function saveChapters(
+  bookId: string,
+  chapters: Array<{
+    id: string;
+    title: string;
+    content?: string;
+    order: number;
+    href?: string;
+    inToc?: boolean;
+  }>,
+): Promise<void> {
+  await dbTransaction([STORES.CHAPTERS], "readwrite", async (stores) => {
+    const chaptersStore = stores.get(STORES.CHAPTERS)!;
+    for (const chapter of chapters) {
+      chaptersStore.put({
+        bookId,
+        chapterId: chapter.id,
+        title: chapter.title,
+        content: chapter.content || "",
+        order: chapter.order,
+        href: chapter.href,
+        inToc: chapter.inToc,
+      });
+    }
+  });
+}
+
+/**
  * Update book's last read timestamp
  */
 export async function updateLastRead(bookId: string): Promise<void> {

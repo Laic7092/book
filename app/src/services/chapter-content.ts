@@ -3,14 +3,14 @@
  *
  * storage/books.ts is a pure CRUD layer and knows nothing about parsers;
  * the *policy* of lazily re-extracting an evicted chapter from the stored
- * raw zip lives here (and in parse-save.ts for the eviction side).
+ * raw zip lives here (and in import-book.ts for the eviction side).
  *
  * Consumers: the reader's fetchChapter and the search plugin. Both call
  * fetchChapterContent; the reader additionally loads rawData for resource
  * injection (zip reads are LRU-cached in raw-data.ts, so the second read
  * is cheap).
  */
-import * as booksStore from "./books";
+import * as booksStore from "../storage/books";
 import type { BookParser } from "@book/parser";
 import { getParserForFormat } from "@book/parser";
 
@@ -37,7 +37,7 @@ export async function fetchChapterContent(
   if (chapter.content) return { html: chapter.content };
 
   if (chapter.href) {
-    const { getZip } = await import("./raw-data");
+    const { getZip } = await import("../storage/raw-data");
     const rawData = await getZip(bookId);
     if (!rawData) {
       throw new Error(

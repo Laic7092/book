@@ -179,7 +179,14 @@ export class FixedHost extends Engine {
   }
 
   protected async fetchAndLoadChapter(bookId: string, chapterId: string): Promise<void> {
-    const { rawData } = await this.fetchChapter!(bookId, chapterId);
+    let rawData: ArrayBuffer | undefined;
+    try {
+      const result = await this.fetchChapter!(bookId, chapterId);
+      rawData = result?.rawData;
+    } catch {
+      this.dispatch({ type: "CHAPTER_FAILED", chapterId, error: "Fetch failed" });
+      return;
+    }
 
     const chapter = this.state.chapters.find((c) => c.id === chapterId);
     if (!chapter) {
@@ -187,9 +194,12 @@ export class FixedHost extends Engine {
       return;
     }
 
-    this.dispatch({ type: "CHAPTER_LOADED", chapterId });
+    if (!rawData || !chapter.href) {
+      this.dispatch({ type: "CHAPTER_FAILED", chapterId, error: "Content not found" });
+      return;
+    }
 
-    if (!rawData || !chapter.href) return;
+    this.dispatch({ type: "CHAPTER_LOADED", chapterId });
 
     try {
       if (this.renderer && this.rendererContainer) {

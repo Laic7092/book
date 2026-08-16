@@ -4,7 +4,7 @@ import { ErrorCode, createReaderError } from "../core/errors";
 import { loadPluginsFor } from "../core/plugin-runtime/loader";
 import { getParserForFormat, loadParserForFormat } from "@book/parser";
 import * as booksStore from "../storage/books";
-import { parseAndSaveBook } from "../storage/parse-save";
+import { parseAndSaveBook } from "../services/import-book";
 import { pluginEvents } from "../core/plugin-runtime/context";
 import { validateBookId } from "../utils/validation";
 

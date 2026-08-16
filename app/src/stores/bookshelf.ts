@@ -2,7 +2,7 @@ import { defineStore } from "pinia";
 import type { Book, Folder } from "../core/types";
 import { dbGetAll, STORES } from "../storage/db";
 import { getCoverBlob, deleteCoverBlob } from "../storage/books";
-import { parseAndSaveBook } from "../storage/parse-save";
+import { parseAndSaveBook } from "../services/import-book";
 import { pluginEvents } from "../core/plugin-runtime/context";
 import * as booksStore from "../storage/books";
 import { useUIStore } from "./ui";

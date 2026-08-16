@@ -4,7 +4,7 @@ import type { SearchResult } from "../../core/types";
 import type { ReaderState } from "@book/engine";
 import type { ReaderSession } from "@book/engine";
 import { useDocumentMarker } from "../../composables/useDocumentMarker";
-import { fetchChapterContent } from "../../storage/chapter-content";
+import { fetchChapterContent } from "../../services/chapter-content";
 import { useUIStore } from "../../stores/ui";
 
 const uiStore = useUIStore();

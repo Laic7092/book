@@ -5,7 +5,7 @@ import { createInitialState } from "@book/engine";
 import { getParserForFormat } from "@book/parser";
 import { currentSession } from "../stores/reader-session";
 import { useUIStore } from "../stores/ui";
-import { fetchChapterContent } from "../storage/chapter-content";
+import { fetchChapterContent } from "../services/chapter-content";
 import {
   applyContentTransformers,
   getOverlayComponents,
