@@ -45,7 +45,6 @@ onUnmounted(() => setStatsRefreshHandler(() => {}));
   align-items: center;
   gap: 16px;
   margin-top: 12px;
-  padding-left: 30px;
 }
 
 .stat-item {
