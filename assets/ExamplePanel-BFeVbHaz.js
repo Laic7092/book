@@ -1,0 +1,1 @@
+import{E as e,c as t,d as n,v as r}from"./runtime-core.esm-bundler-CF3jp_8T.js";var i={class:`example-panel`},a=r({__name:`ExamplePanel`,emits:[`close`],setup(r){return(r,a)=>(e(),n(`div`,i,[...a[0]||=[t(`p`,null,`这是一个示例面板。复制 _template 目录开始写你的插件。`,-1)]]))}});export{a as default};
