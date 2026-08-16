@@ -88,3 +88,41 @@ describe("ReflowableHost scroll-mode TOC switching", () => {
     container.remove();
   });
 });
+
+describe("ReflowableHost presentation lifecycle", () => {
+  it("pagination init reaches ready and renders the raw chapter", async () => {
+    const { host, container } = makeHost();
+    host.init("b1", CHAPTERS, 0, "pagination");
+    await flush();
+
+    expect(host.getState().status).toBe("ready");
+    expect(host.getState().presentation.mode).toBe("pagination");
+    expect(host.getDocument()?.body?.innerHTML).toContain("content of ch1");
+    expect(host.getDocument()?.body?.querySelector('[data-chapter-id="ch1"]')).toBeNull();
+    container.remove();
+  });
+
+  it("pagination → scroll → pagination preserves the current chapter and readiness", async () => {
+    const { host, container } = makeHost();
+    host.init("b1", CHAPTERS, 0, "pagination");
+    await flush();
+
+    host.setMode("scroll");
+    await flush();
+
+    expect(host.getState().status).toBe("ready");
+    expect(host.getState().position.chapterIndex).toBe(0);
+    expect(host.getState().presentation.mode).toBe("scroll");
+    expect(host.getDocument()?.body?.querySelector('[data-chapter-id="ch1"]')).toBeTruthy();
+
+    host.setMode("pagination");
+    await flush();
+
+    expect(host.getState().status).toBe("ready");
+    expect(host.getState().position.chapterIndex).toBe(0);
+    expect(host.getState().presentation.mode).toBe("pagination");
+    expect(host.getDocument()?.body?.querySelector('[data-chapter-id="ch1"]')).toBeNull();
+    expect(host.getDocument()?.body?.innerHTML).toContain("content of ch1");
+    container.remove();
+  });
+});

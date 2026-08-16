@@ -7,15 +7,9 @@ import {
   clearResources,
   type ResourceInfo,
 } from "./resources";
-import { computeChapterScrollProgress } from "./scroll-progress";
-import {
-  computePageFromOffset,
-  computeAnchorScrollTop,
-  computePageCount,
-  computeScrollTarget,
-  hasScrolledAway,
-  computePrependCompensation,
-} from "./layout";
+import { ScrollController } from "./scroll-controller";
+import { PagedController } from "./paged-controller";
+import { type ReflowablePresentation } from "./presentation";
 
 const INTERACTIVE_SELECTOR =
   "button, input, textarea, select, details, summary, [contenteditable], [contenteditable=true]";
@@ -37,18 +31,12 @@ export class ReflowableHost extends Engine {
   private container: HTMLElement;
   private navigateToCfi: ((cfi: string, chapterId: string) => Promise<void>) | undefined;
   private clickHandlerRef: ((e: MouseEvent) => void) | null = null;
-  private scrollHandlerRef: ((e: Event) => void) | null = null;
-  private rafId: number | null = null;
   private transformContent: ReflowableHostOptions["transformContent"];
   private resourceUrls = new Map<string, string>();
   private injectedResources = new Map<string, ResourceInfo>();
-  private scrollObserver: IntersectionObserver | null = null;
-  private sentinelSeen = new WeakMap<Element, true>();
-  private loadedChapterIds = new Set<string>();
-  private autoLoading = false;
-  private columnObserver: ResizeObserver | null = null;
-  private calibrationObserver: ResizeObserver | null = null;
-  private lastCalibratedTop = 0;
+  private pagedController: PagedController;
+  private scrollController: ScrollController;
+  private presentation: ReflowablePresentation;
   private lastChapterHtml = "";
   private lastChapterId = "";
 
@@ -58,6 +46,25 @@ export class ReflowableHost extends Engine {
     this.navigateToCfi = options.navigateToCfi;
     this.transformContent = options.transformContent;
     this.createIframe();
+    this.pagedController = new PagedController({
+      doc: this.iframeDoc,
+      getState: () => this.state,
+      getMode: () => this.mode,
+      dispatch: (action) => this.dispatch(action),
+    });
+    this.scrollController = new ScrollController({
+      doc: this.iframeDoc,
+      getState: () => this.state,
+      getMode: () => this.mode,
+      getBookId: () => this.state.bookId,
+      dispatch: (action) => this.dispatch(action),
+      processChapterContent: (html, rawData, bookId, chapterId) =>
+        this.processChapterContent(html, rawData, bookId, chapterId),
+      fetchChapter: (bookId, chapterId, signal) =>
+        this.fetchChapter?.(bookId, chapterId, signal) ?? Promise.resolve({ html: undefined }),
+      nextAutoLoadSignal: () => this.nextAutoLoadSignal(),
+    });
+    this.presentation = this.pagedController;
     this.setupClickHandler(options.onClick);
   }
 
@@ -73,8 +80,8 @@ export class ReflowableHost extends Engine {
     // presentation before the content pipeline starts.
     this.mode = mode;
     this.iframeDoc.documentElement.dataset.mode = mode;
-    if (mode === "scroll") this.setupScrollHandler();
-    else this.teardownScrollHandler();
+    this.presentation = mode === "scroll" ? this.scrollController : this.pagedController;
+    this.presentation.start();
     super.init(bookId, chapters, chapterIndex, mode, initialPosition, initialPage);
   }
 
@@ -84,24 +91,23 @@ export class ReflowableHost extends Engine {
    */
   override setMode(mode: "pagination" | "scroll"): void {
     const prev = this.mode;
+    if (prev === mode) return;
+
+    const old = this.presentation;
     this.mode = mode;
     this.iframeDoc.documentElement.dataset.mode = mode;
-    if (mode === "scroll") this.setupScrollHandler();
-    else this.teardownScrollHandler();
-
+    this.presentation = mode === "scroll" ? this.scrollController : this.pagedController;
     // A mode switch restructures the whole document; in-flight chained loads
     // would write into a DOM that is about to be replaced.
-    if (prev !== mode) this.cancelAutoLoads();
+    old.teardown();
+    this.cancelAutoLoads();
+    this.presentation.start();
 
-    if (prev !== mode && this.lastChapterHtml && this.state.status === "ready") {
-      this.restructureForMode(mode, this.lastChapterId);
+    if (this.lastChapterHtml && this.state.status === "ready") {
+      this.presentation.restructure(this.lastChapterId, this.lastChapterHtml);
       const chapterId = this.currentChapterId();
-      if (chapterId) {
-        if (mode === "pagination") {
-          requestAnimationFrame(() => this.measureColumns(chapterId));
-        } else {
-          this.dispatch({ type: "MEASURED", chapterId, total: 0, mode: "scroll" });
-        }
+      if (chapterId && mode === "scroll") {
+        this.dispatch({ type: "MEASURED", chapterId, total: 0, mode: "scroll" });
       }
     }
   }
@@ -118,7 +124,7 @@ export class ReflowableHost extends Engine {
       target.progress !== undefined &&
       target.chapterIndex === this.state.position.chapterIndex
     ) {
-      this.scrollToProgress(this.state.position);
+      this.scrollController.scrollToProgress(this.state.position);
     }
   }
 
@@ -219,26 +225,9 @@ export class ReflowableHost extends Engine {
     }
   }
 
-  /** Position the viewport at an anchor element in either mode. */
+  /** Position the viewport at an anchor element using the active presentation. */
   private navigateToAnchor(el: Element): void {
-    if (this.mode === "pagination") {
-      const step = this.iframeDoc.documentElement.clientWidth;
-      if (step > 0) {
-        const page = computePageFromOffset(
-          el.getBoundingClientRect().left,
-          this.iframeDoc.body.getBoundingClientRect().left,
-          step,
-        );
-        this.seek({ chapterIndex: this.state.position.chapterIndex, page });
-      }
-    } else {
-      // Direct scroll — the scroll handler reports the new position.
-      const top = computeAnchorScrollTop(
-        el.getBoundingClientRect().top,
-        this.iframeDoc.documentElement.scrollTop,
-      );
-      this.iframeDoc.documentElement.scrollTop = top;
-    }
+    this.presentation.navigateToAnchor(el);
   }
 
   destroy(): void {
@@ -246,10 +235,8 @@ export class ReflowableHost extends Engine {
     if (this.clickHandlerRef) {
       this.iframeDoc.removeEventListener("click", this.clickHandlerRef);
     }
-    this.teardownScrollHandler();
-    this.teardownScrollSentinels();
-    this.teardownColumnObserver();
-    this.teardownScrollCalibration();
+    this.pagedController.teardown();
+    this.scrollController.teardown();
     clearResources(this.iframeDoc, this.injectedResources);
     for (const [, blobUrl] of this.resourceUrls) {
       URL.revokeObjectURL(blobUrl);
@@ -261,16 +248,9 @@ export class ReflowableHost extends Engine {
   protected async runEffect(effect: ReaderEffect): Promise<void> {
     switch (effect.type) {
       case "POSITION_CHANGED":
-        if (effect.presentation.mode === "pagination") {
-          this.iframeDoc.documentElement.style.setProperty(
-            "--current-page",
-            String(effect.presentation.page),
-          );
-        }
-        // Scroll mode: the position is a report, not a command. Re-applying
-        // it here would fight the user's scrolling (progress saturates at 1,
-        // pinning the viewport bottom on the sentinel's edge so the next
-        // chapter never auto-loads). Explicit navigations apply via seek().
+        // Pagination applies the page as a CSS transform; scroll treats the
+        // position as a DOM → machine report and intentionally does nothing.
+        this.presentation.applyPosition(effect.presentation);
         break;
       default:
         // CONTENT_READY / MODE_CHANGED / READER_UNMOUNTED need no DOM side
@@ -316,8 +296,7 @@ export class ReflowableHost extends Engine {
   }
 
   private async loadChapter(bookId: string, chapterId: string): Promise<void> {
-    this.teardownScrollSentinels();
-    this.teardownScrollCalibration();
+    this.presentation.beforeChapterLoad();
     clearResources(this.iframeDoc, this.injectedResources);
     for (const [, blobUrl] of this.resourceUrls) {
       URL.revokeObjectURL(blobUrl);
@@ -344,270 +323,7 @@ export class ReflowableHost extends Engine {
     this.lastChapterHtml = processed;
     this.lastChapterId = chapterId;
 
-    if (this.mode === "pagination") {
-      this.iframeDoc.body.innerHTML = processed;
-      this.dispatch({ type: "CHAPTER_LOADED", chapterId });
-
-      const loadingChapterId = chapterId;
-      requestAnimationFrame(() => {
-        this.measureColumns(loadingChapterId);
-        this.setupColumnObserver(loadingChapterId);
-      });
-      return;
-    }
-
-    // Scroll mode: start fresh with this chapter.
-    this.loadedChapterIds.clear();
-    this.loadedChapterIds.add(chapterId);
-    this.iframeDoc.body.innerHTML = `<div class="scroll-chapter" data-chapter-id="${chapterId}">${processed}</div>`;
-    this.iframeDoc.documentElement.scrollTop = 0;
-    this.dispatch({ type: "CHAPTER_LOADED", chapterId });
-    // Scroll mode has no column measurement; report readiness immediately.
-    this.dispatch({ type: "MEASURED", chapterId, total: 0, mode: "scroll" });
-
-    requestAnimationFrame(() => {
-      void this.restoreScrollPosition().then(() => {
-        this.syncScrollPosition();
-        this.setupScrollSentinels();
-        this.startScrollCalibration();
-      });
-    });
-  }
-
-  /**
-   * Apply an in-chapter flow position to the scroll viewport: invert the
-   * progress mapping (see scroll-progress.ts) against the current chapter's
-   * wrapper. A no-op when the position already matches the DOM (reports from
-   * the scroll handler round-trip exactly).
-   */
-  private scrollToProgress(position: Position): void {
-    if (this.state.status !== "ready") return;
-    const chapterId = this.currentChapterId();
-    if (!chapterId) return;
-    const wrapper = this.iframeDoc.querySelector<HTMLElement>(
-      `[data-chapter-id="${CSS.escape(chapterId)}"]`,
-    );
-    if (!wrapper) return;
-    const html = this.iframeDoc.documentElement;
-    const max = wrapper.scrollHeight - html.clientHeight;
-    if (max <= 0) return;
-    const offset = wrapper.getBoundingClientRect().top + html.scrollTop;
-    html.scrollTop = computeScrollTarget(position.progress, max, offset);
-  }
-
-  private setupScrollHandler(): void {
-    if (this.scrollHandlerRef) return;
-    this.scrollHandlerRef = () => {
-      if (this.rafId !== null) return;
-      this.rafId = requestAnimationFrame(() => {
-        this.rafId = null;
-        this.handleScroll();
-      });
-    };
-    this.iframeDoc.defaultView?.addEventListener("scroll", this.scrollHandlerRef, {
-      passive: true,
-    });
-  }
-
-  private teardownScrollHandler(): void {
-    if (this.scrollHandlerRef) {
-      this.iframeDoc.defaultView?.removeEventListener("scroll", this.scrollHandlerRef);
-      this.scrollHandlerRef = null;
-    }
-    if (this.rafId !== null) {
-      cancelAnimationFrame(this.rafId);
-      this.rafId = null;
-    }
-  }
-
-  private handleScroll(): void {
-    if (this.state.status !== "ready") return;
-
-    const doc = this.iframeDoc;
-    const html = doc.documentElement;
-    const scrollTop = html.scrollTop || 0;
-    const clientHeight = html.clientHeight || 0;
-
-    const { chapterId, progress, anchor } = computeChapterScrollProgress(
-      doc.body.querySelectorAll<HTMLElement>("[data-chapter-id]"),
-      scrollTop,
-      clientHeight,
-      html.scrollHeight || 0,
-    );
-
-    const chapterIndex =
-      chapterId !== undefined
-        ? this.state.chapters.findIndex((c) => c.id === chapterId)
-        : this.state.position.chapterIndex;
-
-    this.dispatch({
-      type: "POSITION_REPORT",
-      chapterIndex: chapterIndex >= 0 ? chapterIndex : this.state.position.chapterIndex,
-      progress,
-      anchor,
-    });
-
-    // At the very top: bring the previous chapter in so it is reachable by
-    // scrolling up. After loadChapter the doc starts at scrollTop 0, so this
-    // also chains the previous chapter onto a freshly opened one.
-    if (scrollTop <= 0) {
-      let minIdx = Infinity;
-      for (const id of this.loadedChapterIds) {
-        const i = this.state.chapters.findIndex((c) => c.id === id);
-        if (i >= 0 && i < minIdx) minIdx = i;
-      }
-      if (minIdx > 0) void this.autoLoadChapter("prev");
-    }
-  }
-
-  /** Dispatch current scroll position after content load. */
-  private syncScrollPosition(): void {
-    this.handleScroll();
-  }
-
-  /** Restore scroll position after content load in scroll mode. */
-  private async restoreScrollPosition(): Promise<void> {
-    if (this.mode !== "scroll") return;
-    const doc = this.iframeDoc;
-    const html = doc.documentElement;
-    // Restore against the saved anchor (viewport-top offset inside the
-    // chapter, over the chapter's own height — see scroll-progress.ts). A
-    // chapter whose first block (e.g. h1) carries a top margin collapses it
-    // through the wrapper into the document: the wrapper sits `offset` px
-    // below the document top, and that offset is counted in html.scrollHeight
-    // but not in wrapper.scrollHeight. Restoring against html dimensions alone
-    // would lose `offset * (1 - anchor)` on every re-entry, so the in-chapter
-    // anchor drifts upward.
-    const wrapper = doc.body.querySelector<HTMLElement>("[data-chapter-id]");
-    if (!wrapper) return;
-    // Document coordinate: viewport top + scrollTop. Reading rect.top alone is
-    // only valid at scrollTop 0 — restoreScrollPosition can run again after
-    // the first restore (setMode → restructureForMode), by which time the
-    // wrapper top is far above the viewport and rect.top is negative.
-    const offset = wrapper.getBoundingClientRect().top + html.scrollTop;
-
-    const anchor = this.state.position.anchor;
-    if (anchor === undefined || anchor <= 0) return;
-
-    // The saved viewport-top may lie beyond the single-chapter document (the
-    // viewport bottom edge needs the next chapter). Append chapters until the
-    // position is actually reachable, then set scrollTop once — no observer
-    // round-trips, no intermediate clamps.
-    for (let guard = 0; guard < 32; guard++) {
-      const maxScroll = wrapper.scrollHeight;
-      if (maxScroll <= 0) return;
-      html.scrollTop = computeScrollTarget(anchor, maxScroll, offset);
-      this.lastCalibratedTop = html.scrollTop;
-      // Position reachable: viewport bottom sits inside the document.
-      if (html.scrollTop < html.scrollHeight - html.clientHeight - 1) return;
-      if (!this.hasMoreChapters("next")) return;
-      const before = this.loadedChapterIds.size;
-      await this.autoLoadChapter("next");
-      if (this.loadedChapterIds.size === before) return; // nothing appended
-    }
-  }
-
-  private hasMoreChapters(dir: "prev" | "next"): boolean {
-    const chapters = this.state.chapters;
-    let idx = -1;
-    for (const id of this.loadedChapterIds) {
-      const i = chapters.findIndex((c) => c.id === id);
-      if (i < 0) continue;
-      if (dir === "next" && i > idx) idx = i;
-      if (dir === "prev" && (idx < 0 || i < idx)) idx = i;
-    }
-    const target = dir === "next" ? idx + 1 : idx - 1;
-    return target >= 0 && target < chapters.length;
-  }
-
-  /**
-   * Re-apply the restored in-chapter progress while the content settles.
-   * At restore time fonts, images and the settings CSS may not have applied
-   * yet, so the measured height differs from what was saved. A ResizeObserver
-   * on the body catches those height changes; as long as the user has not
-   * scrolled away from the restored position, recompute scrollTop from the
-   * saved anchor. The first user scroll stops the calibration.
-   */
-  private startScrollCalibration(): void {
-    this.teardownScrollCalibration();
-    if (this.mode !== "scroll") return;
-    const anchor = this.state.position.anchor;
-    if (anchor === undefined || anchor <= 0) return;
-    this.calibrationObserver = new ResizeObserver(() => {
-      if (this.mode !== "scroll" || this.state.status !== "ready") return;
-      const html = this.iframeDoc.documentElement;
-      const wrapper = this.iframeDoc.body.querySelector<HTMLElement>("[data-chapter-id]");
-      if (!wrapper) return;
-      // Same document-coordinate offset as restoreScrollPosition: the wrapper
-      // is usually scrolled above the viewport by the time this fires, so
-      // rect.top alone would be negative and collapse the target to ~0.
-      const offset = wrapper.getBoundingClientRect().top + html.scrollTop;
-      const max = wrapper.scrollHeight;
-      if (max <= 0) return;
-      // User has scrolled away from the restored position → stop calibrating.
-      if (hasScrolledAway(html.scrollTop, this.lastCalibratedTop)) {
-        this.teardownScrollCalibration();
-        return;
-      }
-      const target = computeScrollTarget(this.state.position.anchor ?? 0, max, offset);
-      html.scrollTop = target;
-      this.lastCalibratedTop = target;
-    });
-    this.calibrationObserver.observe(this.iframeDoc.body);
-  }
-
-  private teardownScrollCalibration(): void {
-    if (this.calibrationObserver) {
-      this.calibrationObserver.disconnect();
-      this.calibrationObserver = null;
-    }
-  }
-
-  private measureColumns(chapterId: string): void {
-    const doc = this.iframeDoc;
-    if (!doc?.body) return;
-    const total = computePageCount(doc.body.scrollWidth, doc.documentElement.clientWidth);
-    this.dispatch({ type: "MEASURED", chapterId, total, mode: this.mode });
-  }
-
-  private setupColumnObserver(chapterId: string): void {
-    this.teardownColumnObserver();
-    if (this.mode !== "pagination") return;
-    this.columnObserver = new ResizeObserver(() => {
-      this.measureColumns(chapterId);
-    });
-    this.columnObserver.observe(this.iframeDoc.body);
-  }
-
-  private teardownColumnObserver(): void {
-    if (this.columnObserver) {
-      this.columnObserver.disconnect();
-      this.columnObserver = null;
-    }
-  }
-
-  private restructureForMode(mode: "pagination" | "scroll", chapterId: string): void {
-    if (mode === "scroll") {
-      this.loadedChapterIds.clear();
-      this.loadedChapterIds.add(chapterId);
-      this.iframeDoc.body.innerHTML = `<div class="scroll-chapter" data-chapter-id="${chapterId}">${this.lastChapterHtml}</div>`;
-      this.iframeDoc.documentElement.scrollTop = 0;
-      requestAnimationFrame(() => {
-        // The position survives the mode switch — reapply it.
-        this.scrollToProgress(this.state.position);
-        this.syncScrollPosition();
-        this.setupScrollSentinels();
-        this.startScrollCalibration();
-      });
-    } else {
-      this.teardownScrollSentinels();
-      this.teardownScrollCalibration();
-      this.iframeDoc.body.innerHTML = this.lastChapterHtml;
-      requestAnimationFrame(() => {
-        this.measureColumns(chapterId);
-        this.setupColumnObserver(chapterId);
-      });
-    }
+    this.presentation.renderChapter(chapterId, processed);
   }
 
   private createIframe(): void {
@@ -647,115 +363,5 @@ export class ReflowableHost extends Engine {
       onClick?.(e);
     };
     this.iframeDoc.addEventListener("click", this.clickHandlerRef);
-  }
-
-  private async autoLoadChapter(dir: "prev" | "next"): Promise<void> {
-    if (this.autoLoading) return;
-    // A main chapter load (SEEK/INIT/RETRY) is in flight: loadChapter replaces
-    // the whole body, so a queued sentinel callback must not touch the DOM or
-    // abort it — aborting would strand the machine in "loading" (black
-    // screen, dead scroll). The sentinel re-arms after the load settles.
-    if (this.state.status === "loading") return;
-    if (this.mode !== "scroll") return;
-    this.autoLoading = true;
-
-    try {
-      const chapters = this.state.chapters;
-      let targetIdx = -1;
-      for (const id of this.loadedChapterIds) {
-        const i = chapters.findIndex((c) => c.id === id);
-        if (i < 0) continue;
-        if (dir === "next" && i > targetIdx) targetIdx = i;
-        if (dir === "prev" && (targetIdx < 0 || i < targetIdx)) targetIdx = i;
-      }
-      targetIdx = dir === "next" ? targetIdx + 1 : targetIdx - 1;
-      if (targetIdx < 0 || targetIdx >= chapters.length) return;
-
-      const chapter = chapters[targetIdx];
-      if (this.loadedChapterIds.has(chapter.id)) return;
-
-      const signal = this.nextAutoLoadSignal();
-      let result: { html: string | undefined; rawData?: ArrayBuffer } | undefined;
-      try {
-        result = await this.fetchChapter!(this.state.bookId, chapter.id, signal);
-      } catch {
-        return;
-      }
-      if (signal.aborted || !result?.html) return;
-
-      const processed = await this.processChapterContent(
-        result.html,
-        result.rawData,
-        this.state.bookId,
-        chapter.id,
-      );
-
-      const wrapper = this.iframeDoc.createElement("div");
-      wrapper.className = "scroll-chapter";
-      wrapper.dataset.chapterId = chapter.id;
-      wrapper.innerHTML = processed;
-
-      if (dir === "next") {
-        this.iframeDoc.body.append(wrapper);
-      } else {
-        const prevHeight = this.iframeDoc.body.scrollHeight;
-        this.iframeDoc.body.prepend(wrapper);
-        this.iframeDoc.documentElement.scrollTop = computePrependCompensation(
-          prevHeight,
-          this.iframeDoc.body.scrollHeight,
-          this.iframeDoc.documentElement.scrollTop,
-        );
-      }
-
-      this.loadedChapterIds.add(chapter.id);
-    } finally {
-      this.autoLoading = false;
-      this.setupScrollSentinels();
-    }
-  }
-
-  private setupScrollSentinels(): void {
-    this.teardownScrollSentinels();
-
-    const chapters = this.state.chapters;
-    if (!this.loadedChapterIds.size) return;
-
-    let maxIdx = -Infinity;
-    for (const id of this.loadedChapterIds) {
-      const i = chapters.findIndex((c) => c.id === id);
-      if (i >= 0 && i > maxIdx) maxIdx = i;
-    }
-
-    if (maxIdx >= chapters.length - 1) return;
-
-    const el = this.iframeDoc.createElement("div");
-    el.dataset.dir = "next";
-    el.style.cssText = "height:1px;width:1px;opacity:0;pointer-events:none;";
-    this.iframeDoc.body.append(el);
-
-    this.scrollObserver = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (this.sentinelSeen.has(entry.target)) {
-            if (entry.isIntersecting) {
-              void this.autoLoadChapter("next");
-            }
-          } else {
-            this.sentinelSeen.set(entry.target, true);
-          }
-        }
-      },
-      { threshold: 0 },
-    );
-
-    this.scrollObserver.observe(el);
-  }
-
-  private teardownScrollSentinels(): void {
-    if (this.scrollObserver) {
-      this.scrollObserver.disconnect();
-      this.scrollObserver = null;
-    }
-    this.iframeDoc.querySelectorAll("[data-dir]").forEach((el) => el.remove());
   }
 }

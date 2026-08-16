@@ -6,6 +6,7 @@ import type { CustomFontFace } from "./types";
 import type { ReaderSettings } from "../../core/reader-settings";
 import { DEFAULT_SETTINGS } from "./defaults";
 import { generateThemeCSS, generateTypographyCSS } from "../../utils/reader-css";
+import { normalizeReaderMode } from "../../utils/reader-mode";
 
 // ── State ──
 
@@ -132,7 +133,11 @@ export const settingsPlugin: Plugin = {
     const cached = store.getById(ENTITY_ID);
     if (cached) {
       const { id: _, ...rest } = cached;
-      _settings.value = { ...DEFAULT_SETTINGS, ...rest };
+      _settings.value = {
+        ...DEFAULT_SETTINGS,
+        ...rest,
+        readingMode: normalizeReaderMode(rest.readingMode as string | undefined),
+      };
     } else {
       await store.add({ id: ENTITY_ID, ...DEFAULT_SETTINGS });
       _settings.value = { ...DEFAULT_SETTINGS };
@@ -194,10 +199,7 @@ export const settingsPlugin: Plugin = {
       refreshIframeStyle();
       const host = ctx.readerSession();
       if (host) host.setPageMargin(getEffectiveMargin());
-      if (s.value.readingMode === "vertical") {
-        return { ...config, mode: "scroll" };
-      }
-      return config;
+      return { ...config, mode: s.value.readingMode ?? "pagination" };
     };
 
     loadSetting({});
@@ -227,7 +229,7 @@ export const settingsPlugin: Plugin = {
       () => s.value.readingMode,
       (mode) => {
         const host = ctx.readerSession();
-        if (host) host.setMode((mode ?? "pagination") === "vertical" ? "scroll" : "pagination");
+        if (host) host.setMode(mode ?? "pagination");
       },
     );
 

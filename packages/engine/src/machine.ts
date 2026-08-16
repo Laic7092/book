@@ -250,10 +250,9 @@ function seekReducer(
   const next: ReaderState = {
     ...state,
     position: { chapterIndex: idx, progress, anchor: undefined },
-    presentation:
-      state.presentation.mode === "pagination"
-        ? { ...state.presentation, page }
-        : state.presentation,
+    // Page is a readout of progress. In scroll mode total is 0, so this
+    // always stays 0 and the presentation object is effectively unchanged.
+    presentation: { ...state.presentation, page },
   };
   return { state: next, effects: [positionChanged(next, prevChapterIndex)] };
 }

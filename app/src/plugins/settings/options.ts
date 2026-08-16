@@ -1,3 +1,5 @@
+import type { ReaderMode } from "../../utils/reader-mode";
+
 // Theme options
 export const THEME_OPTIONS = [
   { label: "Light", value: "light", desc: "Easy on battery" },
@@ -6,10 +8,14 @@ export const THEME_OPTIONS = [
 ] as const;
 
 // Reading mode options
-export const READING_MODE_OPTIONS = [
-  { label: "Vertical", value: "vertical", desc: "Continuous scroll" },
+export const READING_MODE_OPTIONS: readonly {
+  label: string;
+  value: ReaderMode;
+  desc: string;
+}[] = [
+  { label: "Vertical", value: "scroll", desc: "Continuous scroll" },
   { label: "Pagination", value: "pagination", desc: "Page by page" },
-] as const;
+];
 
 // Font options for typography settings UI
 export interface FontOption {

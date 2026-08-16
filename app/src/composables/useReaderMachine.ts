@@ -16,6 +16,7 @@ import { pluginEvents, pluginHooks } from "../core/plugin-runtime/context";
 import type { InitConfig } from "../core/plugin-runtime/types";
 import { TAP_ZONE_LEFT, TAP_ZONE_RIGHT } from "../utils/constants";
 import { parseCfi, resolveCfiToElement } from "../utils/epub-cfi";
+import type { ReaderMode } from "../utils/reader-mode";
 import * as booksStore from "../storage/books";
 import type { Chapter } from "../core/types";
 
@@ -103,9 +104,7 @@ export function useReaderMachine(
     return getHeaderActions();
   });
 
-  const readingMode = computed<"vertical" | "pagination">(() =>
-    presentationMode.value === "scroll" ? "vertical" : "pagination",
-  );
+  const readingMode = computed<ReaderMode>(() => presentationMode.value);
   const isPaginationMode = computed(() => presentationMode.value === "pagination");
   const currentChapterIndex = computed(() => state.value.position.chapterIndex);
   const currentChapterId = computed(
@@ -184,7 +183,7 @@ export function useReaderMachine(
     const baseConfig: InitConfig = {
       bookId: bookId.value,
       chapterIndex: 0,
-      mode: readingMode.value === "vertical" ? "scroll" : "pagination",
+      mode: readingMode.value,
     };
     void pluginHooks.run("reader:init-config", baseConfig).then((config) => {
       presentationMode.value = config.mode;

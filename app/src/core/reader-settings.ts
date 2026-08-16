@@ -1,3 +1,5 @@
+import type { ReaderMode } from "../utils/reader-mode";
+
 /**
  * Reader typography/theme settings.
  *
@@ -19,7 +21,7 @@ export interface ReaderSettings {
   paragraphSpacing?: number;
   textAlign?: "left" | "center" | "justify";
   contrast?: "soft" | "normal" | "high";
-  readingMode?: "vertical" | "pagination";
+  readingMode?: ReaderMode;
   paginationAnimation?: "slide" | "flip" | "fade";
   /** Whether to apply custom typography settings (fontFamily, lineHeight, etc.). When false, EPUB original styling is preserved. */
   customTypography?: boolean;

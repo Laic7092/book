@@ -6,7 +6,8 @@ import { getSettingsState } from "./index";
 import { useUIStore } from "../../stores/ui";
 import { themeRegistry } from "../../core/theme-registry";
 import { fileToBase64 } from "../../utils/file";
-import { ref } from "vue";
+import { normalizeReaderMode } from "../../utils/reader-mode";
+import { computed, ref } from "vue";
 
 // TS does not propagate null-narrowing from top-level guards into nested
 // functions, so resolve the non-null state through a helper.
@@ -18,6 +19,7 @@ function requireSettingsState() {
 
 const state = requireSettingsState();
 const settings = state.settings;
+const activeReadingMode = computed(() => normalizeReaderMode(settings.readingMode));
 
 function themePreviewBg(themeId: string): string {
   return themeRegistry.get(themeId).chrome.bg;
@@ -183,11 +185,11 @@ function removeBgImage() {
           <button
             v-for="mode in READING_MODE_OPTIONS"
             :key="mode.value"
-            :class="['mode-btn', { active: (settings.readingMode || 'vertical') === mode.value }]"
+            :class="['mode-btn', { active: activeReadingMode === mode.value }]"
             @click="state.update({ readingMode: mode.value })"
           >
             <svg
-              v-if="mode.value === 'vertical'"
+              v-if="mode.value === 'scroll'"
               width="18"
               height="18"
               viewBox="0 0 24 24"
