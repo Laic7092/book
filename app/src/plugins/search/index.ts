@@ -1,4 +1,3 @@
-import { reactive } from "vue";
 import { useReaderSearch } from "./useReaderSearch";
 import type { Plugin } from "../../core/plugin-runtime/types";
 import { PLUGIN_BRAND } from "../../core/plugin-runtime/types";
@@ -17,8 +16,9 @@ export const searchPlugin: Plugin = {
   name: "Full-Text Search",
   version: "1.0.0",
   setup(ctx) {
-    // reactive unwraps nested refs — components access properties without .value
-    activeApi = reactive(useReaderSearch(ctx.readerSession)) as unknown as SearchApi;
+    // Keep the raw refs from useReaderSearch — components use .value in scripts
+    // and rely on Vue's template ref unwrapping in markup.
+    activeApi = useReaderSearch(ctx.readerSession);
 
     ctx.ui.registerModal("search", () => import("./SearchPanel.vue"));
     ctx.ui.registerOverlay("search-nav", () => import("./SearchFooterContent.vue"));
