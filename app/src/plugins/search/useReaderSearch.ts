@@ -3,8 +3,7 @@ import { searchInBook } from "./engine";
 import type { SearchResult } from "../../core/types";
 import type { ReaderState } from "@book/engine";
 import type { ReaderSession } from "@book/engine";
-import { useDocumentMarker } from "../../composables/useDocumentMarker";
-import { fetchChapterContent } from "../../services/chapter-content";
+import { useDocumentMarker } from "../../core/document-marker";
 import { useUIStore } from "../../stores/ui";
 
 const uiStore = useUIStore();
@@ -28,7 +27,10 @@ function waitForState(
   });
 }
 
-export function useReaderSearch(getSession: () => ReaderSession | null) {
+export function useReaderSearch(
+  getSession: () => ReaderSession | null,
+  readChapterContent: (bookId: string, chapterId: string) => Promise<{ html: string | undefined }>,
+) {
   const searchQuery = ref("");
   const searchResults = ref<SearchResult[]>([]);
   const hasHighlights = ref(false);
@@ -121,7 +123,7 @@ export function useReaderSearch(getSession: () => ReaderSession | null) {
 
     searchResults.value = await searchInBook(bookId, searchQuery.value, state.chapters, {
       getChapterContent: (_bookId: string, chapterId: string) =>
-        fetchChapterContent(bookId, chapterId).then((r) => r.html),
+        readChapterContent(bookId, chapterId).then((r) => r.html),
     });
   };
 

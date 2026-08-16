@@ -19,9 +19,10 @@ import type {
   FilterHandler,
 } from "./types";
 import { themeRegistry } from "../theme-registry";
-import { currentSession } from "../../stores/reader-session";
+import { currentSession } from "../reader-session";
 import { navigate as routerNavigate } from "../../utils/router";
 import { createServerClient } from "../../utils/api";
+import { fetchChapterContent } from "../../services/chapter-content";
 import { useUIStore } from "../../stores/ui";
 
 // ── PluginStorageAdapter implementation ──
@@ -455,6 +456,7 @@ export function createTrackedContext(id: string, _bootstrap: PluginBootstrap): T
       registerContentTransformer(t);
       trackedTransformers.push(t);
     },
+    readChapterContent: (bookId, chapterId) => fetchChapterContent(bookId, chapterId),
     navigate: routerNavigate,
     server: createServerClient(),
     themes: themeRegistry,

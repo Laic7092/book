@@ -1,7 +1,7 @@
 import type { Annotation } from "../../core/types";
 import { resolveCfiRange, compareCfi } from "../../utils/epub-cfi";
 import { hexToRgba } from "../../utils/colors";
-import { useDocumentMarker } from "../../composables/useDocumentMarker";
+import { useDocumentMarker } from "../../core/document-marker";
 
 export interface SelectionInfo {
   rect: { top: number; left: number; bottom: number; right: number };

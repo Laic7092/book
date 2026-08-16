@@ -2,7 +2,7 @@ import type { Plugin } from "../../core/plugin-runtime/types";
 import { PLUGIN_BRAND } from "../../core/plugin-runtime/types";
 import { createEntityStore, type EntityStore } from "../../core/plugin-runtime/store-factory";
 import type { Bookmark } from "../../core/types";
-import { currentSession } from "../../stores/reader-session";
+import { currentSession } from "../../core/reader-session";
 import { generateCfiFromElement, generateCfiFromCharOffset } from "../../utils/epub-cfi";
 import { stripHtml } from "../../utils/validation";
 

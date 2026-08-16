@@ -3,7 +3,7 @@ import { ReflowableHost, computePageFromOffset, computeAnchorScrollTop } from "@
 import type { ReaderState, ReaderAction, ReaderEffect } from "@book/engine";
 import { createInitialState } from "@book/engine";
 import { getParserForFormat } from "@book/parser";
-import { currentSession } from "../stores/reader-session";
+import { currentSession } from "../core/reader-session";
 import { useUIStore } from "../stores/ui";
 import { fetchChapterContent } from "../services/chapter-content";
 import {

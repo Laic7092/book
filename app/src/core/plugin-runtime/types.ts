@@ -206,6 +206,8 @@ export interface PluginContext {
   require: <T>(name: string) => T | undefined;
   /** 权力面 — transform chapter HTML before rendering. */
   registerContentTransformer(transformer: ContentTransformer): void;
+  /** 权力面 — read a chapter's HTML through the core content pipeline. */
+  readChapterContent: (bookId: string, chapterId: string) => Promise<{ html: string | undefined }>;
   /** 稳定面. */
   navigate: (url: string, replace?: boolean) => void;
   /** Access Node capabilities (net, fs, …) through the proxy server. 稳定面. */

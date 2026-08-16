@@ -30,6 +30,8 @@ interface PluginMeta {
   dir: string;
   /** Whether to enable by default when no stored state exists. Defaults to true. */
   defaultEnabled?: boolean;
+  /** Core plugins are always enabled and cannot be toggled from the manager. */
+  core?: boolean;
 }
 
 const metas: PluginMeta[] = [];
@@ -49,6 +51,7 @@ for (const meta of PLUGIN_METADATA) {
     name: meta.name,
     dir: meta.dir,
     defaultEnabled: meta.defaultEnabled,
+    core: meta.core,
   });
 }
 
@@ -69,7 +72,8 @@ async function ensureSceneMap(): Promise<void> {
     const loader = pluginLoaders[`../../plugins/${meta.dir}/index.ts`];
     if (!loader) continue;
 
-    const effectiveEnabled = states?.[meta.pluginId] ?? meta.defaultEnabled ?? true;
+    const effectiveEnabled =
+      meta.core === true ? true : (states?.[meta.pluginId] ?? meta.defaultEnabled ?? true);
 
     // Register metadata stub for panel visibility, store loader for later enabling
     registerPlugin({
@@ -78,7 +82,7 @@ async function ensureSceneMap(): Promise<void> {
       name: meta.name ?? meta.pluginId,
       version: "0.0.0",
       enabled: effectiveEnabled,
-      core: false,
+      core: meta.core === true,
     });
     pluginModuleLoaders.set(meta.pluginId, loader);
 

@@ -7,7 +7,7 @@ import AppIcon from "../../components/ui/AppIcon.vue";
 import { compareCfi } from "../../utils/epub-cfi";
 import { formatRelativeShort } from "../../utils/time";
 import { useBookmarkStore, addBookmarkFromHost } from "./index";
-import { currentSession } from "../../stores/reader-session";
+import { currentSession } from "../../core/reader-session";
 
 const store = useBookmarkStore();
 const session = currentSession.value;

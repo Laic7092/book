@@ -1,6 +1,6 @@
 import { ref, watch, computed, onUnmounted } from "vue";
 import type { Annotation } from "../../core/types";
-import { currentSession } from "../../stores/reader-session";
+import { currentSession } from "../../core/reader-session";
 import { useAnnotationStore, useAnnotationFilters, createAnnotation } from "./index";
 import { useAnnotationRenderer } from "./useAnnotationRenderer";
 import { generateCfiFromRange } from "../../utils/epub-cfi";

@@ -1,11 +1,6 @@
 /**
  * ReaderSettings moved to core (../core/reader-settings) — core must not
- * import from plugins. This file keeps only settings-plugin-private types.
+ * import from plugins. This file keeps settings-plugin-private types and
+ * re-exports the shared font type from core.
  */
-
-export interface CustomFontFace {
-  id: string;
-  name: string;
-  data: string; // base64-encoded font data
-  format: string; // "woff2" | "ttf" | "otf"
-}
+export type { CustomFontFace } from "../../core/reader-settings";

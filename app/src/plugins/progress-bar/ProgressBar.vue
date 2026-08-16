@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue";
 import { pluginEvents } from "../../core/plugin-runtime/context";
-import { currentSession } from "../../stores/reader-session";
+import { currentSession } from "../../core/reader-session";
 
 const width = ref("0%");
 

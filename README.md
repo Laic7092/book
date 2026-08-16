@@ -48,6 +48,8 @@ Features are self-contained plugins under `app/src/plugins/`. Each plugin export
 - `bookshelf` — library view (book sources, OPDS, stats)
 - `reader` — reading view (bookmarks, annotations, search, TTS, progress)
 
+`manager`, `settings`, `reading-progress`, and `last-book` are core plugins and cannot be disabled. Their underlying reader capabilities live in `app/src/core/`; optional plugins keep domain logic and UI in `app/src/plugins/`.
+
 Plugins have access to reactive IndexedDB storage, a typed event bus, filter hooks, and UI registration APIs (modals, overlays, toolbar actions).
 
 ### Reader pipeline

@@ -13,7 +13,7 @@ import {
   isAutoAdvancing,
   type AutoReadSettings,
 } from "./index";
-import { currentSession } from "../../stores/reader-session";
+import { currentSession } from "../../core/reader-session";
 import { useUIStore } from "../../stores/ui";
 import { pluginEvents } from "../../core/plugin-runtime/context";
 

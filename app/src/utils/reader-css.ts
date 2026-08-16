@@ -1,4 +1,4 @@
-import type { ReaderSettings } from "../core/reader-settings";
+import type { CustomFontFace, ReaderSettings } from "../core/reader-settings";
 import { themeRegistry } from "../core/theme-registry";
 
 export function generateThemeCSS(
@@ -105,4 +105,73 @@ export function generateTypographyCSS(settings: ReaderSettings): string {
       border-bottom: 1px solid var(--border-subtle);
     }
   `;
+}
+
+// ── Full reader iframe CSS builder ──
+
+export interface CustomColors {
+  bg?: string;
+  text?: string;
+  bgImage?: string;
+  bgImageRepeat?: string;
+  bgImageSize?: string;
+}
+
+export function buildCustomColors(s: {
+  useCustomColors?: boolean;
+  customBgColor?: string;
+  customTextColor?: string;
+  customBgImage?: string;
+  customBgImageRepeat?: string;
+  customBgImageSize?: string;
+}): CustomColors | undefined {
+  if (!s.useCustomColors && !s.customBgImage) return undefined;
+  return {
+    bg: s.useCustomColors ? s.customBgColor : undefined,
+    text: s.useCustomColors ? s.customTextColor : undefined,
+    bgImage: s.customBgImage,
+    bgImageRepeat: s.customBgImageRepeat,
+    bgImageSize: s.customBgImageSize,
+  };
+}
+
+function buildFontFacesCSS(fonts: CustomFontFace[]): string {
+  return fonts
+    .map(
+      (f) => `
+@font-face {
+  font-family: "${f.name}";
+  src: url("${f.data}") format("${f.format}");
+  font-display: swap;
+}`,
+    )
+    .join("\n");
+}
+
+function getActiveCustomFont(
+  fonts: CustomFontFace[],
+  settings: ReaderSettings,
+): CustomFontFace | undefined {
+  if (!settings.customFontFamily) return undefined;
+  return fonts.find((f) => f.name === settings.customFontFamily);
+}
+
+/**
+ * Build the full style block injected into the reader iframe: custom font
+ * faces + theme + typography increments.
+ */
+export function buildReaderFullCSS(settings: ReaderSettings, fonts?: CustomFontFace[]): string {
+  const customColors = buildCustomColors(settings);
+  const themeCSS =
+    settings.theme || settings.useCustomColors || settings.customBgImage
+      ? generateThemeCSS(settings.theme, settings.contrast, customColors)
+      : "";
+  let fontFacesCSS = "";
+  const activeFont = fonts ? getActiveCustomFont(fonts, settings) : undefined;
+  if (activeFont) {
+    fontFacesCSS = buildFontFacesCSS([activeFont]);
+  }
+  // Base layout CSS is owned by reader-engine (injected into the iframe);
+  // this style only carries theme + typography increments.
+  return fontFacesCSS + themeCSS + generateTypographyCSS(settings);
 }

@@ -13,7 +13,7 @@ import {
 } from "./options";
 import { createPreviewIframe, type PreviewIframe } from "./preview-iframe";
 import { getSettingsState, getFontStore } from "./index";
-import { DEFAULT_SETTINGS } from "./defaults";
+import { DEFAULT_SETTINGS } from "../../core/reader-settings";
 import type { CustomFontFace } from "./types";
 import type { EntityStore } from "../../core/plugin-runtime/store-factory";
 

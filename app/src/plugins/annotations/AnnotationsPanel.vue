@@ -8,7 +8,7 @@ import type { FilterItem } from "../../components/ui/FilterBar.vue";
 import AppIcon from "../../components/ui/AppIcon.vue";
 import { formatRelativeShort } from "../../utils/time";
 import { useAnnotationStore, useAnnotationFilters } from "./index";
-import { currentSession } from "../../stores/reader-session";
+import { currentSession } from "../../core/reader-session";
 
 const store = useAnnotationStore();
 const session = currentSession.value;

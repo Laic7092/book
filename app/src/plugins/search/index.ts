@@ -18,7 +18,7 @@ export const searchPlugin: Plugin = {
   setup(ctx) {
     // Keep the raw refs from useReaderSearch — components use .value in scripts
     // and rely on Vue's template ref unwrapping in markup.
-    activeApi = useReaderSearch(ctx.readerSession);
+    activeApi = useReaderSearch(ctx.readerSession, ctx.readChapterContent);
 
     ctx.ui.registerModal("search", () => import("./SearchPanel.vue"));
     ctx.ui.registerOverlay("search-nav", () => import("./SearchFooterContent.vue"));

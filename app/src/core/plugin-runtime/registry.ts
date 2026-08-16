@@ -224,8 +224,9 @@ export async function loadPluginStates(): Promise<void> {
   for (const [id, on] of Object.entries(stored)) {
     const mp = managedPlugins.get(id);
     if (mp) {
-      mp.enabled = on;
-      mp.plugin.enabled = on;
+      // Core plugins are always enabled; ignore any stale stored disabled state.
+      mp.enabled = mp.plugin.core ? true : on;
+      mp.plugin.enabled = mp.enabled;
     }
   }
   bump();

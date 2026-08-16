@@ -2,7 +2,7 @@
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import AppIcon from "../../components/ui/AppIcon.vue";
 import ProgressBar from "../../components/ui/ProgressBar.vue";
-import { currentSession } from "../../stores/reader-session";
+import { currentSession } from "../../core/reader-session";
 
 // ── State ──
 type TTSState = "idle" | "playing" | "paused";
